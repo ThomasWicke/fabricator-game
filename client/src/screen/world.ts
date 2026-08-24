@@ -803,6 +803,7 @@ export class WorldScene extends Phaser.Scene {
   snapshot(): WorldSnapshot {
     return {
       v: 1,
+      settings: this.settings,
       stockpile: { ...this.stockpile },
       harvested: [...this.harvestDeltas.values()],
       built: this.vehicles.map((v) => ({

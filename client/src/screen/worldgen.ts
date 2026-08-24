@@ -9,38 +9,28 @@
 // clearing around the Fabricator pad at the centre.
 
 import type { TerrainType } from "../../../shared/fabricator/schema";
+import {
+  DEFAULT_SETTINGS,
+  ROW_RATIO,
+  SIZE_COLS,
+  rowsFor,
+  type Amount,
+  type Density,
+  type WorldSettings,
+  type WorldSize,
+} from "../../../shared/world-settings";
 
-export type WorldSize = "small" | "medium" | "large";
-export type Amount = "none" | "some" | "lots";
-export type Density = "sparse" | "normal" | "dense";
-
-export type WorldSettings = {
-  /** Free text; same seed + same settings = same world. */
-  seed: string;
-  size: WorldSize;
-  /** Swamp coverage — the terrain that punishes walking. */
-  swamp: Amount;
-  /** Width of the sand shore around the landmass. */
-  shore: Amount;
-  /** Trees and rocks. */
-  scatter: Density;
+export {
+  DEFAULT_SETTINGS,
+  SIZE_COLS,
+  rowsFor,
+  type Amount,
+  type Density,
+  type WorldSettings,
+  type WorldSize,
 };
 
-/** Columns per world size. Rows are derived so the world comes out roughly
- *  square in pixels — hex columns sit 65px apart but rows only 48px (see
- *  hexgrid.ts). "medium" reproduces the 50×68 world the hex grid shipped
- *  with. */
-export const SIZE_COLS: Record<WorldSize, number> = {
-  small: 40,
-  medium: 50,
-  large: 68,
-};
 
-/** Hex column pitch ÷ row pitch (HEX_W / ROW_H). */
-const ROW_RATIO = 65 / 48;
-
-export const rowsFor = (size: WorldSize): number =>
-  Math.round(SIZE_COLS[size] * ROW_RATIO);
 
 /** Fraction of eligible hexes that get a resource node. Retuned upward when
  *  this landed on the hex grid: the original rates were set against a square
@@ -83,13 +73,6 @@ export const TERRAIN_COLORS: Record<TerrainType, string> = {
   swamp: "#4a5236",
 };
 
-export const DEFAULT_SETTINGS: WorldSettings = {
-  seed: "",
-  size: "medium",
-  swamp: "some",
-  shore: "some",
-  scatter: "normal",
-};
 
 /** Resource nodes the generator places. Bogiron post-dates the original
  *  generator; it only appears in swamp, which is what gates swamp-capable

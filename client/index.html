@@ -324,6 +324,122 @@
       .lobby-note b {
         color: var(--text);
       }
+
+      /* ── world settings + live minimap ───────────────────────── */
+      .world-preview {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: center;
+      }
+      .world-preview canvas {
+        width: 100%;
+        max-width: 300px;
+        aspect-ratio: 1;
+        height: auto;
+        border-radius: 10px;
+        background: #0a0d12;
+        border: 1px solid #232c3a;
+        image-rendering: pixelated;
+      }
+      .world-mix {
+        font-size: 11px;
+        color: var(--muted);
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+      .world-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        transition: opacity 0.2s;
+      }
+      .world-controls.locked {
+        opacity: 0.45;
+        pointer-events: none;
+      }
+      .seed-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .seed-row span {
+        min-width: 46px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+      .seed-row input {
+        flex: 1;
+        min-width: 0;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 7px 10px;
+        border-radius: 9px;
+        border: 1px solid #2a3546;
+        background: var(--panel-2);
+        color: var(--text);
+        outline: none;
+      }
+      .seed-row input:focus-visible {
+        border-color: var(--accent);
+      }
+      .seed-row button {
+        font: inherit;
+        font-size: 15px;
+        line-height: 1;
+        padding: 7px 11px;
+        border-radius: 9px;
+        border: 1px solid #2a3546;
+        background: var(--panel-2);
+        color: var(--text);
+        cursor: pointer;
+      }
+      .knobs {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 8px 14px;
+      }
+      .knob {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .knob-label {
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--muted);
+        min-width: 62px;
+      }
+      .knob-opts {
+        display: flex;
+        gap: 3px;
+        background: var(--panel-2);
+        padding: 3px;
+        border-radius: 9px;
+        border: 1px solid #232c3a;
+      }
+      .knob-opts button {
+        font: inherit;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 9px;
+        border-radius: 6px;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        text-transform: capitalize;
+      }
+      .knob-opts button.on {
+        background: var(--accent);
+        color: #0b1220;
+      }
       .lobby-foot button.primary {
         font-weight: 800;
         letter-spacing: 0.08em;

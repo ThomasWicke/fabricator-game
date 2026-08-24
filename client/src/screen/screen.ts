@@ -21,6 +21,20 @@ import { resolveIdentity } from "../identity";
 import { RoomConnection } from "../socket";
 import { keepScreenAwake } from "../wake-lock";
 import { WorldScene, type PlaceableDesign } from "./world";
+import {
+  drawWorldPreview,
+  generateWorld,
+  loadSettings,
+  randomSeed,
+  saveSettings,
+  terrainMix,
+} from "./worldgen";
+import {
+  AMOUNTS,
+  DENSITIES,
+  WORLD_SIZES,
+  type WorldSettings,
+} from "../../../shared/world-settings";
 import { chromaKeyBodySprite } from "./chroma";
 import type {
   DesignAddedMsg,
@@ -63,6 +77,12 @@ export function startScreen(code: string) {
   const slotByPlayerId = new Map<string, Slot>();
   let lastStock: Record<MaterialType, number> | null = null;
   let pendingSnapshot: WorldSnapshot | null | undefined;
+  // Settings persist between sessions; the seed defaults to the room code so
+  // a fresh room is a fresh island.
+  const settings: WorldSettings = loadSettings(code);
+  /** A saved world pins its own settings — regenerating different terrain
+   *  under restored objects would put them on the wrong ground. */
+  let worldLocked = false;
   let roster: PublicPlayer[] = [];
   let phase: Phase = "lobby";
   let scene: WorldScene | null = null;
@@ -113,6 +133,19 @@ export function startScreen(code: string) {
 
           <section class="lobby-panel">
             <div class="panel-title"><span class="step">2</span> The world</div>
+            <div class="world-preview">
+              <canvas id="world-map" width="300" height="300"></canvas>
+              <div class="world-mix" id="world-mix"></div>
+            </div>
+            <div class="world-controls" id="world-controls">
+              <label class="seed-row">
+                <span>Seed</span>
+                <input id="seed-input" type="text" maxlength="24" spellcheck="false"
+                       autocomplete="off" />
+                <button type="button" id="seed-roll" title="New random seed">⟳</button>
+              </label>
+              <div class="knobs" id="knobs"></div>
+            </div>
             <div class="lobby-note" id="world-note">Checking for a saved world…</div>
           </section>
         </div>
@@ -139,6 +172,89 @@ export function startScreen(code: string) {
     const slotsEl = document.getElementById("slots")!;
     const spectatorsEl = document.getElementById("spectators")!;
     const noteEl = document.getElementById("world-note")!;
+
+    // ── world settings + live minimap ─────────────────────────
+    // The generator is Phaser-free precisely so this preview is the same
+    // code the expedition lands in — what you see here is what generates.
+    const mapEl = document.getElementById("world-map") as HTMLCanvasElement;
+    const mixEl = document.getElementById("world-mix")!;
+    const seedInput = document.getElementById("seed-input") as HTMLInputElement;
+    const knobsEl = document.getElementById("knobs")!;
+    const controlsEl = document.getElementById("world-controls")!;
+
+    const KNOBS: {
+      key: "size" | "swamp" | "shore" | "scatter";
+      label: string;
+      options: readonly string[];
+    }[] = [
+      { key: "size", label: "Size", options: WORLD_SIZES },
+      { key: "swamp", label: "Bog", options: AMOUNTS },
+      { key: "shore", label: "Shore", options: AMOUNTS },
+      { key: "scatter", label: "Resources", options: DENSITIES },
+    ];
+
+    const drawPreview = () => {
+      const world = generateWorld(settings);
+      drawWorldPreview(mapEl, world);
+      const mix = terrainMix(world);
+      mixEl.textContent =
+        `${world.cols}×${world.rows} hexes · ` +
+        `${Math.round(mix.grass * 100)}% grass · ` +
+        `${Math.round(mix.sand * 100)}% shore · ` +
+        `${Math.round(mix.swamp * 100)}% bog · ` +
+        `${world.scatter.length} resource nodes`;
+    };
+
+    const renderKnobs = () => {
+      knobsEl.innerHTML = KNOBS.map(
+        (k) => `
+        <div class="knob">
+          <span class="knob-label">${k.label}</span>
+          <div class="knob-opts" data-knob="${k.key}">
+            ${k.options
+              .map(
+                (o) =>
+                  `<button type="button" data-val="${o}"${
+                    settings[k.key] === o ? ' class="on"' : ""
+                  }>${o}</button>`,
+              )
+              .join("")}
+          </div>
+        </div>`,
+      ).join("");
+    };
+
+    const settingsChanged = () => {
+      saveSettings(settings);
+      renderKnobs();
+      drawPreview();
+    };
+
+    knobsEl.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest("[data-val]") as HTMLElement | null;
+      if (!btn || worldLocked) return;
+      const key = btn.parentElement?.dataset.knob as keyof typeof settings | undefined;
+      if (!key || key === "seed") return;
+      (settings as Record<string, string>)[key] = btn.dataset.val!;
+      settingsChanged();
+    });
+
+    seedInput.value = settings.seed;
+    seedInput.addEventListener("input", () => {
+      if (worldLocked) return;
+      settings.seed = seedInput.value;
+      saveSettings(settings);
+      drawPreview();
+    });
+    document.getElementById("seed-roll")!.addEventListener("click", () => {
+      if (worldLocked) return;
+      settings.seed = randomSeed();
+      seedInput.value = settings.seed;
+      settingsChanged();
+    });
+
+    renderKnobs();
+    drawPreview();
     const startHint = document.getElementById("start-hint")!;
     const startBtn = document.getElementById("start-btn") as HTMLButtonElement;
 
@@ -146,13 +262,21 @@ export function startScreen(code: string) {
       if (pendingSnapshot === undefined) return; // still waiting on the server
       if (!pendingSnapshot) {
         noteEl.innerHTML =
-          "<b>A fresh world.</b> Terrain is generated from the room code, so " +
-          "this room always lands on the same map — start a room with a " +
-          "different code for different ground.";
+          "<b>A fresh world.</b> Tune it below — the map is exactly what " +
+          "you'll land in. Settings lock once the expedition starts.";
         startBtn.textContent = "START EXPEDITION";
         return;
       }
       const snap = pendingSnapshot;
+      // Adopt and freeze the saved world's settings.
+      if (snap.settings) {
+        Object.assign(settings, snap.settings);
+        seedInput.value = settings.seed;
+      }
+      worldLocked = true;
+      controlsEl.classList.add("locked");
+      renderKnobs();
+      drawPreview();
       const stock = snap.stockpile;
       noteEl.innerHTML =
         `<b>Saved world found.</b> ${snap.built.length} object` +
@@ -160,7 +284,7 @@ export function startScreen(code: string) {
         `${snap.harvested.length} resource node` +
         `${snap.harvested.length === 1 ? "" : "s"} worked, ` +
         `stockpile ${Math.floor(stock.wood)} wood · ${Math.floor(stock.stone)} stone · ` +
-        `${Math.floor(stock.bogiron)} bogiron. Resuming picks up where you left off.`;
+        `${Math.floor(stock.bogiron)} bogiron. Settings are locked to this world.`;
       startBtn.textContent = "RESUME EXPEDITION";
     };
     onSnapshot();
@@ -315,7 +439,7 @@ export function startScreen(code: string) {
         scene: [],
         callbacks: {
           postBoot: (g) => {
-            g.scene.add("world", worldScene, true, { seed: code });
+            g.scene.add("world", worldScene, true, { seed: code, settings });
           },
         },
       });

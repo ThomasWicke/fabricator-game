@@ -121,6 +121,7 @@ export type UiMsg = {
 // ─── fabricator ────────────────────────────────────────────────────────────
 
 import type { Design, DesignSummary } from "./designs";
+import type { WorldSettings } from "../shared/world-settings";
 
 /** Controller → server: a blueprint submission. Relayed to screens too so
  *  the world can show the Fabricator working while the compile runs. */
@@ -211,6 +212,11 @@ export type FabricateErrorMsg = {
 
 export type WorldSnapshot = {
   v: 1;
+  /** The settings the terrain was generated from. Carried so resuming
+   *  regenerates the same ground — without it, restored objects and worked
+   *  nodes would land on a different map. Absent on saves written before
+   *  world settings existed; those fall back to the defaults. */
+  settings?: WorldSettings;
   stockpile: { wood: number; stone: number; bogiron: number };
   /** Only nodes that have been touched; remaining 0 = harvested out. */
   harvested: { col: number; row: number; remaining: number }[];
