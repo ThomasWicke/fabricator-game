@@ -22,7 +22,13 @@ import type {
   PublicPlayer,
   RosterMsg,
   Slot,
+  WorldSaveMsg,
+  WorldSnapshot,
+  WorldStateMsg,
 } from "./protocol";
+
+/** Room-storage key for the saved world (deltas only — see WorldSnapshot). */
+const WORLD_KEY = "world";
 
 type PlayerRecord = {
   playerId: string;
@@ -98,10 +104,18 @@ export default class FabricatorServer implements Party.Server {
         });
         break;
       }
+      case "world-save": {
+        if (!fromScreen) break;
+        const snap = (msg as unknown as WorldSaveMsg).snapshot;
+        void this.room.storage.put(WORLD_KEY, snap).catch((err) => {
+          console.error("world save failed:", err);
+        });
+        break;
+      }
       case "design-built": {
         if (!fromScreen) break;
         void this.designs
-          .noteBuilt((msg as { designId: string }).designId)
+          .noteBuilt((msg as unknown as { designId: string }).designId)
           .then((d) => {
             if (d) this.sendToControllers(designSummaryMsg(d));
           });
@@ -195,7 +209,9 @@ export default class FabricatorServer implements Party.Server {
           lobbyCode: this.room.id,
         }),
       );
-      void this.sendCatalog(sender, true);
+      // Catalog first, then the world — restoring built objects needs their
+      // designs, and messages arrive in order.
+      void this.sendCatalog(sender, true).then(() => this.sendWorld(sender));
       this.broadcastRoster();
       return;
     }
@@ -239,6 +255,13 @@ export default class FabricatorServer implements Party.Server {
       type: "design-catalog",
       designs: full ? designs : designs.map(summarize),
     };
+    conn.send(JSON.stringify(msg));
+  }
+
+  private async sendWorld(conn: Party.Connection) {
+    const snapshot =
+      ((await this.room.storage.get(WORLD_KEY)) as WorldSnapshot | undefined) ?? null;
+    const msg: WorldStateMsg = { scope: "ui", type: "world-state", snapshot };
     conn.send(JSON.stringify(msg));
   }
 

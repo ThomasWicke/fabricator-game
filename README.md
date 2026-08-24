@@ -57,6 +57,46 @@ Swamp Buggy ≠ Car).
 - Cost is computed **in code** from the spec (`shared/fabricator/cost.ts`),
   never by the LLM.
 
+### Persistence — the room code is the save game
+
+Both halves survive a server restart, keyed by room code:
+
+- **World** (`party/protocol.ts` → `WorldSnapshot`). Terrain is *deterministic*
+  from the room code (it seeds the world RNG), so a save carries only the
+  **deltas**: stockpile, touched resource nodes (`{col,row,remaining}`),
+  manufactured objects at their current position, and equipped tools. A
+  played-in world is a couple of hundred bytes, not a serialized map. The
+  screen owns the simulation and sends debounced snapshots (3s, coalesced —
+  harvesting fires constantly); the server stores them under one room-storage
+  key and replays them to a joining screen after the design catalog, since
+  restoring built objects needs their designs.
+- **Designs** — see below. Stored per room, chunked across keys.
+
+Saving only starts once a restore has completed, so a slow scene boot can't
+overwrite a good save with an empty world.
+
+### Designs
+
+The Fabricator produces **Designs**, not objects. A blueprint compiles once
+into a permanent Design (spec + cost + generated art); **manufacturing**
+spends materials to build one, and a Design can be built any number of
+times. Three things fall out of that split:
+
+- **Cost is visible before you pay.** The phone's 📐 DESIGNS store lists
+  every design with its material cost, greys out BUILD when the team can't
+  afford it, and highlights which materials are short. The screen mirrors
+  the stockpile to phones so this stays live.
+- **AI work is amortized.** Spec compile + image gen happen once per *idea*
+  (~$0.07), not once per object. Rebuilding is instant and free.
+- **The design library is the progression artifact** — what the team knows
+  how to make, in the brief's "discovery is the progression" sense.
+
+Designs persist in PartyKit room storage (`party/designs.ts`), so the room
+code is effectively the save game — the world seed already derives from it.
+Images exceed the 128KiB Durable Object value limit, so they're chunked
+across keys. Screens hold full designs (spec + art); phones only ever get
+summaries, never image payloads.
+
 ### Body sprites (paid tier)
 
 With billing enabled on the Google key, fabrication generates an AI body

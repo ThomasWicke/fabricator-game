@@ -81,7 +81,6 @@ export type UiMsg = {
 
 // ─── fabricator ────────────────────────────────────────────────────────────
 
-import type { FabricatedSpec } from "../shared/fabricator/schema";
 import type { Design, DesignSummary } from "./designs";
 
 /** Controller → server: a blueprint submission. Relayed to screens too so
@@ -163,6 +162,37 @@ export type FabricateErrorMsg = {
   scope: "ui";
   type: "fabricate-error";
   message: string;
+};
+
+// ─── world persistence ─────────────────────────────────────────────────────
+//
+// Terrain is deterministic from the room code (it seeds the world RNG), so a
+// save is only the DELTAS from that baseline — a few KB even for a long
+// game, instead of a serialized map.
+
+export type WorldSnapshot = {
+  v: 1;
+  stockpile: { wood: number; stone: number; bogiron: number };
+  /** Only nodes that have been touched; remaining 0 = harvested out. */
+  harvested: { col: number; row: number; remaining: number }[];
+  /** Manufactured objects, at their current position (vehicles get driven). */
+  built: { designId: string; x: number; y: number }[];
+  /** Equipped hand tools, by player slot. */
+  tools: { slot: Slot; designId: string }[];
+};
+
+/** Screen → server: persist this snapshot (debounced). */
+export type WorldSaveMsg = {
+  scope: "ui";
+  type: "world-save";
+  snapshot: WorldSnapshot;
+};
+
+/** Server → screen on join: the saved world, or null for a fresh one. */
+export type WorldStateMsg = {
+  scope: "ui";
+  type: "world-state";
+  snapshot: WorldSnapshot | null;
 };
 
 // ─── unions ────────────────────────────────────────────────────────────────

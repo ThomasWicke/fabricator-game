@@ -12,13 +12,15 @@ import { formatCost } from "../../../shared/fabricator/cost";
 import { resolveIdentity } from "../identity";
 import { RoomConnection } from "../socket";
 import { keepScreenAwake } from "../wake-lock";
-import { WorldScene } from "./world";
+import { WorldScene, type PlaceableDesign } from "./world";
 import { chromaKeyBodySprite } from "./chroma";
 import type {
   DesignAddedMsg,
   DesignBodyMsg,
   DesignCatalogMsg,
   Slot,
+  WorldSnapshot,
+  WorldStateMsg,
 } from "../../../party/protocol";
 import type { Design } from "../../../party/designs";
 import type { MaterialType } from "../../../shared/fabricator/schema";
@@ -150,6 +152,48 @@ export function startScreen(code: string) {
   const designs = new Map<string, Design>();
   let lastStock: Record<MaterialType, number> | null = null;
 
+  const placeable = (d: Design): PlaceableDesign => ({
+    id: d.id,
+    spec: d.spec,
+    art: d.body ?? d.sketch,
+  });
+
+  // ── world save / restore ────────────────────────────────────
+  // Terrain is deterministic from the room code; only deltas travel. The
+  // snapshot and the scene become ready in either order, so restore runs
+  // when both are in hand — and exactly once.
+  let sceneReady = false;
+  let restored = false;
+  let pendingSnapshot: WorldSnapshot | null | undefined;
+
+  const tryRestore = () => {
+    if (restored || !sceneReady || pendingSnapshot === undefined) return;
+    restored = true;
+    if (pendingSnapshot) {
+      scene.applySnapshot(pendingSnapshot, (id) => {
+        const d = designs.get(id);
+        return d ? placeable(d) : null;
+      });
+    }
+    // saves only start once the saved world is back in place, so a restore
+    // race can never overwrite a good save with an empty world
+    scene.onDirty = scheduleSave;
+  };
+
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  const scheduleSave = () => {
+    if (saveTimer) return; // coalesce bursts (harvesting fires constantly)
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      conn.send({ scope: "ui", type: "world-save", snapshot: scene.snapshot() });
+    }, 3000);
+  };
+
+  scene.onReady = () => {
+    sceneReady = true;
+    tryRestore();
+  };
+
   const shown: Record<string, number> = {};
   scene.onStockpile = (s) => {
     lastStock = { ...s };
@@ -230,6 +274,9 @@ export function startScreen(code: string) {
           const m = msg as unknown as DesignBodyMsg;
           const d = designs.get(m.designId);
           if (d) d.body = m.body;
+        } else if (msg.type === "world-state") {
+          pendingSnapshot = (msg as unknown as WorldStateMsg).snapshot;
+          tryRestore();
         } else if (msg.type === "manufacture") {
           const designId = String((msg as { designId?: string }).designId ?? "");
           const d = designs.get(designId);
@@ -238,7 +285,7 @@ export function startScreen(code: string) {
             return;
           }
           const slot = slotByPlayerId.get(d.createdBy) ?? 1;
-          const rejection = scene.tryFabricate(d.spec, d.body ?? d.sketch, slot);
+          const rejection = scene.tryFabricate(placeable(d), slot);
           if (rejection) {
             toast(rejection, true);
           } else {

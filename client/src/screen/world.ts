@@ -20,7 +20,12 @@
 // harvester (tool or vehicle) is required: the first real progression gate.
 
 import Phaser from "phaser";
-import type { ButtonState, Slot, StickState } from "../../../party/protocol";
+import type {
+  ButtonState,
+  Slot,
+  StickState,
+  WorldSnapshot,
+} from "../../../party/protocol";
 import type {
   FabricatedSpec,
   MaterialType,
@@ -93,6 +98,14 @@ const idleInput = (): PlayerInput => ({
   buttons: { a: false, b: false },
 });
 
+/** Anything the world can manufacture: a stored Design, art already
+ *  display-ready (chroma-keyed body, or the player's sketch). */
+export type PlaceableDesign = {
+  id: string;
+  spec: FabricatedSpec;
+  art?: string;
+};
+
 type PlayerEntity = {
   slot: Slot;
   skin: string;
@@ -102,11 +115,17 @@ type PlayerEntity = {
   prevA: boolean;
   color: number;
   driving: VehicleEntity | null;
-  tool: { spec: FabricatedSpec; icon: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Image } | null;
+  tool: {
+    designId: string;
+    spec: FabricatedSpec;
+    icon: Phaser.GameObjects.Image;
+    glow?: Phaser.GameObjects.Image;
+  } | null;
   nextHarvestAt: number;
 };
 
 type VehicleEntity = {
+  designId: string;
   container: Phaser.GameObjects.Container;
   parts: { img: Phaser.GameObjects.Image; kind: string; baseY: number }[];
   spec: FabricatedSpec;
@@ -127,6 +146,9 @@ type ResourceNode = {
    *  gameplay position. */
   cx: number;
   cy: number;
+  /** Hex address — the stable identity used by world saves. */
+  col: number;
+  row: number;
   material: MaterialType;
   remaining: number;
 };
@@ -145,10 +167,23 @@ export class WorldScene extends Phaser.Scene {
   private fabFx: Phaser.GameObjects.GameObject[] = [];
   private spawnCount = 0;
 
+  private nodeByHex = new Map<string, ResourceNode>();
+  /** Nodes whose remaining count differs from the deterministic baseline —
+   *  the only node state a save needs to carry. */
+  private harvestDeltas = new Map<string, { col: number; row: number; remaining: number }>();
+
   stockpile: Stockpile = { ...STARTING_STOCK };
   /** Screen shell subscribes for the HUD. */
   onStockpile: ((s: Stockpile) => void) | null = null;
   onToolEquipped: ((slot: Slot, spec: FabricatedSpec) => void) | null = null;
+  /** Fired when persistent state changed — the shell debounces a save. */
+  onDirty: (() => void) | null = null;
+  /** Fired once the scene exists and can accept a snapshot. */
+  onReady: (() => void) | null = null;
+
+  private markDirty() {
+    this.onDirty?.();
+  }
 
   constructor() {
     super("world");
@@ -283,7 +318,18 @@ export class WorldScene extends Phaser.Scene {
       const blocker = this.add.rectangle(c.x, cy + bodyDY, bodyW, bodyH).setVisible(false);
       this.physics.add.existing(blocker, true);
       this.obstacles.add(blocker);
-      this.nodes.push({ sprite: s, blocker, cx: c.x, cy, material, remaining: units });
+      const node: ResourceNode = {
+        sprite: s,
+        blocker,
+        cx: c.x,
+        cy,
+        col,
+        row,
+        material,
+        remaining: units,
+      };
+      this.nodes.push(node);
+      this.nodeByHex.set(`${col},${row}`, node);
     };
 
     const usedHexes = new Set<string>();
@@ -375,6 +421,7 @@ export class WorldScene extends Phaser.Scene {
     ) as Record<string, Phaser.Input.Keyboard.Key>;
 
     this.onStockpile?.(this.stockpile);
+    this.onReady?.();
   }
 
   private terrainAt(x: number, y: number): TerrainType {
@@ -448,6 +495,27 @@ export class WorldScene extends Phaser.Scene {
   private addStock(material: MaterialType, amount: number) {
     this.stockpile[material] += amount;
     this.onStockpile?.(this.stockpile);
+    this.markDirty();
+  }
+
+  /** Remove a node from the world (harvested out, or restored as gone). */
+  private removeNode(node: ResourceNode, animate: boolean) {
+    const i = this.nodes.indexOf(node);
+    if (i >= 0) this.nodes.splice(i, 1);
+    this.nodeByHex.delete(`${node.col},${node.row}`);
+    node.blocker.destroy(); // frees the hex for walking immediately
+    const s = node.sprite as unknown as Phaser.GameObjects.Sprite;
+    if (!animate) {
+      s.destroy();
+      return;
+    }
+    this.tweens.add({
+      targets: s,
+      alpha: 0,
+      scale: 0.6,
+      duration: 250,
+      onComplete: () => s.destroy(),
+    });
   }
 
   // ── Fabricator ────────────────────────────────────────────────
@@ -495,12 +563,9 @@ export class WorldScene extends Phaser.Scene {
    * `artDataUrl` is already display-ready — the screen shell chroma-keys
    * generated art once, when the design is created.
    */
-  tryFabricate(
-    spec: FabricatedSpec,
-    artDataUrl: string | undefined,
-    bySlot: Slot,
-  ): string | null {
+  tryFabricate(design: PlaceableDesign, bySlot: Slot): string | null {
     this.clearFabricating();
+    const { spec } = design;
     if (!canAfford(this.stockpile, spec.cost)) {
       return `Not enough materials for ${spec.displayName} — needs ${formatCost(spec.cost)}.`;
     }
@@ -508,12 +573,25 @@ export class WorldScene extends Phaser.Scene {
     this.stockpile.stone -= spec.cost.stone;
     this.stockpile.bogiron -= spec.cost.bogiron;
     this.onStockpile?.(this.stockpile);
+    this.placeDesign(design, bySlot);
+    return null;
+  }
 
-    const key = `fab-body-${this.spawnCount++}`;
-    const build = () => this.materialize(spec, key, bySlot);
-    if (artDataUrl) {
+  /** Put a design into the world without charging for it — the shared path
+   *  for manufacturing and for restoring a saved world. Textures are keyed
+   *  by design id, so repeat builds of one design share a single texture. */
+  private placeDesign(design: PlaceableDesign, bySlot: Slot, x?: number, y?: number) {
+    const key = `fab-body-${design.id}`;
+    const build = () => {
+      if (design.spec.category === "tool") this.equipTool(design, key, bySlot);
+      else this.buildVehicle(design, key, x, y);
+      this.markDirty();
+    };
+    if (this.textures.exists(key)) {
+      build();
+    } else if (design.art) {
       this.textures.once(`addtexture-${key}`, build);
-      this.textures.addBase64(key, artDataUrl);
+      this.textures.addBase64(key, design.art);
     } else {
       const g = this.add.graphics();
       g.fillStyle(0x8b98a9, 1);
@@ -522,19 +600,11 @@ export class WorldScene extends Phaser.Scene {
       g.destroy();
       build();
     }
-    return null;
-  }
-
-  private materialize(spec: FabricatedSpec, bodyKey: string, bySlot: Slot) {
-    if (spec.category === "tool") {
-      this.equipTool(spec, bodyKey, bySlot);
-      return;
-    }
-    this.buildVehicle(spec, bodyKey);
   }
 
   /** Hand tools attach to the player who blueprinted them. */
-  private equipTool(spec: FabricatedSpec, bodyKey: string, bySlot: Slot) {
+  private equipTool(design: PlaceableDesign, bodyKey: string, bySlot: Slot) {
+    const spec = design.spec;
     const p = this.players.get(bySlot) ?? this.players.get(1)!;
     if (p.tool) {
       p.tool.icon.destroy();
@@ -552,18 +622,25 @@ export class WorldScene extends Phaser.Scene {
         .setAlpha(0.75)
         .setDepth(1e6 - 1);
     }
-    p.tool = { spec, icon, glow };
+    p.tool = { designId: design.id, spec, icon, glow };
     this.onToolEquipped?.(p.slot, spec);
     this.materializeFlash(p.sprite.x, p.sprite.y, 40);
   }
 
-  private buildVehicle(spec: FabricatedSpec, bodyKey: string) {
+  private buildVehicle(
+    design: PlaceableDesign,
+    bodyKey: string,
+    atX?: number,
+    atY?: number,
+  ) {
+    const spec = design.spec;
     const { w, h } = spec.size;
-    let x = this.pad.x + 110 + (this.spawnCount % 3) * 30;
-    let y = this.pad.y + 60 + Math.floor(this.spawnCount / 3) * 30;
+    let x = atX ?? this.pad.x + 110 + (this.spawnCount % 3) * 30;
+    let y = atY ?? this.pad.y + 60 + Math.floor(this.spawnCount / 3) * 30;
+    if (atX === undefined) this.spawnCount++;
     // Structures live on the hex grid — snap to the nearest free-ish hex
     // center. (Future: 6-edge connections to neighboring structures.)
-    if (spec.category !== "vehicle") {
+    if (spec.category !== "vehicle" && atX === undefined) {
       const hex = worldToHex(x, y, COLS, ROWS);
       const c = hexToWorld(hex.col, hex.row);
       x = c.x;
@@ -613,6 +690,7 @@ export class WorldScene extends Phaser.Scene {
     this.physics.add.collider(container, this.obstacles);
 
     const vehicle: VehicleEntity = {
+      designId: design.id,
       container,
       parts,
       spec,
@@ -682,24 +760,68 @@ export class WorldScene extends Phaser.Scene {
   private harvestHit(node: ResourceNode, materials: MaterialType[]): boolean {
     if (!materials.includes(node.material)) return false;
     node.remaining -= 1;
+    this.harvestDeltas.set(`${node.col},${node.row}`, {
+      col: node.col,
+      row: node.row,
+      remaining: Math.max(0, node.remaining),
+    });
     this.addStock(node.material, 1);
 
     const s = node.sprite as unknown as Phaser.GameObjects.Sprite;
     this.tweens.add({ targets: s, scale: { from: 1.12, to: 1 }, duration: 120 });
     this.floatText(node.cx, node.cy - 40, `+1 ${node.material}`, "#c9e77f");
 
-    if (node.remaining <= 0) {
-      this.nodes.splice(this.nodes.indexOf(node), 1);
-      node.blocker.destroy(); // frees the hex for walking immediately
-      this.tweens.add({
-        targets: s,
-        alpha: 0,
-        scale: 0.6,
-        duration: 250,
-        onComplete: () => s.destroy(),
-      });
-    }
+    if (node.remaining <= 0) this.removeNode(node, true);
     return true;
+  }
+
+  // ── save / restore ────────────────────────────────────────────
+  //
+  // Terrain regenerates deterministically from the room code, so a save
+  // carries only what diverges from it.
+
+  snapshot(): WorldSnapshot {
+    return {
+      v: 1,
+      stockpile: { ...this.stockpile },
+      harvested: [...this.harvestDeltas.values()],
+      built: this.vehicles.map((v) => ({
+        designId: v.designId,
+        x: Math.round(v.container.x),
+        y: Math.round(v.container.y),
+      })),
+      tools: [...this.players.values()]
+        .filter((p) => p.tool)
+        .map((p) => ({ slot: p.slot, designId: p.tool!.designId })),
+    };
+  }
+
+  /** Apply a saved world over the freshly generated terrain. `resolve` looks
+   *  up a Design by id (the catalog arrives on the same socket). */
+  applySnapshot(
+    snap: WorldSnapshot,
+    resolve: (designId: string) => PlaceableDesign | null,
+  ): void {
+    this.stockpile = { ...snap.stockpile };
+    this.onStockpile?.(this.stockpile);
+
+    for (const h of snap.harvested) {
+      const key = `${h.col},${h.row}`;
+      this.harvestDeltas.set(key, h);
+      const node = this.nodeByHex.get(key);
+      if (!node) continue;
+      if (h.remaining <= 0) this.removeNode(node, false);
+      else node.remaining = h.remaining;
+    }
+
+    for (const b of snap.built) {
+      const design = resolve(b.designId);
+      if (design) this.placeDesign(design, 1, b.x, b.y);
+    }
+    for (const t of snap.tools) {
+      const design = resolve(t.designId);
+      if (design) this.placeDesign(design, t.slot);
+    }
   }
 
   private floatText(x: number, y: number, text: string, color: string) {
@@ -854,6 +976,7 @@ export class WorldScene extends Phaser.Scene {
     const v = p.driving!;
     const vb = v.container.body as Phaser.Physics.Arcade.Body;
     vb.setVelocity(0, 0);
+    this.markDirty(); // it was driven somewhere — persist where it ended up
     p.driving = null;
     v.driver = null;
     v.smoke?.stop();
