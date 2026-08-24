@@ -133,6 +133,8 @@ type PlayerEntity = {
 type VehicleEntity = {
   designId: string;
   container: Phaser.GameObjects.Container;
+  /** The body art itself — shaken in place to sell a running engine. */
+  bodyImg: Phaser.GameObjects.Image;
   parts: { img: Phaser.GameObjects.Image; kind: string; baseY: number }[];
   spec: FabricatedSpec;
   driver: Slot | null;
@@ -657,10 +659,17 @@ export class WorldScene extends Phaser.Scene {
     const body = this.add.image(0, 0, bodyKey);
     body.setDisplaySize(w, h);
 
-    const parts = spec.anchors.map((a) => {
-      const img = this.add.image(a.x * w, a.y * h, `part-${a.part}`);
-      return { img, kind: a.part, baseY: a.y * h };
-    });
+    // Vehicles are generated complete (running gear and all), so library
+    // parts would double up on the art. Structures still get theirs — lamps
+    // and chimneys pair with the emission effects rather than duplicating
+    // the silhouette.
+    const parts =
+      spec.category === "vehicle"
+        ? []
+        : spec.anchors.map((a) => {
+            const img = this.add.image(a.x * w, a.y * h, `part-${a.part}`);
+            return { img, kind: a.part, baseY: a.y * h };
+          });
 
     const label = this.add
       .text(0, -h / 2 - 6, spec.displayName, {
@@ -699,6 +708,7 @@ export class WorldScene extends Phaser.Scene {
     const vehicle: VehicleEntity = {
       designId: design.id,
       container,
+      bodyImg: body,
       parts,
       spec,
       driver: null,
@@ -983,6 +993,9 @@ export class WorldScene extends Phaser.Scene {
     const v = p.driving!;
     const vb = v.container.body as Phaser.Physics.Arcade.Body;
     vb.setVelocity(0, 0);
+    // engine off — settle the body back to rest
+    v.bodyImg.setPosition(0, 0);
+    v.bodyImg.setAngle(0);
     this.markDirty(); // it was driven somewhere — persist where it ended up
     p.driving = null;
     v.driver = null;
@@ -1024,8 +1037,18 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
-    // part animation
+    // Engine vibration: the body shakes in place (never the container, which
+    // physics owns). Idling shakes a little, driving shakes more — this is
+    // what sells "running" now that wheels are baked into the art.
     const vel = Math.hypot(body.velocity.x, body.velocity.y);
+    const shake = 0.5 + Math.min(1, vel / 180) * 1.1;
+    v.bodyImg.setPosition(
+      Math.sin(now / 23) * shake * 0.6,
+      Math.sin(now / 17) * shake,
+    );
+    v.bodyImg.setAngle(Math.sin(now / 31) * shake * 0.5);
+
+    // part animation (structures only — vehicles carry no library parts)
     for (const part of v.parts) {
       switch (part.kind) {
         case "wheel":

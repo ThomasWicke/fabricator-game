@@ -3,9 +3,11 @@
 // can't output alpha, so the client chroma-keys the magenta out
 // (client/src/screen/chroma.ts).
 //
-// The prompt asks for the BODY ONLY — wheels/legs/floats/drills come from
-// the hand-made part library at spec anchors (the hybrid pipeline), so the
-// image model is told to leave them off.
+// Vehicles are asked for COMPLETE — running gear included. The hybrid
+// approach (AI body + library parts bolted on at anchors) doubled up: the
+// generated art drew its own wheels and our sprites sat on top of them.
+// Structures still take library parts (lamps, chimneys) since those pair
+// with emission effects rather than duplicating the silhouette.
 //
 // ISOMORPHIC — fetch-only, caller supplies the key. No env access.
 
@@ -28,14 +30,22 @@ function buildImagePrompt(spec: FabricatedSpec, hasSketch: boolean): string {
       : spec.size.h > spec.size.w * 1.2
         ? "tall, upright"
         : "roughly square";
-  const noParts =
-    spec.category === "structure"
-      ? ""
-      : " Do NOT draw wheels, tracks, legs, floats or drills — the body only, as if the running gear has been removed; those parts are attached separately.";
+  const RUNNING_GEAR: Record<string, string> = {
+    wheels: "chunky rubber wheels",
+    tracks: "caterpillar tracks",
+    legs: "articulated walking legs",
+    float: "pontoon floats",
+  };
+  const gear = RUNNING_GEAR[spec.locomotion.type];
+  const parts =
+    spec.category === "vehicle" && gear
+      ? ` Draw it complete and ready to drive, standing on clearly visible ${gear}.` +
+        (spec.harvest ? " Include a visible cutting or drilling implement." : "")
+      : "";
   return (
     `A single 2D video-game sprite: the body of "${spec.displayName}" (a ${spec.category}). ${spec.flavor} ` +
     `Viewed from a high three-quarter top-down angle. ${aspect} proportions.` +
-    noParts +
+    parts +
     (hasSketch
       ? " Use the attached rough player sketch as the shape reference — follow its silhouette and layout, but render it properly."
       : "") +
