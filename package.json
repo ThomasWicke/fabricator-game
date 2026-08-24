@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently --names client,party --prefix-colors cyan,magenta \"npm:dev:client\" \"npm:dev:party\"",
     "dev:client": "vite",
-    "dev:party": "partykit dev",
+    "dev:party": "partykit dev --port ${PARTYKIT_PORT:-1999}",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "deploy:party": "partykit deploy"

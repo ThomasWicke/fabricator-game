@@ -1,5 +1,10 @@
 import { defineConfig } from "vite";
 
+// Ports are env-overridable so a second instance (e.g. a git worktree) can run
+// alongside the default one: PORT=5273 PARTYKIT_PORT=2099 npm run dev
+const PORT = Number(process.env.PORT) || 5173;
+const PARTYKIT_PORT = Number(process.env.PARTYKIT_PORT) || 1999;
+
 export default defineConfig({
   root: "client",
   envDir: "..",
@@ -9,6 +14,7 @@ export default defineConfig({
   },
   server: {
     host: true,
+    port: PORT,
     fs: {
       // Allow importing shared protocol types from ../party.
       allow: [".."],
@@ -18,7 +24,7 @@ export default defineConfig({
     // matches the prod path (single host name) more closely.
     proxy: {
       "/parties": {
-        target: "http://localhost:1999",
+        target: `http://localhost:${PARTYKIT_PORT}`,
         ws: true,
         changeOrigin: true,
       },

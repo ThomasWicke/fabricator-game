@@ -3,9 +3,11 @@
 // pattern ported from garage-chillen's PlayerRegistry, radically simplified
 // for 2 players.
 //
-// The server owns two things the screen can't: the API keys (spec compile +
-// image generation) and the permanent Design store. The world simulation
-// stays entirely on the screen client.
+// The server owns three things the screen can't: the API keys (spec compile +
+// image generation), the permanent Design store, and the saved world. It also
+// remembers the current phase (lobby/playing) so a phone that joins or
+// reconnects mid-game lands on the game pad. The world simulation stays
+// entirely on the screen client.
 
 import type * as Party from "partykit/server";
 import { FabricatorEndpoint } from "./fabricator";
@@ -19,6 +21,8 @@ import type {
   DesignCatalogMsg,
   FabricateErrorMsg,
   IdentifyMsg,
+  Phase,
+  PresenceClientMsg,
   PublicPlayer,
   RosterMsg,
   Slot,
@@ -34,15 +38,21 @@ type PlayerRecord = {
   playerId: string;
   nickname: string;
   slot: Slot | null;
+  ready: boolean;
   connectionId: string | null;
 };
 
 const NICKNAME_MAX = 16;
 
+function sanitizeNickname(raw: unknown): string {
+  return typeof raw === "string" ? raw.trim().slice(0, NICKNAME_MAX) : "";
+}
+
 export default class FabricatorServer implements Party.Server {
   players = new Map<string, PlayerRecord>(); // by playerId
   connToPlayer = new Map<string, string>(); // connectionId → playerId
   screenConns = new Set<string>();
+  phase: Phase = "lobby";
   fabricator: FabricatorEndpoint;
   designs: DesignStore;
 
@@ -61,8 +71,8 @@ export default class FabricatorServer implements Party.Server {
       return;
     }
 
-    if (msg.scope === "presence" && msg.type === "identify") {
-      this.handleIdentify(msg, sender);
+    if (msg.scope === "presence") {
+      this.handlePresence(msg, sender);
       return;
     }
 
@@ -141,6 +151,7 @@ export default class FabricatorServer implements Party.Server {
     const rec = this.players.get(playerId);
     if (rec && rec.connectionId === conn.id) {
       rec.connectionId = null; // slot stays reserved for reconnect
+      rec.ready = false; // they'll re-ready when they come back
       this.broadcastRoster();
     }
   }
@@ -197,6 +208,58 @@ export default class FabricatorServer implements Party.Server {
 
   // ── presence ─────────────────────────────────────────────────
 
+  private handlePresence(msg: PresenceClientMsg, sender: Party.Connection) {
+    if (msg.type === "identify") {
+      this.handleIdentify(msg, sender);
+      return;
+    }
+
+    // Only the screen sets the phase — it's the one running the simulation.
+    if (msg.type === "set-phase") {
+      if (!this.screenConns.has(sender.id)) return;
+      if (msg.phase !== "lobby" && msg.phase !== "playing") return;
+      if (this.phase === msg.phase) return;
+      this.phase = msg.phase;
+      // A fresh lobby starts with nobody ready.
+      if (msg.phase === "lobby") {
+        for (const rec of this.players.values()) rec.ready = false;
+      }
+      this.broadcastRoster();
+      return;
+    }
+
+    const playerId = this.connToPlayer.get(sender.id);
+    const rec = playerId ? this.players.get(playerId) : undefined;
+    if (!rec) return;
+
+    if (msg.type === "set-nickname") {
+      const nickname = sanitizeNickname(msg.nickname);
+      if (nickname === rec.nickname) return;
+      rec.nickname = nickname;
+      this.broadcastRoster();
+      return;
+    }
+
+    if (msg.type === "set-ready") {
+      const ready = msg.ready === true;
+      if (ready === rec.ready) return;
+      rec.ready = ready;
+      this.broadcastRoster();
+      return;
+    }
+
+    if (msg.type === "swap-slots") {
+      if (this.phase !== "lobby" || rec.slot === null) return;
+      const other = [...this.players.values()].find(
+        (p) => p !== rec && p.slot !== null,
+      );
+      const mine = rec.slot;
+      rec.slot = mine === 1 ? 2 : 1;
+      if (other) other.slot = mine;
+      this.broadcastRoster();
+    }
+  }
+
   private handleIdentify(msg: IdentifyMsg, sender: Party.Connection) {
     if (msg.role === "screen") {
       this.screenConns.add(sender.id);
@@ -207,6 +270,7 @@ export default class FabricatorServer implements Party.Server {
           role: "screen",
           slot: null,
           lobbyCode: this.room.id,
+          phase: this.phase,
         }),
       );
       // Catalog first, then the world — restoring built objects needs their
@@ -216,7 +280,7 @@ export default class FabricatorServer implements Party.Server {
       return;
     }
 
-    const nickname = msg.nickname.trim().slice(0, NICKNAME_MAX) || "anon";
+    const nickname = sanitizeNickname(msg.nickname);
     let rec = this.players.get(msg.playerId);
     if (rec) {
       // Reconnect (or duplicate identify): rebind the connection.
@@ -224,12 +288,14 @@ export default class FabricatorServer implements Party.Server {
         this.connToPlayer.delete(rec.connectionId);
       }
       rec.connectionId = sender.id;
-      rec.nickname = nickname;
+      // Keep the name they set in the lobby if this reconnect carries none.
+      if (nickname) rec.nickname = nickname;
     } else {
       rec = {
         playerId: msg.playerId,
         nickname,
         slot: this.freeSlot(),
+        ready: false,
         connectionId: sender.id,
       };
       this.players.set(msg.playerId, rec);
@@ -242,6 +308,7 @@ export default class FabricatorServer implements Party.Server {
         role: "controller",
         slot: rec.slot,
         lobbyCode: this.room.id,
+        phase: this.phase,
       }),
     );
     void this.sendCatalog(sender, false);
@@ -280,12 +347,14 @@ export default class FabricatorServer implements Party.Server {
       nickname: p.nickname,
       slot: p.slot,
       connected: p.connectionId !== null,
+      ready: p.ready,
     }));
     const msg: RosterMsg = {
       scope: "presence",
       type: "roster",
       players,
       screenConnected: this.screenConns.size > 0,
+      phase: this.phase,
     };
     this.room.broadcast(JSON.stringify(msg));
   }

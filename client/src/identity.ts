@@ -1,6 +1,7 @@
 // Persistent local identity (ported from garage-chillen, minus avatars).
 // UUID is generated once per browser and reused across visits so the server
-// can rebind reconnects to the same player slot.
+// can rebind reconnects to the same player slot. The nickname is edited in
+// the lobby and remembered for the next session.
 
 import { v4 as uuidv4 } from "uuid";
 
@@ -10,6 +11,11 @@ export type Identity = {
 };
 
 const KEY = "fab.identity";
+export const NICKNAME_MAX = 16;
+
+export function sanitizeNickname(raw: string): string {
+  return raw.replace(/\s+/g, " ").trimStart().slice(0, NICKNAME_MAX);
+}
 
 export function ensureIdentity(): Identity {
   try {
@@ -24,8 +30,27 @@ export function ensureIdentity(): Identity {
     // fall through to fresh identity
   }
   const fresh: Identity = { playerId: uuidv4(), nickname: "" };
-  localStorage.setItem(KEY, JSON.stringify(fresh));
+  try {
+    localStorage.setItem(KEY, JSON.stringify(fresh));
+  } catch {
+    // private mode / storage disabled — identity just won't survive a reload
+  }
   return fresh;
+}
+
+/** Remember a name chosen on the landing page or in the lobby. No-op for
+ *  `?pid=` throwaway identities, which shouldn't stomp the real one. */
+export function rememberNickname(nickname: string): void {
+  if (identityFromUrl()) return;
+  const current = ensureIdentity();
+  try {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ ...current, nickname: sanitizeNickname(nickname) }),
+    );
+  } catch {
+    // ignore — see ensureIdentity
+  }
 }
 
 /**
@@ -39,7 +64,7 @@ export function identityFromUrl(): Identity | null {
   if (!pid) return null;
   return {
     playerId: `url-${pid}`,
-    nickname: (q.get("nick") ?? pid).slice(0, 16),
+    nickname: (q.get("nick") ?? pid).slice(0, NICKNAME_MAX),
   };
 }
 
