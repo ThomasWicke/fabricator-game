@@ -6,6 +6,8 @@ import { resolveIdentity } from "../identity";
 import { RoomConnection } from "../socket";
 import { keepScreenAwake } from "../wake-lock";
 import type { ButtonState, StickState } from "../../../party/protocol";
+import type { DesignSummary } from "../../../party/designs";
+import type { MaterialType } from "../../../shared/fabricator/schema";
 
 const SEND_INTERVAL_MS = 33;
 const STICK_RADIUS = 52;
@@ -180,6 +182,73 @@ export function startController(code: string) {
   zone.addEventListener("pointerup", endStick);
   zone.addEventListener("pointercancel", endStick);
 
+  // ── design library ──────────────────────────────────────────
+  // Designs are permanent; building one spends materials. Showing cost and
+  // affordability here is the whole point — players decide before paying.
+  const designs = new Map<string, DesignSummary>();
+  const stock: Record<MaterialType, number> = { wood: 0, stone: 0, bogiron: 0 };
+  const designsOverlay = document.getElementById("designs-overlay")!;
+  const designsList = document.getElementById("designs-list")!;
+  const designsCount = document.getElementById("designs-count")!;
+  const designsStock = document.getElementById("designs-stock")!;
+
+  const costMarkup = (cost: Record<MaterialType, number>) =>
+    (["wood", "stone", "bogiron"] as MaterialType[])
+      .filter((m) => cost[m] > 0)
+      .map((m) => {
+        const short = { wood: "🪵", stone: "🪨", bogiron: "⚙️" }[m];
+        const lack = stock[m] < cost[m];
+        return `<span class="${lack ? "lack" : ""}">${short} ${cost[m]}</span>`;
+      })
+      .join(" · ") || "free";
+
+  function renderDesigns() {
+    designsCount.textContent = String(designs.size);
+    designsStock.textContent =
+      `🪵 ${Math.floor(stock.wood)} · 🪨 ${Math.floor(stock.stone)} · ⚙️ ${Math.floor(stock.bogiron)}`;
+    if (designs.size === 0) {
+      designsList.innerHTML =
+        `<div class="designs-empty">No designs yet.<br>Tap ✏️ BLUEPRINT to sketch one —<br>the Fabricator will design it, then you can build it as often as you like.</div>`;
+      return;
+    }
+    const rows = [...designs.values()]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((d) => {
+        const affordable =
+          stock.wood >= d.cost.wood &&
+          stock.stone >= d.cost.stone &&
+          stock.bogiron >= d.cost.bogiron;
+        const built = d.timesBuilt > 0 ? ` · built ${d.timesBuilt}×` : "";
+        return `
+          <div class="design-row">
+            <div class="info">
+              <div class="dname">${esc(d.displayName)}</div>
+              <div class="dmeta">${d.category}${built}${d.hasArt ? " · art ✓" : ""}</div>
+              <div class="dcost">${costMarkup(d.cost)}</div>
+            </div>
+            <button data-build="${d.id}" ${affordable ? "" : "disabled"}>BUILD</button>
+          </div>`;
+      })
+      .join("");
+    designsList.innerHTML = rows;
+  }
+
+  designsList.addEventListener("click", (e) => {
+    const btn = (e.target as HTMLElement).closest("[data-build]") as HTMLElement | null;
+    if (!btn) return;
+    conn.send({ scope: "ui", type: "manufacture", designId: btn.dataset.build! });
+    if ("vibrate" in navigator) navigator.vibrate(20);
+    designsOverlay.classList.add("hidden");
+  });
+  document.getElementById("designs-btn")!.addEventListener("click", () => {
+    renderDesigns();
+    designsOverlay.classList.remove("hidden");
+  });
+  document.getElementById("designs-close")!.addEventListener("click", () => {
+    designsOverlay.classList.add("hidden");
+  });
+  renderDesigns();
+
   // ── blueprint sketch pad ────────────────────────────────────
   // The phone briefly becomes the Fabricator's design surface; the game
   // keeps running on the shared screen meanwhile.
@@ -345,4 +414,11 @@ function cropInkToDataUrl(
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function esc(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
+  );
 }
