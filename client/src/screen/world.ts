@@ -80,6 +80,14 @@ const PINE_PAD = 8;
 /** Sideways speed below which a vehicle keeps its current facing — stops it
  *  flickering when you drive straight up or down. */
 const FLIP_DEADZONE = 12;
+/** One full day, in ms. Short enough that a session sees both halves. */
+const DAY_MS = 240_000;
+/** How dark it gets at midnight. High enough that a lamp is worth building. */
+const NIGHT_ALPHA = 0.74;
+/** Darkness sits above the world; lights sit above the darkness and punch
+ *  through it with additive blending. */
+const DEPTH_DARKNESS = 900_000;
+const DEPTH_LIGHT = 900_001;
 
 const HEX_ASSETS = [
   "tileGrass",
@@ -146,6 +154,10 @@ type VehicleEntity = {
   nextHarvestAt: number;
   smoke?: Phaser.GameObjects.Particles.ParticleEmitter;
   sparks?: Phaser.GameObjects.Particles.ParticleEmitter;
+  /** Light lives outside the container so it can render above the night
+   *  overlay; container children are stuck at the container's depth. */
+  glow?: Phaser.GameObjects.Image;
+  glowOffset?: { x: number; y: number };
 };
 
 type ResourceNode = {
@@ -178,6 +190,7 @@ export class WorldScene extends Phaser.Scene {
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private pad!: { x: number; y: number };
   private fabFx: Phaser.GameObjects.GameObject[] = [];
+  private darkness!: Phaser.GameObjects.Rectangle;
   private spawnCount = 0;
 
   private settings: WorldSettings = DEFAULT_SETTINGS;
@@ -423,6 +436,12 @@ export class WorldScene extends Phaser.Scene {
       "W,A,S,D,F,G,UP,DOWN,LEFT,RIGHT,K,L",
     ) as Record<string, Phaser.Input.Keyboard.Key>;
 
+    // Night falls over the whole world; lights are drawn above it.
+    this.darkness = this.add
+      .rectangle(this.worldW / 2, this.worldH / 2, this.worldW, this.worldH, 0x0a1024)
+      .setDepth(DEPTH_DARKNESS)
+      .setAlpha(0);
+
     this.onStockpile?.(this.stockpile);
     this.onReady?.();
   }
@@ -635,9 +654,8 @@ export class WorldScene extends Phaser.Scene {
       glow = this.add
         .image(p.sprite.x, p.sprite.y, "glow")
         .setBlendMode(Phaser.BlendModes.ADD)
-        .setScale(0.5 + spec.emission.intensity * 0.8)
-        .setAlpha(0.75)
-        .setDepth(1e6 - 1);
+        .setScale(0.8 + spec.emission.intensity * 1.5)
+        .setDepth(DEPTH_LIGHT);
     }
     p.tool = { designId: design.id, spec, icon, glow };
     this.onToolEquipped?.(p.slot, spec);
@@ -692,15 +710,6 @@ export class WorldScene extends Phaser.Scene {
 
     const children: Phaser.GameObjects.GameObject[] = [body, ...parts.map((p) => p.img)];
 
-    if (spec.emission?.kind === "light") {
-      const lampAnchor = spec.anchors.find((a) => a.part === "lamp");
-      const glow = this.add
-        .image(lampAnchor ? lampAnchor.x * w : 0, lampAnchor ? lampAnchor.y * h : 0, "glow")
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setScale(0.5 + spec.emission.intensity * 0.9)
-        .setAlpha(0.75);
-      children.push(glow);
-    }
     children.push(label);
 
     const container = this.add.container(x, y, children);
@@ -750,6 +759,16 @@ export class WorldScene extends Phaser.Scene {
       em.setDepth(1e6 - 2);
       if (spec.category === "vehicle") em.stop();
       vehicle.sparks = em;
+    }
+
+    if (spec.emission?.kind === "light") {
+      const lamp = spec.anchors.find((a) => a.part === "lamp");
+      vehicle.glowOffset = { x: lamp ? lamp.x * w : 0, y: lamp ? lamp.y * h : 0 };
+      vehicle.glow = this.add
+        .image(x + vehicle.glowOffset.x, y + vehicle.glowOffset.y, "glow")
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setScale(0.9 + spec.emission.intensity * 1.8)
+        .setDepth(DEPTH_LIGHT);
     }
 
     this.vehicles.push(vehicle);
@@ -917,6 +936,19 @@ export class WorldScene extends Phaser.Scene {
 
   update() {
     const now = this.time.now;
+
+    // Day/night. Dawn and dusk get most of the curve so the transition reads
+    // as a sunset rather than a light switch.
+    const t = (now % DAY_MS) / DAY_MS; // 0 = dawn, 0.5 = dusk
+    const night = (1 - Math.cos(t * Math.PI * 2)) / 2; // 0 at noon, 1 at midnight
+    this.darkness.setAlpha(night * night * NIGHT_ALPHA);
+
+    for (const v of this.vehicles) {
+      if (!v.glow || !v.glowOffset) continue;
+      v.glow.setPosition(v.container.x + v.glowOffset.x, v.container.y + v.glowOffset.y);
+      // A lamp is invisible at noon and full strength at midnight.
+      v.glow.setAlpha(0.25 + night * 0.75);
+    }
     for (const p of this.players.values()) {
       const input = this.keyboardInput(p.slot) ?? p.net;
       const aEdge = input.buttons.a && !p.prevA;
@@ -967,6 +999,8 @@ export class WorldScene extends Phaser.Scene {
       if (p.tool) {
         p.tool.icon.setPosition(p.sprite.x + 16, p.sprite.y - 26);
         p.tool.glow?.setPosition(p.sprite.x, p.sprite.y);
+        // a carried lamp earns its keep after dark, same as a vehicle's
+        p.tool.glow?.setAlpha(0.25 + night * 0.75);
       }
     }
   }
