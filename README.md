@@ -11,10 +11,22 @@ Fabricator — Co-op Survival Game PoC).
 ## Stack
 
 - **Client:** Vite + TypeScript + Phaser 3 (world sim, split-screen cameras)
-- **Networking:** PartyKit (thin relay + player registry; the *screen client*
-  is the authoritative simulation host)
+- **Server:** one Cloudflare Worker serving three things from a single origin
+  — the built client (assets binding, SPA fallback), the rooms
+  (`partyserver` Durable Objects at `/parties/main/*`), and generated art
+  (`/sprites/*` from R2). Single origin means no CORS and no build-time host
+  config: the client just uses `window.location`.
+- The *screen client* is the authoritative simulation host; the Worker is a
+  relay plus a store (it owns the API keys, the design store, and saves).
 - Ported patterns from `garage-chillen` (protocol, socket wrapper, identity,
-  `?pid=` test identities) and `pong-pilot` (room codes, QR join, wake lock)
+  `?pid=` test identities) and `pong-pilot` (room codes, QR join, wake lock).
+
+Migrated off PartyKit in Aug 2026: its shared `partykit.dev` zone hit
+Cloudflare's 10,000-custom-domains-per-zone limit, so new projects can no
+longer be deployed there at all. `partyserver` is the Cloudflare-owned
+successor and uses the same Durable Object model, so the room code ported
+over nearly unchanged — **except `onMessage(connection, message)`, whose
+argument order is the reverse of PartyKit's.**
 
 ## Run
 
@@ -22,8 +34,26 @@ Fabricator — Co-op Survival Game PoC).
 npm run dev
 ```
 
-Runs Vite (:5173) and PartyKit (:1999) concurrently; Vite proxies `/parties`
-so everything is same-origin (needed for iOS Safari on LAN).
+Runs Vite (:5173) and `wrangler dev` (:8787) concurrently; Vite proxies
+`/parties` and `/sprites` to the Worker so everything is same-origin (needed
+for iOS Safari on LAN). Durable Object storage and R2 are emulated on disk
+under `.wrangler/` — local dev needs no Cloudflare account.
+
+## Deploy
+
+Needs your Cloudflare credentials, so these are yours to run:
+
+```bash
+npx wrangler login
+npx wrangler r2 bucket create fabricator-sprites
+npx wrangler secret put GOOGLE_API_KEY
+npm run deploy
+```
+
+R2 must be enabled on the account once (Cloudflare dashboard → R2) before
+the bucket can be created; it has a free tier. `npm run deploy` type-checks
+both projects, builds the client to `dist/`, and uploads Worker + assets
+together. Re-run `npm run cf-typegen` after changing `wrangler.jsonc`.
 
 - `/` — landing: start a shared screen, or join as controller with a code
 - `/screen/CODE` — the shared screen (Phaser world, QR join overlay)

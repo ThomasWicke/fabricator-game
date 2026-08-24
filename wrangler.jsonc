@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fabricator",
+  "main": "worker.ts",
+  "compatibility_date": "2026-08-24",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // The Worker serves everything from one origin: the built client, the
+  // WebSocket rooms, and the generated sprites. Single origin means no CORS
+  // and no build-time host config — the client just uses window.location.
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    // /screen/CODE and /c/CODE are client routes, but these two prefixes
+    // must reach the Worker instead of the SPA fallback.
+    "run_worker_first": ["/parties/*", "/sprites/*"]
+  },
+
+  // Binding name → party route (kebab-cased): "Main" serves /parties/main/*,
+  // which is what partysocket asks for by default.
+  "durable_objects": {
+    "bindings": [{ "name": "Main", "class_name": "FabricatorServer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FabricatorServer"] }],
+
+  // Generated body sprites and player sketches. Blobs don't belong in
+  // Durable Object storage — this also lets the browser fetch them
+  // directly over HTTP (cacheable) instead of down the WebSocket.
+  "r2_buckets": [{ "binding": "SPRITES", "bucket_name": "fabricator-sprites" }],
+
+  "observability": { "enabled": true }
+}

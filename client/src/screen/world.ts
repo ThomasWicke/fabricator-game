@@ -98,12 +98,13 @@ const idleInput = (): PlayerInput => ({
   buttons: { a: false, b: false },
 });
 
-/** Anything the world can manufacture: a stored Design, art already
- *  display-ready (chroma-keyed body, or the player's sketch). */
+/** Anything the world can manufacture: a stored Design plus a URL for its
+ *  display-ready art (chroma-keyed body, or the player's sketch), served
+ *  from R2 by the Worker. */
 export type PlaceableDesign = {
   id: string;
   spec: FabricatedSpec;
-  art?: string;
+  artUrl?: string;
 };
 
 type PlayerEntity = {
@@ -579,7 +580,8 @@ export class WorldScene extends Phaser.Scene {
 
   /** Put a design into the world without charging for it — the shared path
    *  for manufacturing and for restoring a saved world. Textures are keyed
-   *  by design id, so repeat builds of one design share a single texture. */
+   *  by design id, so repeat builds of one design share a single texture
+   *  and the art is only fetched once. */
   private placeDesign(design: PlaceableDesign, bySlot: Slot, x?: number, y?: number) {
     const key = `fab-body-${design.id}`;
     const build = () => {
@@ -587,18 +589,31 @@ export class WorldScene extends Phaser.Scene {
       else this.buildVehicle(design, key, x, y);
       this.markDirty();
     };
+    const placeholder = () => {
+      if (!this.textures.exists(key)) {
+        const g = this.add.graphics();
+        g.fillStyle(0x8b98a9, 1);
+        g.fillRoundedRect(0, 0, 64, 40, 8);
+        g.generateTexture(key, 64, 40);
+        g.destroy();
+      }
+      build();
+    };
+
     if (this.textures.exists(key)) {
       build();
-    } else if (design.art) {
-      this.textures.once(`addtexture-${key}`, build);
-      this.textures.addBase64(key, design.art);
+    } else if (design.artUrl) {
+      this.load.image(key, design.artUrl);
+      this.load.once(`filecomplete-image-${key}`, build);
+      this.load.once(`loaderror`, (file: { key: string }) => {
+        if (file.key === key) {
+          console.warn("sprite failed to load, using placeholder:", design.artUrl);
+          placeholder();
+        }
+      });
+      this.load.start();
     } else {
-      const g = this.add.graphics();
-      g.fillStyle(0x8b98a9, 1);
-      g.fillRoundedRect(0, 0, 64, 40, 8);
-      g.generateTexture(key, 64, 40);
-      g.destroy();
-      build();
+      placeholder();
     }
   }
 

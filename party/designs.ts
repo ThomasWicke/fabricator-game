@@ -1,14 +1,18 @@
 // The Design store: the Fabricator produces *Designs*, not objects.
 //
 // A Design is the permanent record of one compiled blueprint — spec, cost,
-// generated body sprite. Manufacturing spends materials to turn a Design
+// and pointers to its art. Manufacturing spends materials to turn a Design
 // into a thing in the world, and a Design can be built any number of times.
-// That means the expensive AI work (spec compile + image gen) happens once
+// The expensive AI work (spec compile + image gen) therefore happens once
 // per idea rather than once per object, and players see the cost BEFORE
 // they commit resources.
 //
-// Persisted in room storage, so the room code is effectively the save game
-// (the world seed already derives from it too).
+// Only METADATA lives here, in Durable Object storage. The images live in
+// R2 and are fetched over HTTP by the browser (see worker.ts) — blobs don't
+// belong in DO storage, and this way they're cacheable and never travel
+// down the WebSocket.
+//
+// No Workers types in this file: the client imports these types too.
 
 import type { MaterialCost, FabricatedSpec } from "../shared/fabricator/schema";
 
@@ -18,14 +22,14 @@ export type Design = {
   createdBy: string;
   createdAt: number;
   timesBuilt: number;
-  /** Chroma-keyed body sprite PNG, processed by a screen client. */
-  body?: string;
-  /** The player's original sketch — fallback art, and the seed for a
-   *  future "modify this design" flow. */
-  sketch?: string;
+  /** AI body sprite exists at /sprites/body/<id>.png */
+  hasBody: boolean;
+  /** Player's original sketch at /sprites/sketch/<id>.png — fallback art,
+   *  and the seed for a future "modify this design" flow. */
+  hasSketch: boolean;
 };
 
-/** What phones need: enough to list and price a design, no image payload. */
+/** What phones need: enough to list and price a design. */
 export type DesignSummary = {
   id: string;
   displayName: string;
@@ -48,42 +52,28 @@ export function summarize(d: Design): DesignSummary {
     createdBy: d.createdBy,
     createdAt: d.createdAt,
     timesBuilt: d.timesBuilt,
-    hasArt: !!d.body,
+    hasArt: d.hasBody || d.hasSketch,
   };
 }
 
-/** Durable Object values cap at 128KiB, so images are split across keys. */
-const CHUNK = 90_000;
-const MAX_DESIGNS = 120;
+/** URL for a design's best available art, or undefined if it has none. */
+export function designArtUrl(d: Design | DesignSummary): string | undefined {
+  if ("hasBody" in d) {
+    if (d.hasBody) return `/sprites/body/${d.id}.png`;
+    if (d.hasSketch) return `/sprites/sketch/${d.id}.png`;
+    return undefined;
+  }
+  return d.hasArt ? `/sprites/body/${d.id}.png` : undefined;
+}
 
-type StoredMeta = {
-  id: string;
-  spec: FabricatedSpec;
-  createdBy: string;
-  createdAt: number;
-  timesBuilt: number;
-  bodyParts: number;
-  sketchParts: number;
-};
+const MAX_DESIGNS = 500;
 
+/** The slice of Durable Object storage this needs — declared locally so the
+ *  file stays free of Workers types. */
 type StorageLike = {
-  get(keys: string[]): Promise<Map<string, unknown>>;
   put(entries: Record<string, unknown>): Promise<void>;
   list(options?: { prefix?: string }): Promise<Map<string, unknown>>;
 };
-
-function chunkEntries(prefix: string, value: string | undefined): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!value) return out;
-  for (let i = 0; i * CHUNK < value.length; i++) {
-    out[`${prefix}:${i}`] = value.slice(i * CHUNK, (i + 1) * CHUNK);
-  }
-  return out;
-}
-
-function partCount(value: string | undefined): number {
-  return value ? Math.ceil(value.length / CHUNK) : 0;
-}
 
 export class DesignStore {
   private designs = new Map<string, Design>();
@@ -95,56 +85,19 @@ export class DesignStore {
     if (!this.loading) {
       this.loading = (async () => {
         const all = await this.storage.list({ prefix: "d:" });
-        const metas: StoredMeta[] = [];
-        const chunks = new Map<string, string>();
-        for (const [key, value] of all) {
-          if (key.includes(":b:") || key.includes(":s:")) {
-            if (typeof value === "string") chunks.set(key, value);
-          } else if (value && typeof value === "object") {
-            metas.push(value as StoredMeta);
+        for (const value of all.values()) {
+          if (value && typeof value === "object") {
+            const d = value as Design;
+            this.designs.set(d.id, d);
           }
-        }
-        const join = (prefix: string, n: number): string | undefined => {
-          if (!n) return undefined;
-          let out = "";
-          for (let i = 0; i < n; i++) {
-            const part = chunks.get(`${prefix}:${i}`);
-            if (part === undefined) return undefined; // torn write — drop the art
-            out += part;
-          }
-          return out;
-        };
-        for (const m of metas) {
-          this.designs.set(m.id, {
-            id: m.id,
-            spec: m.spec,
-            createdBy: m.createdBy,
-            createdAt: m.createdAt,
-            timesBuilt: m.timesBuilt,
-            body: join(`d:${m.id}:b`, m.bodyParts),
-            sketch: join(`d:${m.id}:s`, m.sketchParts),
-          });
         }
       })();
     }
     return this.loading;
   }
 
-  private async persist(d: Design): Promise<void> {
-    const meta: StoredMeta = {
-      id: d.id,
-      spec: d.spec,
-      createdBy: d.createdBy,
-      createdAt: d.createdAt,
-      timesBuilt: d.timesBuilt,
-      bodyParts: partCount(d.body),
-      sketchParts: partCount(d.sketch),
-    };
-    await this.storage.put({
-      [`d:${d.id}`]: meta,
-      ...chunkEntries(`d:${d.id}:b`, d.body),
-      ...chunkEntries(`d:${d.id}:s`, d.sketch),
-    });
+  private persist(d: Design): Promise<void> {
+    return this.storage.put({ [`d:${d.id}`]: d });
   }
 
   async all(): Promise<Design[]> {
@@ -168,12 +121,12 @@ export class DesignStore {
     await this.persist(d);
   }
 
-  /** Attach the screen-processed body sprite. Returns the updated design. */
-  async setBody(id: string, body: string): Promise<Design | null> {
+  /** Record that the screen-processed body sprite is now in R2. */
+  async markBody(id: string): Promise<Design | null> {
     await this.ready();
     const d = this.designs.get(id);
-    if (!d) return null;
-    d.body = body;
+    if (!d || d.hasBody) return d ?? null;
+    d.hasBody = true;
     await this.persist(d);
     return d;
   }

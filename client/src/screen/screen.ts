@@ -22,7 +22,7 @@ import type {
   WorldSnapshot,
   WorldStateMsg,
 } from "../../../party/protocol";
-import type { Design } from "../../../party/designs";
+import { designArtUrl, type Design } from "../../../party/designs";
 import type { MaterialType } from "../../../shared/fabricator/schema";
 
 const ICONS: Record<MaterialType, string> = {
@@ -155,7 +155,7 @@ export function startScreen(code: string) {
   const placeable = (d: Design): PlaceableDesign => ({
     id: d.id,
     spec: d.spec,
-    art: d.body ?? d.sketch,
+    artUrl: designArtUrl(d),
   });
 
   // ── world save / restore ────────────────────────────────────
@@ -262,18 +262,15 @@ export function startScreen(code: string) {
           // permanent storage so every future build reuses it.
           if (m.rawBody) {
             chromaKeyBodySprite(m.rawBody).then(
-              (body) => {
-                const d = designs.get(m.design.id);
-                if (d) d.body = body;
-                conn.send({ scope: "ui", type: "design-body", designId: m.design.id, body });
-              },
+              (body) =>
+                conn.send({ scope: "ui", type: "design-body", designId: m.design.id, body }),
               (err) => console.warn("chroma key failed, design keeps its sketch:", err),
             );
           }
         } else if (msg.type === "design-body") {
-          const m = msg as unknown as DesignBodyMsg;
-          const d = designs.get(m.designId);
-          if (d) d.body = m.body;
+          // The sprite is now in R2; the design just gains a URL.
+          const d = designs.get((msg as unknown as DesignBodyMsg).designId);
+          if (d) d.hasBody = true;
         } else if (msg.type === "world-state") {
           pendingSnapshot = (msg as unknown as WorldStateMsg).snapshot;
           tryRestore();

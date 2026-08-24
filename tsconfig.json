@@ -14,5 +14,8 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"]
   },
-  "include": ["client/src/**/*", "party/**/*", "shared/**/*"]
+  // Client + the isomorphic modules it shares with the Worker. The Worker
+  // itself is checked by tsconfig.worker.json — its Cloudflare runtime
+  // globals conflict with DOM lib, so the two can't share one project.
+  "include": ["client/src/**/*", "shared/**/*", "party/protocol.ts", "party/designs.ts"]
 }
