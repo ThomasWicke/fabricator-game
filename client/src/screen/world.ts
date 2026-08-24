@@ -141,6 +141,8 @@ type VehicleEntity = {
   parts: { img: Phaser.GameObjects.Image; kind: string; baseY: number }[];
   spec: FabricatedSpec;
   driver: Slot | null;
+  /** Second rider, when the spec has the seats for one. */
+  passenger: Slot | null;
   nextHarvestAt: number;
   smoke?: Phaser.GameObjects.Particles.ParticleEmitter;
   sparks?: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -192,6 +194,9 @@ export class WorldScene extends Phaser.Scene {
   /** Screen shell subscribes for the HUD. */
   onStockpile: ((s: Stockpile) => void) | null = null;
   onToolEquipped: ((slot: Slot, spec: FabricatedSpec) => void) | null = null;
+  /** Fired when a player boards or leaves a vehicle, for the HUD. */
+  onRideChanged: ((slot: Slot, vehicle: string | null, driving: boolean) => void) | null =
+    null;
   /** Fired when persistent state changed — the shell debounces a save. */
   onDirty: (() => void) | null = null;
   /** Fired once the scene exists and can accept a snapshot. */
@@ -715,6 +720,7 @@ export class WorldScene extends Phaser.Scene {
       parts,
       spec,
       driver: null,
+      passenger: null,
       nextHarvestAt: 0,
     };
 
@@ -917,7 +923,13 @@ export class WorldScene extends Phaser.Scene {
       p.prevA = input.buttons.a;
 
       if (p.driving) {
-        this.driveVehicle(p, p.driving, input, now);
+        // Only whoever has the wheel steers; a passenger just rides along
+        // (their camera follows their sprite, so it has to track the ride).
+        if (p.driving.driver === p.slot) {
+          this.driveVehicle(p, p.driving, input, now);
+        } else {
+          p.sprite.setPosition(p.driving.container.x, p.driving.container.y);
+        }
         if (aEdge) this.exitVehicle(p);
         continue;
       }
@@ -963,7 +975,11 @@ export class WorldScene extends Phaser.Scene {
     let best: VehicleEntity | null = null;
     let bestDist = Infinity;
     for (const v of this.vehicles) {
-      if (v.spec.category !== "vehicle" || v.driver !== null) continue;
+      if (v.spec.category !== "vehicle") continue;
+      // Free seat? The driver's, or the passenger's on a two-seater.
+      const seats = Math.max(1, v.spec.seats);
+      const taken = (v.driver !== null ? 1 : 0) + (v.passenger !== null ? 1 : 0);
+      if (taken >= seats) continue;
       const d = Phaser.Math.Distance.Between(
         p.sprite.x,
         p.sprite.y,
@@ -981,7 +997,14 @@ export class WorldScene extends Phaser.Scene {
 
   private enterVehicle(p: PlayerEntity, v: VehicleEntity) {
     p.driving = v;
-    v.driver = p.slot;
+    if (v.driver === null) {
+      v.driver = p.slot;
+      if (v.spec.emission?.kind === "smoke") v.smoke?.start();
+      if (v.spec.emission?.kind === "sparks") v.sparks?.start();
+    } else {
+      v.passenger = p.slot;
+    }
+    this.onRideChanged?.(p.slot, v.spec.displayName, v.driver === p.slot);
     p.sprite.setVisible(false);
     p.label.setVisible(false);
     if (p.tool) {
@@ -989,23 +1012,32 @@ export class WorldScene extends Phaser.Scene {
       p.tool.glow?.setVisible(false);
     }
     (p.sprite.body as Phaser.Physics.Arcade.Body).enable = false;
-    if (v.spec.emission?.kind === "smoke") v.smoke?.start();
-    if (v.spec.emission?.kind === "sparks") v.sparks?.start();
   }
 
   private exitVehicle(p: PlayerEntity) {
     const v = p.driving!;
-    const vb = v.container.body as Phaser.Physics.Arcade.Body;
-    vb.setVelocity(0, 0);
-    // engine off — settle the body back to rest
-    v.bodyImg.setPosition(0, 0);
-    v.bodyImg.setAngle(0);
-    this.markDirty(); // it was driven somewhere — persist where it ended up
+    const wasDriver = v.driver === p.slot;
+    if (wasDriver) {
+      const vb = v.container.body as Phaser.Physics.Arcade.Body;
+      vb.setVelocity(0, 0);
+      // engine off — settle the body back to rest
+      v.bodyImg.setPosition(0, 0);
+      v.bodyImg.setAngle(0);
+      v.driver = null;
+      v.smoke?.stop();
+      v.sparks?.stop();
+      this.markDirty(); // it was driven somewhere — persist where it ended up
+    } else {
+      v.passenger = null;
+    }
     p.driving = null;
-    v.driver = null;
-    v.smoke?.stop();
-    v.sparks?.stop();
-    p.sprite.setPosition(v.container.x, v.container.y + v.spec.size.h / 2 + 20);
+    this.onRideChanged?.(p.slot, null, false);
+    // step out to the side a passenger vacates, so the two don't stack
+    const side = wasDriver ? 1 : -1;
+    p.sprite.setPosition(
+      v.container.x + side * (v.spec.size.w / 2 + 16),
+      v.container.y + v.spec.size.h / 2 + 12,
+    );
     p.sprite.setVisible(true);
     p.label.setVisible(true);
     if (p.tool) {

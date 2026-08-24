@@ -519,6 +519,18 @@ export function startScreen(code: string) {
       }
     };
 
+    worldScene.onRideChanged = (slot, vehicle, driving) => {
+      const el = document.getElementById(`tool-${slot === 1 ? "p1" : "p2"}`);
+      if (!el) return;
+      if (vehicle) {
+        el.textContent = `${driving ? "🛞 driving" : "🧍 riding in"} ${vehicle}`;
+        el.classList.add("has");
+      } else {
+        el.textContent = "no tool";
+        el.classList.remove("has");
+      }
+    };
+
     worldScene.onToolEquipped = (slot, spec) => {
       const el = document.getElementById(`tool-${slot === 1 ? "p1" : "p2"}`)!;
       const gathers = spec.harvest ? ` · ${spec.harvest.materials.join("/")}` : "";
