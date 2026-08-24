@@ -19,6 +19,8 @@ import type {
   DesignCatalogMsg,
   FabricateErrorMsg,
   IdentifyMsg,
+  Phase,
+  PresenceClientMsg,
   PublicPlayer,
   RosterMsg,
   Slot,
@@ -32,9 +34,14 @@ type PlayerRecord = {
   nickname: string;
   slot: Slot | null;
   connectionId: string | null;
+  ready: boolean;
 };
 
 const NICKNAME_MAX = 16;
+
+function sanitizeNickname(raw: unknown): string {
+  return typeof raw === "string" ? raw.trim().slice(0, NICKNAME_MAX) : "";
+}
 /** Room-storage key for the saved world (deltas only — see WorldSnapshot). */
 const WORLD_KEY = "world";
 const DATA_URL_RE = /^data:(image\/[a-z+]+);base64,(.+)$/;
@@ -45,6 +52,9 @@ export class FabricatorServer extends Server<Env> {
   private players = new Map<string, PlayerRecord>();
   private connToPlayer = new Map<string, string>();
   private screenConns = new Set<string>();
+  /** Lobby or playing. Held here so a phone joining or reconnecting mid-game
+   *  lands on the game pad instead of the lobby. */
+  private phase: Phase = "lobby";
   private fabricator!: FabricatorEndpoint;
   private designs!: DesignStore;
 
@@ -66,8 +76,8 @@ export class FabricatorServer extends Server<Env> {
       return;
     }
 
-    if (msg.scope === "presence" && msg.type === "identify") {
-      this.handleIdentify(msg, connection);
+    if (msg.scope === "presence") {
+      this.handlePresence(msg, connection);
       return;
     }
 
@@ -143,6 +153,7 @@ export class FabricatorServer extends Server<Env> {
     const rec = this.players.get(playerId);
     if (rec && rec.connectionId === connection.id) {
       rec.connectionId = null; // slot stays reserved for reconnect
+      rec.ready = false;
       this.broadcastRoster();
     }
   }
@@ -225,6 +236,58 @@ export class FabricatorServer extends Server<Env> {
 
   // ── presence ─────────────────────────────────────────────────
 
+  private handlePresence(msg: PresenceClientMsg, conn: Connection) {
+    if (msg.type === "identify") {
+      this.handleIdentify(msg, conn);
+      return;
+    }
+
+    // Only the screen sets the phase — it's the one running the simulation.
+    if (msg.type === "set-phase") {
+      if (!this.screenConns.has(conn.id)) return;
+      if (msg.phase !== "lobby" && msg.phase !== "playing") return;
+      if (this.phase === msg.phase) return;
+      this.phase = msg.phase;
+      // A fresh lobby starts with nobody ready.
+      if (msg.phase === "lobby") {
+        for (const rec of this.players.values()) rec.ready = false;
+      }
+      this.broadcastRoster();
+      return;
+    }
+
+    const playerId = this.connToPlayer.get(conn.id);
+    const rec = playerId ? this.players.get(playerId) : undefined;
+    if (!rec) return;
+
+    if (msg.type === "set-nickname") {
+      const nickname = sanitizeNickname(msg.nickname);
+      if (nickname === rec.nickname) return;
+      rec.nickname = nickname;
+      this.broadcastRoster();
+      return;
+    }
+
+    if (msg.type === "set-ready") {
+      const ready = msg.ready === true;
+      if (ready === rec.ready) return;
+      rec.ready = ready;
+      this.broadcastRoster();
+      return;
+    }
+
+    if (msg.type === "swap-slots") {
+      if (this.phase !== "lobby" || rec.slot === null) return;
+      const other = [...this.players.values()].find(
+        (p) => p !== rec && p.slot !== null,
+      );
+      const mine = rec.slot;
+      rec.slot = mine === 1 ? 2 : 1;
+      if (other) other.slot = mine;
+      this.broadcastRoster();
+    }
+  }
+
   private handleIdentify(msg: IdentifyMsg, conn: Connection) {
     if (msg.role === "screen") {
       this.screenConns.add(conn.id);
@@ -235,6 +298,7 @@ export class FabricatorServer extends Server<Env> {
           role: "screen",
           slot: null,
           lobbyCode: this.name,
+          phase: this.phase,
         }),
       );
       // Catalog first, then the world — restoring built objects needs their
@@ -244,7 +308,7 @@ export class FabricatorServer extends Server<Env> {
       return;
     }
 
-    const nickname = msg.nickname.trim().slice(0, NICKNAME_MAX) || "anon";
+    const nickname = sanitizeNickname(msg.nickname);
     let rec = this.players.get(msg.playerId);
     if (rec) {
       // Reconnect (or duplicate identify): rebind the connection.
@@ -252,13 +316,15 @@ export class FabricatorServer extends Server<Env> {
         this.connToPlayer.delete(rec.connectionId);
       }
       rec.connectionId = conn.id;
-      rec.nickname = nickname;
+      // Keep the name they set in the lobby if this reconnect carries none.
+      if (nickname) rec.nickname = nickname;
     } else {
       rec = {
         playerId: msg.playerId,
         nickname,
         slot: this.freeSlot(),
         connectionId: conn.id,
+        ready: false,
       };
       this.players.set(msg.playerId, rec);
     }
@@ -270,6 +336,7 @@ export class FabricatorServer extends Server<Env> {
         role: "controller",
         slot: rec.slot,
         lobbyCode: this.name,
+        phase: this.phase,
       }),
     );
     void this.sendCatalog(conn, false);
@@ -308,12 +375,14 @@ export class FabricatorServer extends Server<Env> {
       nickname: p.nickname,
       slot: p.slot,
       connected: p.connectionId !== null,
+      ready: p.ready,
     }));
     const msg: RosterMsg = {
       scope: "presence",
       type: "roster",
       players,
       screenConnected: this.screenConns.size > 0,
+      phase: this.phase,
     };
     this.broadcast(JSON.stringify(msg));
   }
