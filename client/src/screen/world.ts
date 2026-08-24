@@ -80,6 +80,11 @@ const PINE_PAD = 8;
 /** Sideways speed below which a vehicle keeps its current facing — stops it
  *  flickering when you drive straight up or down. */
 const FLIP_DEADZONE = 12;
+/** How far past its own footprint an automated structure can reach. */
+const AUTOMATION_REACH = 40;
+/** Unattended harvesting runs at this fraction of the spec's rate — free,
+ *  but slower than standing there doing it yourself. */
+const AUTOMATION_RATE = 0.6;
 /** One full day, in ms. Short enough that a session sees both halves. */
 const DAY_MS = 240_000;
 /** How dark it gets at midnight. High enough that a lamp is worth building. */
@@ -1001,6 +1006,33 @@ export class WorldScene extends Phaser.Scene {
         p.tool.glow?.setPosition(p.sprite.x, p.sprite.y);
         // a carried lamp earns its keep after dark, same as a vehicle's
         p.tool.glow?.setAlpha(0.25 + night * 0.75);
+      }
+    }
+
+    this.runAutomation(now);
+  }
+
+  /**
+   * Structures that can harvest work their own patch, unattended — the first
+   * automation in the game. Deliberately slower than doing it by hand: the
+   * trade is that it keeps going while you're somewhere else.
+   */
+  private runAutomation(now: number) {
+    for (const v of this.vehicles) {
+      const hv = v.spec.harvest;
+      if (!hv || v.spec.category !== "structure") continue;
+      if (now < v.nextHarvestAt) continue;
+      const reach = Math.max(v.spec.size.w, v.spec.size.h) / 2 + AUTOMATION_REACH;
+      const node = this.nearestNode(v.container.x, v.container.y, reach);
+      if (!node || !hv.materials.includes(node.material)) {
+        v.nextHarvestAt = now + 1200; // nothing in reach — check back shortly
+        continue;
+      }
+      this.harvestHit(node, hv.materials);
+      v.nextHarvestAt = now + 1000 / (hv.rate * AUTOMATION_RATE);
+      // a visible tick so you can tell it's earning its keep
+      for (const part of v.parts) {
+        if (part.kind === "drill") part.img.setAngle(part.img.angle === 0 ? 12 : 0);
       }
     }
   }
