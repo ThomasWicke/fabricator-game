@@ -1,16 +1,34 @@
-// Spec v0 — the capability schema. Single source of truth: the TS type, the
+// Spec v1 — the capability schema. Single source of truth: the TS type, the
 // JSON schema sent to providers, and the code-side validator all live here.
 //
 // This is the core architectural thesis: the LLM only ever SELECTS AND
 // PARAMETERIZES from this fixed vocabulary; all behavior downstream of a
 // spec is deterministic, hand-designed simulation.
 //
+// v1 primitives: locomotion (terrain-modified movement), harvest (resource
+// gathering), emission (light/smoke/sparks). Cost is a per-material bill
+// computed in code — swamp capability is priced in bogiron, which only
+// exists in the swamp. That's the material-gated progression loop.
+//
 // ISOMORPHIC — must run in PartyKit workers AND browsers. No process.env,
 // no PartyKit imports, no Node APIs.
 
 export type LocomotionType = "none" | "wheels" | "tracks" | "legs" | "float";
 export type TerrainType = "grass" | "sand" | "swamp";
-export type PartKind = "wheel" | "leg" | "float";
+export type MaterialType = "wood" | "stone" | "bogiron";
+export type PartKind =
+  | "wheel"
+  | "leg"
+  | "float"
+  | "track"
+  | "drill"
+  | "chimney"
+  | "lamp";
+export type EmissionKind = "light" | "smoke" | "sparks";
+
+export const MATERIALS: readonly MaterialType[] = ["wood", "stone", "bogiron"];
+
+export type MaterialCost = Record<MaterialType, number> & { total: number };
 
 export type FabricatedSpec = {
   category: "vehicle" | "structure" | "tool";
@@ -19,11 +37,26 @@ export type FabricatedSpec = {
   size: { w: number; h: number };
   locomotion: {
     type: LocomotionType;
-    /** Base speed in px/s on ideal terrain. 0 for structures. */
+    /** Base speed in px/s on ideal terrain. 0 for structures/tools. */
     speed: number;
     /** Speed multipliers per terrain, 0..1. This is where "Swamp Buggy ≠
      *  Car" lives. */
     terrainModifiers: Record<TerrainType, number>;
+  };
+  /** Resource gathering. On a tool: boosts the carrying player. On a
+   *  vehicle: harvests nodes it touches while driven. */
+  harvest?: {
+    /** Units per second, 0.4..4. */
+    rate: number;
+    /** Which materials it can extract. Bogiron REQUIRES a harvester that
+     *  lists it — bare hands can't gather it. */
+    materials: MaterialType[];
+  };
+  /** Ambient output — visible in the world (glow / smoke puffs / sparks). */
+  emission?: {
+    kind: EmissionKind;
+    /** 0..1 — scales radius / particle frequency. */
+    intensity: number;
   };
   /** Functional parts attached to the body; x/y relative to body size,
    *  each in [-0.5, 0.5] ((0,0) = body center). */
@@ -31,8 +64,8 @@ export type FabricatedSpec = {
   seats: number;
   /** One in-world line from the Fabricator about its interpretation. */
   flavor: string;
-  /** Resource cost — computed by code from the spec, never by the LLM. */
-  cost: number;
+  /** Per-material bill — computed by code from the spec, never by the LLM. */
+  cost: MaterialCost;
 };
 
 /** What providers must return (cost is added by code afterwards). */
@@ -70,12 +103,36 @@ export const SPEC_JSON_SCHEMA = {
       required: ["type", "speed", "terrainModifiers"],
       additionalProperties: false,
     },
+    harvest: {
+      type: "object",
+      properties: {
+        rate: { type: "number" },
+        materials: {
+          type: "array",
+          items: { type: "string", enum: ["wood", "stone", "bogiron"] },
+        },
+      },
+      required: ["rate", "materials"],
+      additionalProperties: false,
+    },
+    emission: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["light", "smoke", "sparks"] },
+        intensity: { type: "number" },
+      },
+      required: ["kind", "intensity"],
+      additionalProperties: false,
+    },
     anchors: {
       type: "array",
       items: {
         type: "object",
         properties: {
-          part: { type: "string", enum: ["wheel", "leg", "float"] },
+          part: {
+            type: "string",
+            enum: ["wheel", "leg", "float", "track", "drill", "chimney", "lamp"],
+          },
           x: { type: "number" },
           y: { type: "number" },
         },
@@ -117,12 +174,31 @@ export function validateSpec(raw: unknown): string[] {
   for (const t of ["grass", "sand", "swamp"]) {
     if (typeof mods?.[t] !== "number") errs.push(`bad terrainModifiers.${t}`);
   }
+  if (o.harvest !== undefined && o.harvest !== null) {
+    const hv = o.harvest as Record<string, unknown>;
+    if (typeof hv.rate !== "number") errs.push("bad harvest.rate");
+    if (
+      !Array.isArray(hv.materials) ||
+      !(hv.materials as unknown[]).every((m) => MATERIALS.includes(m as MaterialType))
+    ) {
+      errs.push("bad harvest.materials");
+    }
+  }
+  if (o.emission !== undefined && o.emission !== null) {
+    const em = o.emission as Record<string, unknown>;
+    if (!["light", "smoke", "sparks"].includes(em.kind as string)) {
+      errs.push("bad emission.kind");
+    }
+    if (typeof em.intensity !== "number") errs.push("bad emission.intensity");
+  }
   if (!Array.isArray(o.anchors)) {
     errs.push("bad anchors");
   } else {
     for (const a of o.anchors as Record<string, unknown>[]) {
       if (
-        !["wheel", "leg", "float"].includes(a?.part as string) ||
+        !["wheel", "leg", "float", "track", "drill", "chimney", "lamp"].includes(
+          a?.part as string,
+        ) ||
         typeof a?.x !== "number" ||
         typeof a?.y !== "number"
       ) {
@@ -165,6 +241,15 @@ export function clampSpec(raw: RawSpec): RawSpec {
             swamp: clamp(t.swamp, 0, 1),
           },
     },
+    harvest: raw.harvest
+      ? {
+          rate: clamp(raw.harvest.rate, 0.4, 4),
+          materials: [...new Set(raw.harvest.materials)],
+        }
+      : undefined,
+    emission: raw.emission
+      ? { kind: raw.emission.kind, intensity: clamp(raw.emission.intensity, 0, 1) }
+      : undefined,
     anchors: raw.anchors.slice(0, 8).map((a) => ({
       part: a.part,
       x: clamp(a.x, -0.5, 0.5),

@@ -73,6 +73,42 @@ const PAIRS: Pair[] = [
       return Math.min(t.grass, t.sand, t.swamp) >= 0.3 ? ok : "expected all-terrain capability";
     },
   },
+  // ── v1 primitives: harvest + emission ──
+  {
+    name: "Sturdy Axe",
+    intent: "For chopping trees.",
+    check: (s) =>
+      s.category === "tool" && s.harvest?.materials.includes("wood")
+        ? ok
+        : "expected wood-harvesting tool",
+  },
+  {
+    name: "Mining Drill",
+    intent: "A handheld drill for extracting ore from rock.",
+    check: (s) =>
+      s.harvest && (s.harvest.materials.includes("stone") || s.harvest.materials.includes("bogiron"))
+        ? ok
+        : "expected stone/bogiron harvest",
+  },
+  {
+    name: "Logging Truck",
+    intent: "Drives around cutting down trees.",
+    check: (s) =>
+      s.category === "vehicle" && s.harvest?.materials.includes("wood")
+        ? ok
+        : "expected wood-harvesting vehicle",
+  },
+  {
+    name: "Lantern",
+    check: (s) => (s.emission?.kind === "light" ? ok : "expected light emission"),
+  },
+  {
+    name: "Steam Tractor",
+    check: (s) =>
+      s.emission?.kind === "smoke" && s.locomotion.type !== "none"
+        ? ok
+        : "expected smoking vehicle",
+  },
 ];
 
 const CONFIGS: { config: CompilerConfig; keyVar: string }[] = [
@@ -112,11 +148,15 @@ async function main() {
         totalOut += usage.outputTokens;
         const problem = pair.check(spec);
         const t = spec.locomotion.terrainModifiers;
+        const extras =
+          (spec.harvest ? ` hv=${spec.harvest.rate.toFixed(1)}/${spec.harvest.materials.join("+")}` : "") +
+          (spec.emission ? ` em=${spec.emission.kind}@${spec.emission.intensity.toFixed(1)}` : "");
         console.log(
           `${problem ? "✗" : "✓"} ${pair.name.padEnd(18)} ${spec.category.padEnd(10)}` +
             ` ${spec.locomotion.type.padEnd(7)} v=${String(Math.round(spec.locomotion.speed)).padStart(3)}` +
             ` g/s/w=${t.grass.toFixed(2)}/${t.sand.toFixed(2)}/${t.swamp.toFixed(2)}` +
-            ` cost=${spec.cost} ${Date.now() - t0}ms atts=${attempts}` +
+            ` cost=${spec.cost.total}(${spec.cost.wood}w/${spec.cost.stone}s/${spec.cost.bogiron}b)` +
+            `${extras} ${Date.now() - t0}ms atts=${attempts}` +
             (problem ? `  ← ${problem}` : ""),
         );
         if (pair.name === "Car") swampVsCar[label].car = t.swamp;

@@ -12,6 +12,7 @@ import {
   type CompilerConfig,
   type FabricatedSpec,
 } from "../shared/fabricator";
+import { generateBodySprite } from "../shared/fabricator/image";
 
 /** Per-room fabrication cap so a deployed demo key can't be farmed. */
 const MAX_PER_HOUR = 20;
@@ -53,5 +54,33 @@ export class FabricatorEndpoint {
         ` out=${outcome.usage.outputTokens}`,
     );
     return outcome.spec;
+  }
+
+  /**
+   * AI body sprite for the spec (Google key only — Anthropic has no image
+   * model). Failures return null: the game falls back to the player's
+   * sketch, fabrication never dies on the art step.
+   */
+  async bodySprite(
+    spec: FabricatedSpec,
+    sketchBase64: string | undefined,
+  ): Promise<string | null> {
+    const googleKey = this.env.GOOGLE_API_KEY as string | undefined;
+    if (!googleKey) return null;
+    // Tools stay sketch-bodied: they render as 22px icons, not worth an
+    // image-gen round trip.
+    if (spec.category === "tool") return null;
+    try {
+      const t0 = Date.now();
+      const sprite = await generateBodySprite(spec, sketchBase64, googleKey);
+      console.log(
+        `body sprite for "${spec.displayName}" in ${Date.now() - t0}ms` +
+          ` (${sprite.mimeType}, ~${Math.round(sprite.dataUrl.length / 1024)}KB wire)`,
+      );
+      return sprite.dataUrl;
+    } catch (err) {
+      console.error("body sprite failed, falling back to sketch:", err);
+      return null;
+    }
   }
 }

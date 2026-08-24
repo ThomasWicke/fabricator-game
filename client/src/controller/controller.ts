@@ -31,8 +31,19 @@ export function startController(code: string) {
         <div class="stick-nub" id="stick-nub"></div>
         <div class="zone-hint">touch anywhere here to move</div>
       </div>
-      <button class="blueprint-btn" id="blueprint-btn">✏️ BLUEPRINT</button>
+      <div class="top-btns">
+        <button class="blueprint-btn" id="blueprint-btn">✏️ BLUEPRINT</button>
+        <button class="blueprint-btn" id="designs-btn">📐 DESIGNS<span class="badge" id="designs-count">0</span></button>
+      </div>
       <div class="fabricating-note hidden" id="fabricating-note">FABRICATING…</div>
+      <div class="designs-overlay hidden" id="designs-overlay">
+        <div class="designs-head">
+          <h2>Design store</h2>
+          <div class="stock" id="designs-stock">🪵 0 · 🪨 0 · ⚙️ 0</div>
+        </div>
+        <div class="designs-list" id="designs-list"></div>
+        <button class="designs-close" id="designs-close">Close</button>
+      </div>
       <div class="sketch-overlay hidden" id="sketch-overlay">
         <input id="sketch-name" type="text" maxlength="32" placeholder="Name it (e.g. Swamp Buggy)" autocomplete="off" />
         <input id="sketch-intent" type="text" maxlength="80" placeholder="Optional: what should it do?" autocomplete="off" />
@@ -75,9 +86,30 @@ export function startController(code: string) {
         return;
       }
       if (msg.scope === "ui") {
-        if (msg.type === "fabricated" || msg.type === "fabricate-error") {
+        if (msg.type === "design-catalog") {
+          designs.clear();
+          for (const d of (msg as unknown as { designs: DesignSummary[] }).designs) {
+            designs.set(d.id, d);
+          }
+          renderDesigns();
+        } else if (msg.type === "design-added") {
+          const d = (msg as unknown as { design: DesignSummary }).design;
+          const isNew = !designs.has(d.id);
+          designs.set(d.id, d);
+          renderDesigns();
+          if (isNew) {
+            fabricatingNote.classList.add("hidden");
+            if ("vibrate" in navigator) navigator.vibrate([30, 60, 30]);
+          }
+        } else if (msg.type === "stockpile") {
+          const s = msg as unknown as Record<MaterialType, number>;
+          stock.wood = s.wood;
+          stock.stone = s.stone;
+          stock.bogiron = s.bogiron;
+          renderDesigns();
+        } else if (msg.type === "fabricate-error") {
           fabricatingNote.classList.add("hidden");
-          if ("vibrate" in navigator) navigator.vibrate(msg.type === "fabricated" ? [30, 60, 30] : 200);
+          if ("vibrate" in navigator) navigator.vibrate(200);
         }
       }
     },

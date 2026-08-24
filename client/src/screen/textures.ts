@@ -186,6 +186,142 @@ export function makePartTextures(scene: Phaser.Scene): void {
     ctx.fill();
     canvas.refresh();
   }
+  if (!scene.textures.exists("part-track")) {
+    // caterpillar tread: rounded band with visible tread notches
+    const w = 44;
+    const h = 18;
+    const canvas = scene.textures.createCanvas("part-track", w, h)!;
+    const ctx = canvas.context;
+    ctx.fillStyle = "#23262c";
+    ctx.beginPath();
+    ctx.roundRect(0, 0, w, h, 9);
+    ctx.fill();
+    ctx.fillStyle = "#4a4f59";
+    for (let x = 4; x < w - 4; x += 7) {
+      ctx.fillRect(x, 2, 3, h - 4);
+    }
+    ctx.fillStyle = "#7c828e";
+    ctx.beginPath();
+    ctx.arc(10, h / 2, 4, 0, Math.PI * 2);
+    ctx.arc(w - 10, h / 2, 4, 0, Math.PI * 2);
+    ctx.fill();
+    canvas.refresh();
+  }
+  if (!scene.textures.exists("part-drill")) {
+    // cone-shaped drill bit pointing right, with segment lines
+    const w = 30;
+    const h = 20;
+    const canvas = scene.textures.createCanvas("part-drill", w, h)!;
+    const ctx = canvas.context;
+    ctx.fillStyle = "#8a8f99";
+    ctx.beginPath();
+    ctx.moveTo(2, 2);
+    ctx.lineTo(w - 2, h / 2);
+    ctx.lineTo(2, h - 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#4a4f59";
+    ctx.lineWidth = 2;
+    for (const fx of [0.3, 0.55, 0.78]) {
+      const x = 2 + (w - 4) * fx;
+      const spread = (1 - fx) * (h / 2 - 2);
+      ctx.beginPath();
+      ctx.moveTo(x, h / 2 - spread);
+      ctx.lineTo(x, h / 2 + spread);
+      ctx.stroke();
+    }
+    canvas.refresh();
+  }
+  if (!scene.textures.exists("part-chimney")) {
+    const w = 14;
+    const h = 24;
+    const canvas = scene.textures.createCanvas("part-chimney", w, h)!;
+    const ctx = canvas.context;
+    ctx.fillStyle = "#4a4f59";
+    ctx.fillRect(3, 4, 8, h - 4);
+    ctx.fillStyle = "#23262c";
+    ctx.fillRect(1, 0, 12, 6);
+    canvas.refresh();
+  }
+  if (!scene.textures.exists("part-lamp")) {
+    const s = 18;
+    const canvas = scene.textures.createCanvas("part-lamp", s, s)!;
+    const ctx = canvas.context;
+    ctx.fillStyle = "#4a4f59";
+    ctx.fillRect(s / 2 - 2, s / 2, 4, s / 2);
+    ctx.fillStyle = "#ffe9a8";
+    ctx.beginPath();
+    ctx.arc(s / 2, s / 2 - 2, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#8a8f99";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    canvas.refresh();
+  }
+}
+
+/** Bogiron deposit — the swamp-only resource node. */
+export function makeBogironTexture(scene: Phaser.Scene): void {
+  if (scene.textures.exists("bogiron")) return;
+  const w = 34;
+  const h = 26;
+  const canvas = scene.textures.createCanvas("bogiron", w, h)!;
+  const ctx = canvas.context;
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.beginPath();
+  ctx.ellipse(w / 2, h - 3, 13, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // dark lump
+  ctx.fillStyle = "#3c3430";
+  ctx.beginPath();
+  ctx.moveTo(3, h - 5);
+  ctx.lineTo(7, 7);
+  ctx.lineTo(17, 3);
+  ctx.lineTo(28, 8);
+  ctx.lineTo(31, h - 5);
+  ctx.closePath();
+  ctx.fill();
+  // rusty ore flecks
+  ctx.fillStyle = "#c97b3d";
+  for (const [x, y] of [[10, 10], [19, 8], [24, 14], [13, 16], [20, 18]]) {
+    ctx.fillRect(x, y, 3, 3);
+  }
+  canvas.refresh();
+}
+
+/** Tiny soft textures for particle emitters (smoke puffs, sparks). */
+export function makeParticleTextures(scene: Phaser.Scene): void {
+  if (!scene.textures.exists("puff")) {
+    const s = 12;
+    const canvas = scene.textures.createCanvas("puff", s, s)!;
+    const ctx = canvas.context;
+    const g = ctx.createRadialGradient(s / 2, s / 2, 1, s / 2, s / 2, s / 2);
+    g.addColorStop(0, "rgba(200,200,205,0.9)");
+    g.addColorStop(1, "rgba(200,200,205,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, s, s);
+    canvas.refresh();
+  }
+  if (!scene.textures.exists("spark")) {
+    const s = 5;
+    const canvas = scene.textures.createCanvas("spark", s, s)!;
+    const ctx = canvas.context;
+    ctx.fillStyle = "#ffd75e";
+    ctx.fillRect(0, 0, s, s);
+    canvas.refresh();
+  }
+  if (!scene.textures.exists("glow")) {
+    const s = 128;
+    const canvas = scene.textures.createCanvas("glow", s, s)!;
+    const ctx = canvas.context;
+    const g = ctx.createRadialGradient(s / 2, s / 2, 4, s / 2, s / 2, s / 2);
+    g.addColorStop(0, "rgba(255,231,160,0.55)");
+    g.addColorStop(0.6, "rgba(255,231,160,0.18)");
+    g.addColorStop(1, "rgba(255,231,160,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, s, s);
+    canvas.refresh();
+  }
 }
 
 export function makeTreeTexture(scene: Phaser.Scene): void {

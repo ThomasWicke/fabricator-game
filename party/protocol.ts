@@ -82,6 +82,7 @@ export type UiMsg = {
 // ─── fabricator ────────────────────────────────────────────────────────────
 
 import type { FabricatedSpec } from "../shared/fabricator/schema";
+import type { Design, DesignSummary } from "./designs";
 
 /** Controller → server: a blueprint submission. Relayed to screens too so
  *  the world can show the Fabricator working while the compile runs. */
@@ -94,16 +95,70 @@ export type BlueprintMsg = {
   image?: string;
 };
 
-/** Server → everyone: the compiled result. */
-export type FabricatedMsg = {
+// ─── designs ───────────────────────────────────────────────────────────────
+//
+// The Fabricator produces Designs (permanent, stored server-side).
+// Manufacturing spends materials to build one; a Design can be built any
+// number of times. Screens get full designs (they render and simulate);
+// phones get summaries (name + cost + affordability), never image payloads.
+
+/** Server → screens: a new Design, plus the raw generated art to process. */
+export type DesignAddedMsg = {
   scope: "ui";
-  type: "fabricated";
-  byPlayerId: string;
-  spec: FabricatedSpec;
-  image?: string;
+  type: "design-added";
+  design: Design;
+  /** AI body sprite on a magenta background — the screen chroma-keys it
+   *  and returns the result via `design-body`. */
+  rawBody?: string;
 };
 
-/** Server → everyone: compile failed. */
+/** Server → phones: the same event, without any image payload. */
+export type DesignAddedSummaryMsg = {
+  scope: "ui";
+  type: "design-added";
+  design: DesignSummary;
+};
+
+/** Screen → server: the chroma-keyed body sprite, for permanent storage.
+ *  Server → screens: the processed art for a design. */
+export type DesignBodyMsg = {
+  scope: "ui";
+  type: "design-body";
+  designId: string;
+  body: string;
+};
+
+/** Server → a joining client: everything it needs about existing designs. */
+export type DesignCatalogMsg = {
+  scope: "ui";
+  type: "design-catalog";
+  designs: Design[] | DesignSummary[];
+};
+
+/** Phone → server → screens: build this design (spends materials). */
+export type ManufactureMsg = {
+  scope: "ui";
+  type: "manufacture";
+  designId: string;
+};
+
+/** Screen → server: a design was successfully built (bumps timesBuilt). */
+export type DesignBuiltMsg = {
+  scope: "ui";
+  type: "design-built";
+  designId: string;
+};
+
+/** Screen → phones: current team stockpile, so phones can price designs. */
+export type StockpileMsg = {
+  scope: "ui";
+  type: "stockpile";
+  wood: number;
+  stone: number;
+  bogiron: number;
+};
+
+/** Server → everyone: the Fabricator could not compile the blueprint. */
 export type FabricateErrorMsg = {
   scope: "ui";
   type: "fabricate-error";

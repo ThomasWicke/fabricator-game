@@ -17,7 +17,7 @@
         --panel-2: #1c2430;
         --text: #e8edf4;
         --muted: #8b98a9;
-        --p1: #35d0ba;
+        --p1: #f06eaa;
         --p2: #ff9f43;
         --accent: #6c9ef8;
       }
@@ -119,47 +119,208 @@
         pointer-events: none;
         z-index: 5;
       }
-      .screen-hud {
+      /* ── in-frame HUD ────────────────────────────────────────── */
+      .hud {
+        position: absolute;
+        inset: 0;
+        z-index: 8;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 0.85em 1em;
+        /* scales with the display so it stays readable across a room */
+        font-size: clamp(14px, 1.7vh, 22px);
+      }
+      .hud-top,
+      .hud-bottom {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.8em;
+      }
+      .hud-bottom {
+        align-items: flex-end;
+      }
+      .glass {
+        background: rgba(10, 14, 20, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 12px;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      }
+
+      /* player cards sit over their own half of the split screen */
+      .player-card {
         display: flex;
         align-items: center;
-        gap: 16px;
-        padding: 8px 14px;
-        background: var(--panel);
-        font-size: 13px;
+        gap: 0.65em;
+        padding: 0.5em 0.85em;
+        min-width: 9.5em;
+        transition: opacity 0.2s;
       }
-      .screen-hud .code {
-        font-weight: 800;
-        letter-spacing: 0.18em;
+      .player-card.p2 {
+        flex-direction: row-reverse;
+        text-align: right;
       }
-      .screen-hud .chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 3px 10px;
-        border-radius: 99px;
-        background: var(--panel-2);
-        color: var(--muted);
-      }
-      .screen-hud .chip .dot {
-        width: 8px;
-        height: 8px;
+      .player-card .dot {
+        width: 0.8em;
+        height: 0.8em;
         border-radius: 50%;
         background: #45526a;
+        flex: none;
+        box-shadow: 0 0 0 0.22em rgba(255, 255, 255, 0.06);
       }
-      .screen-hud .chip.on {
-        color: var(--text);
-      }
-      .screen-hud .chip.p1.on .dot {
+      .player-card.p1.on .dot {
         background: var(--p1);
+        box-shadow: 0 0 0 3px rgba(240, 110, 170, 0.22);
       }
-      .screen-hud .chip.p2.on .dot {
+      .player-card.p2.on .dot {
         background: var(--p2);
+        box-shadow: 0 0 0 3px rgba(255, 159, 67, 0.22);
       }
-      .screen-hud .spacer {
-        flex: 1;
+      .player-card .who {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.25;
+        min-width: 0;
       }
-      .screen-hud .hint {
+      .player-card .name {
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .player-card .tool {
+        font-size: 0.8em;
         color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .player-card .tool.has {
+        color: #9fd4ff;
+      }
+      .player-card:not(.on) {
+        opacity: 0.55;
+      }
+
+      /* shared team stockpile, centred between the two halves */
+      .resources {
+        display: flex;
+        align-items: center;
+        gap: 0.15em;
+        padding: 0.35em 0.4em;
+        margin: 0 auto;
+      }
+      .res {
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+        padding: 0.2em 0.8em;
+        border-radius: 0.6em;
+      }
+      .res + .res {
+        border-left: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .res svg {
+        display: block;
+        flex: none;
+        width: 1.2em;
+        height: 1.2em;
+      }
+      .res .n {
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        min-width: 2ch;
+      }
+      .res.zero {
+        opacity: 0.45;
+      }
+      @keyframes resBump {
+        0% {
+          transform: scale(1);
+          color: var(--text);
+        }
+        35% {
+          transform: scale(1.32);
+          color: #c9e77f;
+        }
+        100% {
+          transform: scale(1);
+          color: var(--text);
+        }
+      }
+      .res.bump .n {
+        animation: resBump 0.45s ease-out;
+      }
+      @keyframes resSpend {
+        0% {
+          transform: scale(1);
+        }
+        35% {
+          transform: scale(0.78);
+          color: #ff9f9f;
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      .res.spend .n {
+        animation: resSpend 0.45s ease-out;
+      }
+
+      /* bottom row: room code, transient messages, connection */
+      .chip-mini {
+        padding: 0.4em 0.8em;
+        font-size: 0.8em;
+        color: var(--muted);
+        letter-spacing: 0.12em;
+        font-weight: 700;
+        flex: none;
+      }
+      .chip-mini .dot {
+        display: inline-block;
+        width: 0.55em;
+        height: 0.55em;
+        border-radius: 50%;
+        background: #6ee7a8;
+        margin-right: 0.5em;
+        vertical-align: 0.05em;
+      }
+      .chip-mini.bad {
+        color: #ffbdbd;
+      }
+      .chip-mini.bad .dot {
+        background: #ff7676;
+      }
+      .toast {
+        flex: 1;
+        margin: 0 auto;
+        max-width: 62%;
+        padding: 0.65em 1.15em;
+        text-align: center;
+        color: var(--text);
+        opacity: 0;
+        transform: translateY(6px);
+        transition: opacity 0.25s, transform 0.25s;
+        align-self: center;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .toast .lead {
+        font-weight: 800;
+      }
+      .toast .cost {
+        color: #c9e77f;
+        font-weight: 700;
+      }
+      .toast.err {
+        color: #ffc9c9;
+        border-color: rgba(255, 120, 120, 0.35);
       }
       .qr-overlay {
         position: absolute;
@@ -234,7 +395,7 @@
         font-weight: 800;
       }
       .controller.slot-1 {
-        background: radial-gradient(120% 100% at 50% 100%, #10312c 0%, var(--bg) 60%);
+        background: radial-gradient(120% 100% at 50% 100%, #371527 0%, var(--bg) 60%);
       }
       .controller.slot-2 {
         background: radial-gradient(120% 100% at 50% 100%, #3a2712 0%, var(--bg) 60%);
@@ -313,11 +474,16 @@
         font-size: 13px;
         pointer-events: none;
       }
-      .blueprint-btn {
+      .top-btns {
         position: absolute;
         top: calc(env(safe-area-inset-top, 8px) + 34px);
         left: 12px;
+        right: 12px;
         z-index: 4;
+        display: flex;
+        gap: 8px;
+      }
+      .blueprint-btn {
         font: inherit;
         font-size: 13px;
         font-weight: 700;
@@ -326,6 +492,125 @@
         border: 1px solid #2a3546;
         background: rgba(21, 27, 36, 0.9);
         color: var(--text);
+      }
+      .blueprint-btn .badge {
+        display: inline-block;
+        min-width: 18px;
+        margin-left: 6px;
+        padding: 1px 5px;
+        border-radius: 99px;
+        background: var(--accent);
+        color: #0b1220;
+        font-size: 11px;
+      }
+
+      /* ── design library ──────────────────────────────────────── */
+      .designs-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 11;
+        display: flex;
+        flex-direction: column;
+        background: #0c1016;
+        padding: calc(env(safe-area-inset-top, 8px) + 10px) 12px 12px;
+        gap: 10px;
+      }
+      .designs-overlay.hidden {
+        display: none;
+      }
+      .designs-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: none;
+      }
+      .designs-head h2 {
+        font-size: 15px;
+        margin: 0;
+        flex: 1;
+      }
+      .designs-head .stock {
+        display: flex;
+        gap: 10px;
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--muted);
+      }
+      .designs-list {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .design-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 11px 12px;
+        border-radius: 14px;
+        background: var(--panel);
+        border: 1px solid #232c3a;
+      }
+      .design-row .info {
+        flex: 1;
+        min-width: 0;
+      }
+      .design-row .dname {
+        font-weight: 800;
+        font-size: 14px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .design-row .dmeta {
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .design-row .dcost {
+        font-size: 12px;
+        font-weight: 700;
+        margin-top: 3px;
+      }
+      .design-row .dcost .lack {
+        color: #ff8f8f;
+      }
+      .design-row button {
+        font: inherit;
+        font-weight: 800;
+        font-size: 13px;
+        padding: 11px 16px;
+        border-radius: 12px;
+        border: 0;
+        background: var(--accent);
+        color: #0b1220;
+        flex: none;
+      }
+      .design-row button:disabled {
+        background: #263043;
+        color: #6b788c;
+      }
+      .designs-empty {
+        color: var(--muted);
+        text-align: center;
+        padding: 40px 20px;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .designs-close {
+        font: inherit;
+        font-weight: 700;
+        padding: 13px;
+        border-radius: 12px;
+        border: 1px solid #2a3546;
+        background: var(--panel);
+        color: var(--text);
+        flex: none;
       }
 
       /* ── sketch overlay (the Fabricator blueprint pad) ────────── */

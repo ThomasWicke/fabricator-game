@@ -57,6 +57,20 @@ Swamp Buggy ≠ Car).
 - Cost is computed **in code** from the spec (`shared/fabricator/cost.ts`),
   never by the LLM.
 
+### Body sprites (paid tier)
+
+With billing enabled on the Google key, fabrication generates an AI body
+sprite: spec + the player's sketch (as shape reference) →
+`gemini-3.1-flash-image` (Nano Banana 2, ~10s, ~$0.07) → a body on a solid
+magenta background → chroma-keyed, despilled, and cropped client-side
+(`client/src/screen/chroma.ts`) → the vehicle body, with library parts
+bolted on at spec anchors. Failures at the art step fall back to the sketch;
+tools always keep the sketch (they render as 22px icons). Controllers never
+receive the image payload (~500KB stays on the screen path). Sketch-signal
+test confirmed the drawing genuinely shapes the spec (anchor count/layout
+and body aspect follow the sketch), so it's worth feeding to the image
+model.
+
 ### Eval
 
 ```bash
@@ -78,5 +92,57 @@ for real sprites later.
 
 In-world today: fabricate from the phone (✏️ BLUEPRINT), walk up to the
 result and press A to enter/exit; driving speed = spec speed × terrain
-modifier. The player's sketch (transparent PNG) is the vehicle body; wheels/
-legs/floats come from the part library at spec-defined anchors.
+modifier. The player's sketch (transparent PNG) is the vehicle body; parts
+come from the part library at spec-defined anchors.
+
+## Hex world & art
+
+Terrain is a **hexagonal grid** (Kenney "Hexagon Tiles", CC0 — see
+`client/public/assets/hex/LICENSE.txt`), stamped once into a static
+RenderTexture. Play is continuous (free pixel movement), but terrain lookup
+and structure placement are hexagonal — `client/src/screen/hexgrid.ts` has
+the odd-r offset math including 6-neighbor adjacency, the foundation for
+connecting fabricated structures edge-to-edge into production lines later.
+Structures already snap to hex centers.
+
+Biomes: grass, sand beach (west), purple bog band (east; internally the
+"swamp" terrain type — bogiron only spawns there). Kenney's matching pines/
+rocks are the wood/stone nodes; bogiron is the same rock tinted rust.
+
+Players are Kenney's aliens (CC0, `client/public/assets/aliens/`) with
+4-direction movement from platformer frames: stand = facing camera,
+walk1/2 = sides (flipped), climb1/2 = walking away.
+
+## v1 economy & primitives
+
+- **Materials:** wood (trees), stone (rocks), **bogiron** (deposits that only
+  spawn in the swamp). Trees/rocks/deposits are harvestable nodes feeding a
+  shared team stockpile (HUD bottom bar). Starting stock: 25 wood, 15 stone.
+- **Gathering:** hold A near a node. Bare hands are slow and can't touch
+  bogiron; a fabricated tool (category "tool", auto-equips to its author)
+  brings its own rate + material list. Vehicles with `harvest` chew nodes
+  they touch while driven.
+- **Fabrication is charged:** cost is a per-material bill computed in code
+  (`shared/fabricator/cost.ts`). Swamp-capable locomotion is priced in
+  bogiron → the progression gate is: gather wood/stone by hand → fabricate
+  a drill tool (never costs bogiron, by construction) → trek into the swamp
+  → gather bogiron → build the swamp vehicle. Can't afford it → the
+  Fabricator rejects and nothing is charged.
+- **Primitives:** locomotion (speed × terrain modifiers), `harvest` {rate,
+  materials}, `emission` {light|smoke|sparks, intensity} — glow sprites,
+  smoke puffs (running only while driven), sparks.
+- **Parts:** wheel, track, leg, float, drill, chimney, lamp — procedural
+  sprites with per-kind animations (wheels spin, drills jitter, tracks
+  vibrate, lamps glow).
+
+### HUD
+
+Layered inside the game frame (a DOM overlay on top of the canvas, not a bar
+beside it), so text stays crisp at any DPI and it reads as part of the game.
+Player cards sit over their own half of the split screen and show name,
+connection and equipped tool; the shared team stockpile is centred between
+them; fabrication results and rejections appear as a transient strip at the
+bottom. Sizing is `em`-based off a `clamp(…vh)` root so the whole HUD scales
+with the display — it stays legible on a TV across a room.
+
+Deterministic tests: `npx tsx scripts/test-cost.ts` (17 checks, no API).
