@@ -13,9 +13,20 @@
 
 import type { FabricatedSpec } from "./schema";
 
-/** Paid-tier image model (Nano Banana 2). ~10s, ~340KB JPEG.
- *  `gemini-3.1-flash-lite-image` is the fast/cheap alternative (~3s). */
-export const IMAGE_MODEL = "gemini-3.1-flash-image";
+/**
+ * Nano Banana 2 Lite. Measured against the full `gemini-3.1-flash-image` on
+ * the same four subjects with this exact prompt: ~2.8s vs ~9.7s, comparable
+ * or better quality, and it honoured `legs` where the full model drew tracks.
+ *
+ * Cost note: an image bills as a FLAT 1120 output tokens on both models,
+ * regardless of any aspect/size hint (those are accepted and ignored), so
+ * the only cost levers are which model runs and how many images we ask for.
+ */
+export const IMAGE_MODEL = "gemini-3.1-flash-lite-image";
+
+/** Lite occasionally returns 503 "high demand"; the full model is the
+ *  backstop so a fabrication never loses its art to a capacity blip. */
+const IMAGE_FALLBACK_MODEL = "gemini-3.1-flash-image";
 
 export type BodySprite = {
   /** data:<mime>;base64,... */
@@ -67,22 +78,19 @@ function buildImagePrompt(spec: FabricatedSpec, hasSketch: boolean): string {
       : "") +
     " Style: flat cel-shaded colors, chunky simplified toy-like shapes, bold readable silhouette, matching the look of Kenney game assets. " +
     "One object only, centered, filling most of the frame, isolated on a SOLID PURE MAGENTA background (#FF00FF). " +
+    "Do not draw a driver, pilot or any person — the players have their own characters. " +
     "No shadows, no ground, no text, no border."
   );
 }
 
-export async function generateBodySprite(
-  spec: FabricatedSpec,
-  sketchBase64: string | undefined,
-  apiKey: string,
-  model: string = IMAGE_MODEL,
-): Promise<BodySprite> {
-  const parts: Record<string, unknown>[] = [];
-  if (sketchBase64) {
-    parts.push({ inlineData: { mimeType: "image/png", data: sketchBase64 } });
-  }
-  parts.push({ text: buildImagePrompt(spec, !!sketchBase64) });
+/** Usage as reported by the API, so spend can be tracked per fabrication. */
+export type ImageUsage = { model: string; imageTokens: number; totalTokens: number };
 
+async function callImageModel(
+  model: string,
+  parts: Record<string, unknown>[],
+  apiKey: string,
+): Promise<{ sprite: BodySprite; usage: ImageUsage }> {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
@@ -92,17 +100,64 @@ export async function generateBodySprite(
     },
   );
   if (!res.ok) {
-    throw new Error(`Image API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    const err = new Error(`Image API ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    (err as Error & { status?: number }).status = res.status;
+    throw err;
   }
   const body = (await res.json()) as {
     candidates?: {
       content?: { parts?: { inlineData?: { mimeType: string; data: string } }[] };
     }[];
+    usageMetadata?: {
+      totalTokenCount?: number;
+      candidatesTokensDetails?: { modality?: string; tokenCount?: number }[];
+    };
   };
   const img = body.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData;
   if (!img) throw new Error("Image model returned no image");
   return {
-    dataUrl: `data:${img.mimeType};base64,${img.data}`,
-    mimeType: img.mimeType,
+    sprite: { dataUrl: `data:${img.mimeType};base64,${img.data}`, mimeType: img.mimeType },
+    usage: {
+      model,
+      imageTokens:
+        body.usageMetadata?.candidatesTokensDetails?.find((d) => d.modality === "IMAGE")
+          ?.tokenCount ?? 0,
+      totalTokens: body.usageMetadata?.totalTokenCount ?? 0,
+    },
   };
+}
+
+/** Capacity errors — worth another go, or the other model. */
+const TRANSIENT = new Set([429, 500, 502, 503, 504]);
+
+export async function generateBodySprite(
+  spec: FabricatedSpec,
+  sketchBase64: string | undefined,
+  apiKey: string,
+  model: string = IMAGE_MODEL,
+): Promise<BodySprite & { usage: ImageUsage }> {
+  const parts: Record<string, unknown>[] = [];
+  if (sketchBase64) {
+    parts.push({ inlineData: { mimeType: "image/png", data: sketchBase64 } });
+  }
+  parts.push({ text: buildImagePrompt(spec, !!sketchBase64) });
+
+  // Lite is the default and occasionally reports "high demand". A failed call
+  // isn't billed, so one retry then the heavier model is cheap insurance
+  // against a fabrication losing its art.
+  const attempts =
+    model === IMAGE_MODEL ? [model, model, IMAGE_FALLBACK_MODEL] : [model];
+  let last: unknown;
+  for (let i = 0; i < attempts.length; i++) {
+    try {
+      const { sprite, usage } = await callImageModel(attempts[i], parts, apiKey);
+      return { ...sprite, usage };
+    } catch (err) {
+      last = err;
+      const status = (err as Error & { status?: number }).status;
+      if (!status || !TRANSIENT.has(status)) throw err;
+      if (i < attempts.length - 1) await new Promise((r) => setTimeout(r, 700));
+    }
+  }
+  throw last;
 }

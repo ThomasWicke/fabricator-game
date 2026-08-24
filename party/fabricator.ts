@@ -73,9 +73,12 @@ export class FabricatorEndpoint {
     try {
       const t0 = Date.now();
       const sprite = await generateBodySprite(spec, sketchBase64, googleKey);
+      // Log usage per fabrication: image output bills at a flat token count,
+      // so counting these lines is counting the spend.
       console.log(
-        `body sprite for "${spec.displayName}" in ${Date.now() - t0}ms` +
-          ` (${sprite.mimeType}, ~${Math.round(sprite.dataUrl.length / 1024)}KB wire)`,
+        `body sprite for "${spec.displayName}" in ${Date.now() - t0}ms via ` +
+          `${sprite.usage.model} (${sprite.usage.imageTokens} image tokens, ` +
+          `${sprite.usage.totalTokens} total, ~${Math.round(sprite.dataUrl.length / 1024)}KB wire)`,
       );
       return sprite.dataUrl;
     } catch (err) {
