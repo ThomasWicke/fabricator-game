@@ -1,0 +1,57 @@
+// PartyKit-side Fabricator endpoint: resolves the API key from room env,
+// enforces a per-room rate cap, and delegates to the isomorphic compile
+// module in shared/fabricator/. This file is the only place key resolution
+// happens — the shared module never touches env.
+
+import {
+  compileSpec,
+  mockCompile,
+  DEFAULT_COMPILER_CONFIG,
+  ANTHROPIC_COMPILER_CONFIG,
+  type CompileInput,
+  type CompilerConfig,
+  type FabricatedSpec,
+} from "../shared/fabricator";
+
+/** Per-room fabrication cap so a deployed demo key can't be farmed. */
+const MAX_PER_HOUR = 20;
+
+export class FabricatorEndpoint {
+  private timestamps: number[] = [];
+
+  constructor(private env: Record<string, unknown>) {}
+
+  /** Throws with a player-facing message on rate cap. */
+  checkRateCap(): void {
+    const hourAgo = Date.now() - 3600_000;
+    this.timestamps = this.timestamps.filter((t) => t > hourAgo);
+    if (this.timestamps.length >= MAX_PER_HOUR) {
+      throw new Error("The Fabricator is overheated — try again later.");
+    }
+    this.timestamps.push(Date.now());
+  }
+
+  private resolve(): { config: CompilerConfig; apiKey: string } | null {
+    const googleKey = this.env.GOOGLE_API_KEY as string | undefined;
+    if (googleKey) return { config: DEFAULT_COMPILER_CONFIG, apiKey: googleKey };
+    const anthropicKey = this.env.ANTHROPIC_API_KEY as string | undefined;
+    if (anthropicKey) return { config: ANTHROPIC_COMPILER_CONFIG, apiKey: anthropicKey };
+    return null;
+  }
+
+  async compile(input: CompileInput): Promise<FabricatedSpec> {
+    this.checkRateCap();
+    const resolved = this.resolve();
+    if (!resolved) {
+      // Keyless dev / test harness: keep the loop playable offline.
+      return mockCompile(input);
+    }
+    const outcome = await compileSpec(input, resolved.config, resolved.apiKey);
+    console.log(
+      `fabricated "${input.name}" via ${resolved.config.provider}/${resolved.config.model}` +
+        ` in ${outcome.attempts} attempt(s), tokens in=${outcome.usage.inputTokens}` +
+        ` out=${outcome.usage.outputTokens}`,
+    );
+    return outcome.spec;
+  }
+}

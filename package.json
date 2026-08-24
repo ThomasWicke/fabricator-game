@@ -1,0 +1,29 @@
+{
+  "name": "fabricator",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently --names client,party --prefix-colors cyan,magenta \"npm:dev:client\" \"npm:dev:party\"",
+    "dev:client": "vite",
+    "dev:party": "partykit dev",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "deploy:party": "partykit deploy"
+  },
+  "dependencies": {
+    "partysocket": "^1.1.18",
+    "phaser": "^3.90.0",
+    "qrcode": "^1.5.4",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5",
+    "@types/uuid": "^10.0.0",
+    "concurrently": "^9.2.1",
+    "partykit": "^0.0.115",
+    "tsx": "^4.23.12",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0"
+  }
+}
