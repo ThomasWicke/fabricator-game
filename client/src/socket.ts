@@ -7,6 +7,8 @@ import type { Identity } from "./identity";
 
 export type ConnectionStatus = "connecting" | "open" | "closed";
 
+const QUEUE_MAX = 20;
+
 export type Handlers = {
   onMessage: (msg: ServerToClient) => void;
   onStatus: (status: ConnectionStatus) => void;
@@ -14,6 +16,10 @@ export type Handlers = {
 
 export class RoomConnection {
   private socket: PartySocket;
+  /** Messages sent before the socket opened (or while it's reconnecting).
+   *  Presence/ui messages matter after the fact — lobby state, blueprints —
+   *  so they wait; input is a live signal and is simply dropped. */
+  private queue: ClientToServer[] = [];
 
   constructor(
     code: string,
@@ -32,6 +38,7 @@ export class RoomConnection {
 
     this.socket.addEventListener("open", () => {
       this.handlers.onStatus("open");
+      // identify first — the server keys everything else off it.
       this.send({
         scope: "presence",
         type: "identify",
@@ -39,6 +46,9 @@ export class RoomConnection {
         playerId: this.identity.playerId,
         nickname: this.identity.nickname,
       });
+      const pending = this.queue;
+      this.queue = [];
+      for (const msg of pending) this.send(msg);
     });
 
     this.socket.addEventListener("close", () => {
@@ -57,6 +67,11 @@ export class RoomConnection {
   }
 
   send(msg: ClientToServer): void {
+    if (this.socket.readyState !== WebSocket.OPEN) {
+      if (msg.scope === "input") return; // stale by the time we reconnect
+      if (this.queue.length < QUEUE_MAX) this.queue.push(msg);
+      return;
+    }
     this.socket.send(JSON.stringify(msg));
   }
 

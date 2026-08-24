@@ -5,8 +5,9 @@
 // Split-screen: two cameras over one world, one per player (DST-couch-co-op
 // style), fixed vertical split for now.
 //
-// Terrain demo layout: sand beach on the west edge, a swamp band east of
-// the spawn clearing — so "Swamp Buggy ≠ Car" is visible within seconds.
+// Terrain comes from the lobby's world settings (see worldgen.ts): a grass
+// interior with a sand shore and swamp blobs, always with a clear grass
+// spawn — so "Swamp Buggy ≠ Car" is reachable within seconds of landing.
 
 import Phaser from "phaser";
 import type { ButtonState, Slot, StickState } from "../../../party/protocol";
@@ -22,9 +23,8 @@ import {
   makeTreeTexture,
   mulberry32,
 } from "./textures";
+import { DEFAULT_SETTINGS, generateWorld, type WorldSettings } from "./worldgen";
 
-const WORLD_TILES = 80; // 80×80 tiles → 2560×2560 px
-const WORLD_SIZE = WORLD_TILES * TILE;
 const WALK_SPEED = 220;
 const SPRINT_MULT = 1.65;
 /** On-foot terrain penalties — the swamp is miserable without a machine. */
@@ -56,7 +56,9 @@ type VehicleEntity = {
 };
 
 export class WorldScene extends Phaser.Scene {
-  private seed = "fabricator";
+  private settings: WorldSettings = DEFAULT_SETTINGS;
+  private tilesPerSide = 80;
+  private worldPx = 80 * TILE;
   private players = new Map<Slot, PlayerEntity>();
   private vehicles: VehicleEntity[] = [];
   private terrain: TerrainType[][] = [];
@@ -71,8 +73,8 @@ export class WorldScene extends Phaser.Scene {
     super("world");
   }
 
-  init(data: { seed?: string }) {
-    if (data.seed) this.seed = data.seed;
+  init(data: { settings?: WorldSettings }) {
+    if (data.settings) this.settings = data.settings;
   }
 
   create() {
@@ -87,51 +89,35 @@ export class WorldScene extends Phaser.Scene {
     makeExplorerTexture(this, "explorer-1", "#35d0ba", "#1d8a7a");
     makeExplorerTexture(this, "explorer-2", "#ff9f43", "#c26a1c");
 
-    const rng = mulberry32(this.seed);
-
     // ── terrain + ground tilemap ────────────────────────────────
-    // Sand beach: west edge. Swamp band: vertical strip east of spawn.
-    const data: number[][] = [];
-    for (let y = 0; y < WORLD_TILES; y++) {
-      const row: number[] = [];
-      const trow: TerrainType[] = [];
-      for (let x = 0; x < WORLD_TILES; x++) {
-        const wobble = Math.sin(y * 0.35) * 1.6 + (rng() - 0.5) * 2;
-        let terrain: TerrainType = "grass";
-        if (x < 6 + wobble) terrain = "sand";
-        else if (x > 48 + wobble && x < 60 + wobble) terrain = "swamp";
-        trow.push(terrain);
+    // Layout is decided by worldgen (same module the lobby previews with);
+    // this only picks a tile variant per terrain type.
+    const world = generateWorld(this.settings);
+    this.terrain = world.tiles;
+    this.tilesPerSide = world.size;
+    this.worldPx = world.size * TILE;
 
-        let t: number;
-        if (terrain === "sand") {
-          t = TILE_KEYS.sandA + Math.floor(rng() * 2);
-        } else if (terrain === "swamp") {
-          t = TILE_KEYS.swampA + Math.floor(rng() * 2);
-        } else {
-          const r = rng();
-          t = TILE_KEYS.grassA + Math.floor(rng() * 4);
-          if (r > 0.965) t = TILE_KEYS.flowers;
-          else if (r > 0.94) t = TILE_KEYS.dirt;
-        }
-        row.push(t);
-      }
-      data.push(row);
-      this.terrain.push(trow);
-    }
+    const rng = mulberry32(`${this.settings.seed}|tiles`);
+    const data: number[][] = world.tiles.map((trow) =>
+      trow.map((terrain) => {
+        if (terrain === "sand") return TILE_KEYS.sandA + Math.floor(rng() * 2);
+        if (terrain === "swamp") return TILE_KEYS.swampA + Math.floor(rng() * 2);
+        const r = rng();
+        if (r > 0.965) return TILE_KEYS.flowers;
+        if (r > 0.94) return TILE_KEYS.dirt;
+        return TILE_KEYS.grassA + Math.floor(rng() * 4);
+      }),
+    );
     const map = this.make.tilemap({ data, tileWidth: TILE, tileHeight: TILE });
     const tileset = map.addTilesetImage("tiles", "tiles", TILE, TILE, 0, 0, 0)!;
     map.createLayer(0, tileset, 0, 0);
 
-    // ── obstacles (grass only, clear of spawn) ──────────────────
+    // ── obstacles ───────────────────────────────────────────────
     this.obstacles = this.physics.add.staticGroup();
-    const center = WORLD_SIZE / 2;
-    const clearRadius = 7 * TILE;
-    for (let i = 0; i < 170; i++) {
-      const x = rng() * WORLD_SIZE;
-      const y = rng() * WORLD_SIZE;
-      if (Math.hypot(x - center, y - center) < clearRadius) continue;
-      if (this.terrainAt(x, y) !== "grass") continue;
-      const isTree = rng() < 0.7;
+    for (const item of world.scatter) {
+      const x = (item.tx + 0.5) * TILE;
+      const y = (item.ty + 0.5) * TILE;
+      const isTree = item.kind === "tree";
       const s = this.obstacles.create(x, y, isTree ? "tree" : "rock") as
         Phaser.Physics.Arcade.Sprite;
       s.setDepth(y);
@@ -142,26 +128,28 @@ export class WorldScene extends Phaser.Scene {
     }
 
     // ── the Universal Fabricator pad ────────────────────────────
-    this.pad = { x: center, y: center - 110 };
+    const center = (world.spawn.tx + 0.5) * TILE;
+    const centerY = (world.spawn.ty + 0.5) * TILE;
+    this.pad = { x: center, y: centerY - 110 };
     this.add.image(this.pad.x, this.pad.y, "pad").setDepth(this.pad.y);
 
     // ── players ─────────────────────────────────────────────────
-    const p1 = this.spawnPlayer(1, center - 40, center, "explorer-1", 0x35d0ba);
-    const p2 = this.spawnPlayer(2, center + 40, center, "explorer-2", 0xff9f43);
+    const p1 = this.spawnPlayer(1, center - 40, centerY, "explorer-1", 0x35d0ba);
+    const p2 = this.spawnPlayer(2, center + 40, centerY, "explorer-2", 0xff9f43);
     this.physics.add.collider(p1.sprite, this.obstacles);
     this.physics.add.collider(p2.sprite, this.obstacles);
     this.physics.add.collider(p1.sprite, p2.sprite);
 
-    this.physics.world.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
+    this.physics.world.setBounds(0, 0, this.worldPx, this.worldPx);
 
     // ── split-screen cameras ────────────────────────────────────
     const cam1 = this.cameras.main;
-    cam1.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
+    cam1.setBounds(0, 0, this.worldPx, this.worldPx);
     cam1.startFollow(p1.sprite, true, 0.12, 0.12);
     cam1.setRoundPixels(true);
 
     this.cam2 = this.cameras.add();
-    this.cam2.setBounds(0, 0, WORLD_SIZE, WORLD_SIZE);
+    this.cam2.setBounds(0, 0, this.worldPx, this.worldPx);
     this.cam2.startFollow(p2.sprite, true, 0.12, 0.12);
     this.cam2.setRoundPixels(true);
 
@@ -175,8 +163,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private terrainAt(x: number, y: number): TerrainType {
-    const tx = Math.max(0, Math.min(WORLD_TILES - 1, Math.floor(x / TILE)));
-    const ty = Math.max(0, Math.min(WORLD_TILES - 1, Math.floor(y / TILE)));
+    const tx = Math.max(0, Math.min(this.tilesPerSide - 1, Math.floor(x / TILE)));
+    const ty = Math.max(0, Math.min(this.tilesPerSide - 1, Math.floor(y / TILE)));
     return this.terrain[ty][tx];
   }
 

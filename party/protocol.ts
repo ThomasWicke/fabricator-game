@@ -2,13 +2,19 @@
 //
 // Roles:
 //   • screen     — the shared TV/laptop screen. Runs the Phaser simulation
-//                  (host-authoritative). Receives relayed controller inputs.
-//   • controller — a phone. Sends joystick/button input; later also acts as
-//                  the Fabricator sketch pad.
+//                  (host-authoritative) and owns the lobby: it configures the
+//                  world and decides when the expedition starts.
+//   • controller — a phone. In the lobby it's a name/ready pad; in play it
+//                  sends joystick/button input and acts as the sketch pad.
 //
-// The server is a thin relay + player registry. It never simulates anything.
+// The server is a thin relay + player registry. It never simulates anything;
+// the only room state it owns is the roster and the current phase (so a phone
+// joining or reconnecting mid-game lands on the right screen).
 
 export type Slot = 1 | 2;
+
+/** Lobby = everyone is picking names; playing = the world is running. */
+export type Phase = "lobby" | "playing";
 
 export type PublicPlayer = {
   playerId: string;
@@ -16,6 +22,8 @@ export type PublicPlayer = {
   /** null when the room already had 2 players (spectator/overflow). */
   slot: Slot | null;
   connected: boolean;
+  /** Lobby readiness. Ignored while playing. */
+  ready: boolean;
 };
 
 // ─── presence ──────────────────────────────────────────────────────────────
@@ -35,6 +43,7 @@ export type WelcomeMsg = {
   /** Only meaningful for controllers. */
   slot: Slot | null;
   lobbyCode: string;
+  phase: Phase;
 };
 
 export type RosterMsg = {
@@ -42,6 +51,34 @@ export type RosterMsg = {
   type: "roster";
   players: PublicPlayer[];
   screenConnected: boolean;
+  phase: Phase;
+};
+
+/** Controller → server: rename myself (lobby name editing). */
+export type SetNicknameMsg = {
+  scope: "presence";
+  type: "set-nickname";
+  nickname: string;
+};
+
+/** Controller → server: toggle lobby readiness. */
+export type SetReadyMsg = {
+  scope: "presence";
+  type: "set-ready";
+  ready: boolean;
+};
+
+/** Controller → server: trade P1/P2 seats with the other player. */
+export type SwapSlotsMsg = {
+  scope: "presence";
+  type: "swap-slots";
+};
+
+/** Screen → server: the host started (or returned to) the lobby. */
+export type SetPhaseMsg = {
+  scope: "presence";
+  type: "set-phase";
+  phase: Phase;
 };
 
 // ─── input (controller → server → screen) ──────────────────────────────────
@@ -112,5 +149,12 @@ export type FabricateErrorMsg = {
 
 // ─── unions ────────────────────────────────────────────────────────────────
 
-export type ClientToServer = IdentifyMsg | InputMsg | UiMsg;
+export type PresenceClientMsg =
+  | IdentifyMsg
+  | SetNicknameMsg
+  | SetReadyMsg
+  | SwapSlotsMsg
+  | SetPhaseMsg;
+
+export type ClientToServer = PresenceClientMsg | InputMsg | UiMsg;
 export type ServerToClient = WelcomeMsg | RosterMsg | InputRelayMsg | UiMsg;
