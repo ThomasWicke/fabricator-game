@@ -11,8 +11,10 @@
 // hexgrid.ts already knows each hex's 6 neighbors: the foundation for
 // connecting fabricated structures into production lines later.
 //
-// Biomes: grass, sand beach (west), and the purple "bog" band (east) whose
-// TerrainType is "swamp" — bogiron deposits only spawn there.
+// Terrain comes from worldgen.ts — a seeded, Phaser-free generator: a grass
+// interior with a sand shore around the rim, swamp blobs from a noise
+// moisture field, and a guaranteed clearing at the Fabricator pad. Bogiron
+// only spawns in swamp, which is what gates swamp-capable machines.
 //
 // v1 economy: trees/rocks/bogiron deposits are harvestable nodes feeding a
 // shared team stockpile; fabrication charges a per-material bill computed
@@ -33,6 +35,7 @@ import type {
 } from "../../../shared/fabricator/schema";
 import { canAfford, formatCost } from "../../../shared/fabricator/cost";
 import {
+  HEX_IMG_H,
   HEX_W,
   ROW_H,
   hexImageTopLeft,
@@ -45,12 +48,14 @@ import {
   makeParticleTextures,
   mulberry32,
 } from "./textures";
+import {
+  DEFAULT_SETTINGS,
+  generateWorld,
+  type WorldSettings,
+} from "./worldgen";
 
-const COLS = 50;
-const ROWS = 64;
-const WORLD_W = COLS * HEX_W + HEX_W / 2;
-// last row's slab side must fit: (ROWS-1)·ROW_H + full image height
-const WORLD_H = (ROWS - 1) * ROW_H + 89;
+// World dimensions come from the generator now (they follow the world-size
+// setting), so they live on the scene rather than as module constants.
 const WALK_SPEED = 220;
 const SPRINT_MULT = 1.65;
 /** On-foot terrain penalties — the bog is miserable without a machine. */
@@ -168,6 +173,11 @@ export class WorldScene extends Phaser.Scene {
   private fabFx: Phaser.GameObjects.GameObject[] = [];
   private spawnCount = 0;
 
+  private settings: WorldSettings = DEFAULT_SETTINGS;
+  private cols = 0;
+  private rows = 0;
+  private worldW = 0;
+  private worldH = 0;
   private nodeByHex = new Map<string, ResourceNode>();
   /** Nodes whose remaining count differs from the deterministic baseline —
    *  the only node state a save needs to carry. */
@@ -190,8 +200,10 @@ export class WorldScene extends Phaser.Scene {
     super("world");
   }
 
-  init(data: { seed?: string }) {
+  init(data: { seed?: string; settings?: WorldSettings }) {
     if (data.seed) this.seed = data.seed;
+    // The room code seeds the world unless the lobby picked its own seed.
+    this.settings = data.settings ?? { ...DEFAULT_SETTINGS, seed: this.seed };
   }
 
   preload() {
@@ -214,43 +226,43 @@ export class WorldScene extends Phaser.Scene {
 
     const rng = mulberry32(this.seed);
 
-    // ── hex terrain, stamped once into a static RenderTexture ──
+    // ── terrain, from the seeded generator ─────────────────────
+    // worldgen is deliberately Phaser-free: the same call produces the
+    // minimap the lobby will preview, so what you pick is what you land in.
+    const generated = generateWorld(this.settings);
+    this.cols = generated.cols;
+    this.rows = generated.rows;
+    this.worldW = this.cols * HEX_W + HEX_W / 2;
+    // last row's slab side must fit: (rows-1)·ROW_H + full image height
+    this.worldH = (this.rows - 1) * ROW_H + HEX_IMG_H;
+    this.biome = generated.tiles;
+
     const tileFor: Record<TerrainType, string> = {
       grass: "tileGrass",
       sand: "tileSand",
       swamp: "tileMagic",
     };
-    for (let row = 0; row < ROWS; row++) {
-      const brow: TerrainType[] = [];
-      for (let col = 0; col < COLS; col++) {
-        const wobble = Math.sin(row * 0.5) * 1.2 + (rng() - 0.5) * 1.6;
-        let t: TerrainType = "grass";
-        if (col < 4 + wobble) t = "sand";
-        else if (col > 31 + wobble && col < 39 + wobble) t = "swamp";
-        brow.push(t);
-      }
-      this.biome.push(brow);
-    }
 
     // Full 3D tiles, rows drawn top→bottom: with ROW_H matched to the art
     // (see hexgrid.ts) each row's top faces cover the slab sides of the row
     // above, so the interior reads flat and only the southern edge shows
     // depth. Bog tiles are stamped SWAMP_DROP lower, which uncovers that
     // much of the neighbouring tile's slab — the step down into the bog.
-    const ground = this.add.renderTexture(0, 0, WORLD_W, WORLD_H).setOrigin(0, 0);
+    const ground = this.add.renderTexture(0, 0, this.worldW, this.worldH).setOrigin(0, 0);
     ground.setDepth(-10);
     ground.beginDraw();
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
+    for (let row = 0; row < this.rows; row++) {
+      for (let col = 0; col < this.cols; col++) {
         const t = this.biome[row][col];
         const tl = hexImageTopLeft(col, row);
         ground.batchDraw(tileFor[t], tl.x, tl.y + this.dropAt(col, row));
       }
     }
     // decorations are static → stamp them into the ground texture too
-    for (let i = 0; i < 260; i++) {
-      const col = Math.floor(rng() * COLS);
-      const row = Math.floor(rng() * ROWS);
+    const decoCount = Math.round(this.cols * this.rows * 0.08);
+    for (let i = 0; i < decoCount; i++) {
+      const col = Math.floor(rng() * this.cols);
+      const row = Math.floor(rng() * this.rows);
       const t = this.biome[row][col];
       if (t === "sand") continue;
       const c = hexToWorld(col, row);
@@ -269,7 +281,7 @@ export class WorldScene extends Phaser.Scene {
 
     // ── resource nodes on hex centers (double as obstacles) ─────
     this.obstacles = this.physics.add.staticGroup();
-    const spawnHex = worldToHex(WORLD_W / 2, WORLD_H / 2, COLS, ROWS);
+    const spawnHex = { col: generated.spawn.tx, row: generated.spawn.ty };
 
     /**
      * Two art conventions in the pack, and they need different anchoring:
@@ -333,42 +345,22 @@ export class WorldScene extends Phaser.Scene {
       this.nodeByHex.set(`${col},${row}`, node);
     };
 
-    const usedHexes = new Set<string>();
-    const tryPlace = (
-      filter: (t: TerrainType) => boolean,
-      place: (col: number, row: number) => void,
-      count: number,
-    ) => {
-      let placed = 0;
-      for (let i = 0; i < 4000 && placed < count; i++) {
-        const col = Math.floor(rng() * COLS);
-        const row = Math.floor(rng() * ROWS);
-        const key = `${col},${row}`;
-        if (usedHexes.has(key)) continue;
-        if (!filter(this.biome[row][col])) continue;
-        if (Math.abs(col - spawnHex.col) < 3 && Math.abs(row - spawnHex.row) < 4) continue;
-        usedHexes.add(key);
-        place(col, row);
-        placed++;
-      }
-    };
-
+    // The generator decides what goes where; this just gives each kind its
+    // art and yield.
     const pines = ["pineGreen_low", "pineGreen_mid", "pineGreen_high"];
-    tryPlace(
-      (t) => t === "grass",
-      (col, row) => addNode(col, row, pines[Math.floor(rng() * 3)], "wood", 5, "pine"),
-      90,
-    );
-    tryPlace(
-      (t) => t === "grass",
-      (col, row) => addNode(col, row, "rockStone", "stone", 4, "boulder"),
-      40,
-    );
-    tryPlace(
-      (t) => t === "swamp",
-      (col, row) => addNode(col, row, "rockStone", "bogiron", 3, "boulder", 0xd9813f),
-      30,
-    );
+    for (const s of generated.scatter) {
+      switch (s.kind) {
+        case "tree":
+          addNode(s.tx, s.ty, pines[Math.floor(rng() * 3)], "wood", 5, "pine");
+          break;
+        case "rock":
+          addNode(s.tx, s.ty, "rockStone", "stone", 4, "boulder");
+          break;
+        case "bogiron":
+          addNode(s.tx, s.ty, "rockStone", "bogiron", 3, "boulder", 0xd9813f);
+          break;
+      }
+    }
 
     // ── the Universal Fabricator pad ────────────────────────────
     const padHex = hexToWorld(spawnHex.col, spawnHex.row - 2);
@@ -390,25 +382,25 @@ export class WorldScene extends Phaser.Scene {
         repeat: -1,
       });
     }
-    const cx = WORLD_W / 2;
-    const cy = WORLD_H / 2;
+    const cx = this.worldW / 2;
+    const cy = this.worldH / 2;
     const p1 = this.spawnPlayer(1, cx - 40, cy, 0xf06eaa);
     const p2 = this.spawnPlayer(2, cx + 40, cy, 0xffcf4d);
     this.physics.add.collider(p1.sprite, this.obstacles);
     this.physics.add.collider(p2.sprite, this.obstacles);
     this.physics.add.collider(p1.sprite, p2.sprite);
 
-    this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
+    this.physics.world.setBounds(0, 0, this.worldW, this.worldH);
 
     // ── split-screen cameras ────────────────────────────────────
     const cam1 = this.cameras.main;
-    cam1.setBounds(0, 0, WORLD_W, WORLD_H);
+    cam1.setBounds(0, 0, this.worldW, this.worldH);
     cam1.setZoom(CAMERA_ZOOM);
     cam1.startFollow(p1.sprite, true, 0.12, 0.12);
     cam1.setRoundPixels(true);
 
     this.cam2 = this.cameras.add();
-    this.cam2.setBounds(0, 0, WORLD_W, WORLD_H);
+    this.cam2.setBounds(0, 0, this.worldW, this.worldH);
     this.cam2.setZoom(CAMERA_ZOOM);
     this.cam2.startFollow(p2.sprite, true, 0.12, 0.12);
     this.cam2.setRoundPixels(true);
@@ -426,7 +418,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private terrainAt(x: number, y: number): TerrainType {
-    const h = worldToHex(x, y, COLS, ROWS);
+    const h = worldToHex(x, y, this.cols, this.rows);
     return this.biome[h.row]?.[h.col] ?? "grass";
   }
 
@@ -656,7 +648,7 @@ export class WorldScene extends Phaser.Scene {
     // Structures live on the hex grid — snap to the nearest free-ish hex
     // center. (Future: 6-edge connections to neighboring structures.)
     if (spec.category !== "vehicle" && atX === undefined) {
-      const hex = worldToHex(x, y, COLS, ROWS);
+      const hex = worldToHex(x, y, this.cols, this.rows);
       const c = hexToWorld(hex.col, hex.row);
       x = c.x;
       y = c.y + this.dropAt(hex.col, hex.row);
