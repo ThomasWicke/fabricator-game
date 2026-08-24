@@ -9,6 +9,8 @@ import type { ButtonState, StickState } from "../../../party/protocol";
 
 const SEND_INTERVAL_MS = 33;
 const STICK_RADIUS = 52;
+const SKETCH_MAX_SIDE = 256;
+const SKETCH_CROP_PADDING = 8;
 
 export function startController(code: string) {
   const upperCode = code.toUpperCase();
@@ -214,16 +216,11 @@ export function startController(code: string) {
       nameInput.focus();
       return;
     }
-    // Downscale to ≤256px, keep alpha (the sketch becomes the body sprite).
-    let image: string | undefined;
-    if (hasInk) {
-      const scale = Math.min(1, 256 / Math.max(sketchCanvas.width, sketchCanvas.height));
-      const out = document.createElement("canvas");
-      out.width = Math.max(1, Math.round(sketchCanvas.width * scale));
-      out.height = Math.max(1, Math.round(sketchCanvas.height * scale));
-      out.getContext("2d")!.drawImage(sketchCanvas, 0, 0, out.width, out.height);
-      image = out.toDataURL("image/png");
-    }
+    // Crop to the ink, then downscale to ≤256px; keep alpha (the sketch
+    // becomes the body sprite).
+    const image = hasInk
+      ? cropInkToDataUrl(sketchCanvas, SKETCH_MAX_SIDE, SKETCH_CROP_PADDING)
+      : undefined;
     conn.send({
       scope: "ui",
       type: "blueprint",
@@ -258,6 +255,60 @@ export function startController(code: string) {
     el.addEventListener("pointerup", () => set(false));
     el.addEventListener("pointercancel", () => set(false));
   }
+}
+
+/** Crop a sketch canvas to the bounding box of its non-transparent pixels
+ *  (plus a little padding) and downscale so the longest side is ≤ maxSide,
+ *  preserving aspect ratio. Players draw in a small patch of the pad, so
+ *  sending the raw canvas wastes most of the frame on transparent margin —
+ *  which makes the body sprite render as a faint speck once stretched to the
+ *  spec size, and gives the compiler an image where the subject is tiny.
+ *  Returns undefined when the canvas holds no ink. */
+function cropInkToDataUrl(
+  source: HTMLCanvasElement,
+  maxSide: number,
+  padding: number,
+): string | undefined {
+  const w = source.width;
+  const h = source.height;
+  if (!w || !h) return undefined;
+
+  let pixels: Uint8ClampedArray;
+  try {
+    pixels = source.getContext("2d")!.getImageData(0, 0, w, h).data;
+  } catch {
+    return undefined; // tainted canvas — shouldn't happen, we only draw strokes
+  }
+
+  let minX = w;
+  let minY = h;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < h; y++) {
+    const row = y * w * 4;
+    for (let x = 0; x < w; x++) {
+      if (pixels[row + x * 4 + 3] === 0) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      maxY = y; // rows are scanned top-down, so this is always the lowest so far
+    }
+  }
+  if (maxX < 0) return undefined; // fully transparent
+
+  const sx = Math.max(0, minX - padding);
+  const sy = Math.max(0, minY - padding);
+  const sw = Math.min(w, maxX + 1 + padding) - sx;
+  const sh = Math.min(h, maxY + 1 + padding) - sy;
+
+  const scale = Math.min(1, maxSide / Math.max(sw, sh));
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.round(sw * scale));
+  out.height = Math.max(1, Math.round(sh * scale));
+  const outCtx = out.getContext("2d")!;
+  outCtx.imageSmoothingQuality = "high";
+  outCtx.drawImage(source, sx, sy, sw, sh, 0, 0, out.width, out.height);
+  return out.toDataURL("image/png");
 }
 
 function round2(n: number): number {
