@@ -77,6 +77,9 @@ const SWAMP_DROP = 6;
 /** Pines carry 8px of transparent padding below the trunk in every size
  *  variant, so origin(0.5,1) alone would bury them. */
 const PINE_PAD = 8;
+/** Sideways speed below which a vehicle keeps its current facing — stops it
+ *  flickering when you drive straight up or down. */
+const FLIP_DEADZONE = 12;
 
 const HEX_ASSETS = [
   "tileGrass",
@@ -1036,6 +1039,12 @@ export class WorldScene extends Phaser.Scene {
         }
       }
     }
+
+    // Facing: art is generated nose-right, so driving left just mirrors it.
+    // Only horizontal intent flips it — steering straight up or down keeps
+    // whichever way it was already pointing, instead of snapping about.
+    if (body.velocity.x < -FLIP_DEADZONE) v.bodyImg.setFlipX(true);
+    else if (body.velocity.x > FLIP_DEADZONE) v.bodyImg.setFlipX(false);
 
     // Engine vibration: the body shakes in place (never the container, which
     // physics owns). Idling shakes a little, driving shakes more — this is

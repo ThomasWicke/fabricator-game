@@ -39,12 +39,28 @@ function buildImagePrompt(spec: FabricatedSpec, hasSketch: boolean): string {
   const gear = RUNNING_GEAR[spec.locomotion.type];
   const parts =
     spec.category === "vehicle" && gear
-      ? ` Draw it complete and ready to drive, standing on clearly visible ${gear}.` +
+      ? ` Draw it complete and ready to drive, standing on clearly visible ${gear} along its underside.` +
         (spec.harvest ? " Include a visible cutting or drilling implement." : "")
       : "";
+  // Vehicles must all face the same way or they can't be mirrored: the game
+  // flips the sprite to drive left, so anything drawn at an isometric angle
+  // reads as driving diagonally in one direction and backwards in the other.
+  // Flat lighting matters for the same reason — a strong directional shadow
+  // would land on the wrong side once mirrored.
+  const view =
+    spec.category === "vehicle"
+      ? "STRICT SIDE VIEW: the vehicle faces exactly RIGHT — its nose points at the " +
+        "right edge of the frame and its direction of travel is perfectly horizontal. " +
+        "Seen from slightly above so a sliver of the roof shows, but it still reads as " +
+        "a clean side profile. Do NOT draw it at an isometric or three-quarter angle, " +
+        "and do NOT angle it toward any corner of the frame. Light it evenly and flatly, " +
+        "with no strong directional shadow — the sprite gets mirrored to drive the other way. "
+      : "Viewed from a high three-quarter top-down angle. ";
+
   return (
     `A single 2D video-game sprite: the body of "${spec.displayName}" (a ${spec.category}). ${spec.flavor} ` +
-    `Viewed from a high three-quarter top-down angle. ${aspect} proportions.` +
+    view +
+    `${aspect} proportions.` +
     parts +
     (hasSketch
       ? " Use the attached rough player sketch as the shape reference — follow its silhouette and layout, but render it properly."
