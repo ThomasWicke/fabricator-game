@@ -18,6 +18,16 @@ export const HEX_TOP_H = 64; // height of the top face (iso-squashed)
 export const HEX_IMG_H = 89; // full tile image incl. the 25px slab side
 export const ROW_H = 48; // vertical distance between row centers (0.75 × top)
 
+/** Chunk dimensions live HERE, in the Phaser-free module, so the coverage
+ *  arithmetic — which pixels of which tiles land in which chunk — can be
+ *  proven by a test that runs in node. It was reasoned about in a comment
+ *  instead, and the comment was wrong: it predated raised ground and nobody
+ *  re-derived it when drop went negative. */
+export const CHUNK_COLS = 10;
+export const CHUNK_ROWS = 12;
+export const CHUNK_W = CHUNK_COLS * HEX_W; // 650
+export const CHUNK_H = CHUNK_ROWS * ROW_H; // 576
+
 export type HexCoord = { col: number; row: number };
 
 /**

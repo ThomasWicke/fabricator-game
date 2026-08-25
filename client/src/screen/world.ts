@@ -1333,8 +1333,11 @@ export class WorldScene extends Phaser.Scene {
 
     for (const c of cams) {
       const v = c.worldView;
-      // Hex outlines on the FLAT lattice — no relief drop — so what the lines
-      // say is "this is the hex's address", not "this is where its art sits".
+      // Hex outlines follow the DRAWN tile — relief drop included. The first
+      // version drew the flat lattice, which in high country floats 9-14px
+      // off the art everywhere and reads as "the grid is wrong" rather than
+      // as an overlay. The lines must hug what the player actually sees, or
+      // the tool for reporting misalignment IS a misalignment.
       d.hexes.lineStyle(1, 0x2affc8, 0.4);
       const row0 = Math.floor(v.y / ROW_H) - 1;
       const row1 = Math.ceil((v.y + v.height) / ROW_H) + 1;
@@ -1343,17 +1346,18 @@ export class WorldScene extends Phaser.Scene {
       for (let row = row0; row <= row1; row++) {
         for (let col = col0; col <= col1; col++) {
           const cpt = hexToWorld(col, row);
+          const drop = this.dropAt(col, row);
           d.hexes.beginPath();
           HEX_POINTS.forEach(([px, py], i) => {
-            if (i === 0) d.hexes.moveTo(cpt.x + px, cpt.y + py);
-            else d.hexes.lineTo(cpt.x + px, cpt.y + py);
+            if (i === 0) d.hexes.moveTo(cpt.x + px, cpt.y + py + drop);
+            else d.hexes.lineTo(cpt.x + px, cpt.y + py + drop);
           });
           d.hexes.closePath();
           d.hexes.strokePath();
           // An address every third column and row: dense enough that any
           // artefact in a screenshot sits next to a printed coordinate.
           if (col % 3 === 0 && row % 3 === 0) {
-            label(cpt.x, cpt.y, `${col},${row}`, "#8affde");
+            label(cpt.x, cpt.y + drop, `${col},${row}`, "#8affde");
           }
         }
       }

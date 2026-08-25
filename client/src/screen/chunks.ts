@@ -12,18 +12,14 @@
 // bleed in from its neighbours and then clips to its own exact rectangle. The
 // quads tile edge to edge, nothing overlaps, and depth never has to arbitrate.
 //
-// Cost per chunk is (COLS+1) × (ROWS+2) batched draws, once, at load.
+// Cost per chunk is (COLS+1) × (ROWS+3) batched draws, once, at load.
 
 import Phaser from "phaser";
-import { HEX_W, ROW_H, hexImageTopLeft, hexToWorld } from "./hexgrid";
+import { hexImageTopLeft, hexToWorld } from "./hexgrid";
 import { BIOMES, decorAt, tileAt } from "./worldgen";
 
-export const CHUNK_COLS = 10;
-export const CHUNK_ROWS = 12;
-
-/** Chunk footprint in world pixels. */
-export const CHUNK_W = CHUNK_COLS * HEX_W; // 650
-export const CHUNK_H = CHUNK_ROWS * ROW_H; // 576
+export { CHUNK_COLS, CHUNK_ROWS, CHUNK_W, CHUNK_H } from "./hexgrid";
+import { CHUNK_COLS, CHUNK_ROWS, CHUNK_W, CHUNK_H } from "./hexgrid";
 
 /** Ground sits under everything; nothing else uses depths this low. */
 const GROUND_DEPTH = -10_000;
@@ -191,12 +187,18 @@ export class ChunkField {
     // the world would put the simulation on a different grid from the maths.
     const px = Math.round;
     rt.beginDraw();
-    // Two rows of bleed-in above and one column to the left: a tile's image
-    // hangs 41px below its row, and a sunken sea tile (+11) hangs 52px, so the
-    // row two above can just reach in. Raised ground (-14) reaches less far,
-    // not more, so two rows still covers the worst case. Ascending row order is
-    // what makes each row's top face cover the slab of the row above it.
-    for (let row = row0 - 2; row < row0 + CHUNK_ROWS; row++) {
+    // Bleed: two rows above, one row BELOW, one column left. Above: a tile's
+    // image hangs 41px below its row, a sunken sea tile (+11) hangs 52px, so
+    // the row two above can just reach in. Below: raised ground is drawn
+    // upward — drop runs to -14 — so the NEXT chunk's first row pokes its top
+    // 14px up into this chunk, where the next chunk's own RenderTexture clips
+    // it. Before the extra row, nobody drew those pixels: every raised tile
+    // in a chunk's first row lost its top edge, which read as a line of
+    // notches along every horizontal chunk boundary in high country (flat
+    // ground has drop 0, which is why spawn looked fine and the mountains
+    // did not). Ascending row order is what makes each row's top face cover
+    // the slab of the row above it.
+    for (let row = row0 - 2; row < row0 + CHUNK_ROWS + 1; row++) {
       for (let col = col0 - 1; col < col0 + CHUNK_COLS; col++) {
         const { biome, drop } = tileAt(col, row, this.seed);
         const c = hexToWorld(col, row);
