@@ -22,7 +22,7 @@ import type { BiomeType } from "./worldgen";
  * scripts/test-enemies.ts asserts the relationship, which it could not do if
  * they lived in a module that needs a browser to load.
  */
-export const WALK_SPEED = 220;
+export const WALK_SPEED = 200;
 export const SPRINT_MULT = 1.65;
 /** Speed multiplier while hungry — the slowest a player can ever be. */
 export const HUNGRY_SPEED = 0.72;
@@ -72,13 +72,24 @@ export type Species = {
   brood: number;
 };
 
+/**
+ * A chaser's speed, as a fraction of a walking player's.
+ *
+ * Written this way because the promise is a relationship, and an absolute
+ * number only keeps it by coincidence: the speeds here all used to be plain
+ * px/s, so retuning the player downwards would have quietly made the fastest
+ * animal faster than them. Every value below is under 1 by construction, and
+ * the margin survives whatever WALK_SPEED becomes.
+ */
+const chase = (fractionOfPlayer: number) => Math.round(WALK_SPEED * fractionOfPlayer);
+
 export const SPECIES: Record<SpeciesId, Species> = {
   spider: {
     idle: "spider",
     walk: ["spider_walk1", "spider_walk2"],
     hit: "spider_hit",
     dead: "spider_dead",
-    speed: 196,
+    speed: chase(0.89),
     damage: 8,
     health: 20,
     size: 26,
@@ -89,7 +100,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     walk: ["snake", "snake_walk"],
     hit: "snake_hit",
     dead: "snake_dead",
-    speed: 190,
+    speed: chase(0.86),
     damage: 10,
     health: 24,
     size: 20,
@@ -100,7 +111,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     walk: ["mouse", "mouse_walk"],
     hit: "mouse_hit",
     dead: "mouse_dead",
-    speed: 202,
+    speed: chase(0.92),
     damage: 6,
     health: 14,
     size: 20,
@@ -111,7 +122,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     walk: ["bat", "bat_fly"],
     hit: "bat_hit",
     dead: "bat_dead",
-    speed: 205,
+    speed: chase(0.93),
     damage: 7,
     health: 16,
     size: 24,
@@ -122,7 +133,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     walk: ["slimeGreen", "slimeGreen_walk"],
     hit: "slimeGreen_hit",
     dead: "slimeGreen_dead",
-    speed: 178,
+    speed: chase(0.81),
     damage: 11,
     health: 30,
     size: 24,

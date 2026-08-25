@@ -109,7 +109,12 @@ const ENTER_RANGE = 70;
 const HARVEST_RANGE = 56;
 /** Both split-screen viewports are half-width, so the world needs magnifying
  *  to stay readable across a room. Tune here — it applies to both cameras. */
-const CAMERA_ZOOM = 1.6;
+const CAMERA_ZOOM = 1.45;
+/** Narrow viewports show less world at the same magnification, so they pull
+ *  back to compensate. Fractions of the above rather than their own numbers,
+ *  so changing the zoom moves the whole ladder instead of compressing it. */
+const ZOOM_NARROW = 0.72;
+const ZOOM_MID = 0.84;
 /** Bare hands: slow, and bogiron is beyond them. */
 const HAND_RATE = 0.8;
 const HAND_MATERIALS: CarryType[] = ["wood", "stone", "food"];
@@ -1039,7 +1044,12 @@ export class WorldScene extends Phaser.Scene {
     // away and has a fraction of the pixels, so the same magnification would
     // leave you peering through a letterbox at three hexes.
     const viewW = split ? w / 2 : w;
-    const zoom = viewW < 520 ? 1.15 : viewW < 800 ? 1.35 : CAMERA_ZOOM;
+    const zoom =
+      viewW < 520
+        ? CAMERA_ZOOM * ZOOM_NARROW
+        : viewW < 800
+          ? CAMERA_ZOOM * ZOOM_MID
+          : CAMERA_ZOOM;
     this.cameras.main.setZoom(zoom);
     this.cam2.setZoom(zoom);
     if (split) {

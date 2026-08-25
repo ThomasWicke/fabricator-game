@@ -35,10 +35,23 @@ const GROUND_DEPTH = -10_000;
  */
 const MARGIN = 1;
 
-/** Hard ceiling on resident chunks. Each is a 650×576 GPU texture (~1.5 MB),
- *  so this is the VRAM budget as much as anything: ~50 MB at the cap. Two
- *  cameras that wander apart are the worst case, and they're covered. */
-const MAX_CHUNKS = 34;
+/**
+ * Chunks kept resident BEYOND what the cameras currently need.
+ *
+ * This used to be a flat ceiling of 34, which was never a ceiling: eviction
+ * only ever drops chunks nobody needs, so a view that needs more simply keeps
+ * more. Two cameras on a 1080p screen already need about 40, so the number
+ * described a budget the code was not keeping — and the fix is not a bigger
+ * constant. What the cameras need spans roughly 20 chunks on a phone and 50
+ * on a split 1440p television, so any single figure is either a phone holding
+ * three times what it can see or a television rebuilding what it just had.
+ *
+ * Sized against the view instead. Each chunk is a 650×576 GPU texture (~1.5 MB),
+ * so the resident set costs about (needed + 8) × 1.5 MB: ~42 MB on a phone,
+ * ~87 MB on the worst split-screen. The 8 is history — enough that pacing back
+ * and forth across one boundary doesn't rebuild the same two chunks forever.
+ */
+const HISTORY_CHUNKS = 8;
 
 /** Chunks built per frame. Building is a few milliseconds of batched draws;
  *  more than a couple in one frame is a visible hitch when you drive fast. */
@@ -123,7 +136,8 @@ export class ChunkField {
   /** Drop chunks nobody needs, furthest from any camera first. */
   private evict(needed: Set<ChunkKey>, centres: { x: number; y: number }[]): void {
     const spare = [...this.live.keys()].filter((k) => !needed.has(k));
-    if (this.live.size <= MAX_CHUNKS && spare.length === 0) return;
+    const budget = needed.size + HISTORY_CHUNKS;
+    if (this.live.size <= budget && spare.length === 0) return;
 
     const distance = (key: ChunkKey) => {
       const [cx, cy] = key.split(",").map(Number);
@@ -133,11 +147,11 @@ export class ChunkField {
     };
     spare.sort((a, b) => distance(b) - distance(a));
 
-    // Everything outside the needed set is fair game once we're at the cap;
-    // below the cap we keep a little history, so pacing back and forth across
-    // one boundary doesn't rebuild the same two chunks forever.
-    const overBudget = this.live.size - MAX_CHUNKS;
-    const keepSpare = Math.max(0, Math.min(spare.length, MAX_CHUNKS - needed.size));
+    // Everything outside the needed set is fair game once we're over budget;
+    // under it we keep a little history, so pacing back and forth across one
+    // boundary doesn't rebuild the same two chunks forever.
+    const overBudget = this.live.size - budget;
+    const keepSpare = Math.max(0, Math.min(spare.length, HISTORY_CHUNKS));
     const dropCount = Math.max(overBudget, spare.length - keepSpare);
     for (const key of spare.slice(0, dropCount)) this.drop(key);
   }
