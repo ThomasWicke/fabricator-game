@@ -46,7 +46,12 @@ import {
   dropFor,
   type ChunkKey,
 } from "./chunks";
-import { makePadTexture, makeParticleTextures } from "./textures";
+import {
+  makeForageTexture,
+  makePackTexture,
+  makePadTexture,
+  makeParticleTextures,
+} from "./textures";
 import {
   BIOMES,
   BIOME_TILE_KEYS,
@@ -81,7 +86,7 @@ const HARVEST_RANGE = 56;
 const CAMERA_ZOOM = 1.6;
 /** Bare hands: slow, and bogiron is beyond them. */
 const HAND_RATE = 0.8;
-const HAND_MATERIALS: MaterialType[] = ["wood", "stone"];
+const HAND_MATERIALS: CarryType[] = ["wood", "stone", "food"];
 const STARTING_STOCK: Record<MaterialType, number> = { wood: 25, stone: 15, bogiron: 0 };
 const PLAYER_SCALE = 0.45;
 /** Pines carry 8px of transparent padding below the trunk in every size
@@ -136,6 +141,41 @@ const DUST_TINT: Record<TerrainType, number> = {
   water: 0x2d5c86,
 };
 
+// ── survival ──────────────────────────────────────────────────────────────
+//
+// Deliberately unhurried. Hunger is a reason to keep an eye on the land, not
+// a timer: a full belly lasts about eight minutes, and running out slows you
+// down well before it hurts you. Dying costs you the trip you were on — the
+// load on your back — and nothing else.
+
+const HEALTH_MAX = 100;
+const HUNGER_MAX = 100;
+/** Hunger per second, standing still. ~8 minutes from full to empty. */
+const HUNGER_DRAIN = HUNGER_MAX / 480;
+/** Multipliers on that drain. Effort costs; it just doesn't cost much. */
+const HUNGER_WALK = 1.35;
+const HUNGER_SPRINT = 2.1;
+/** Below this you are hungry: slower, and the HUD says so. */
+const HUNGER_LOW = 25;
+const HUNGRY_SPEED = 0.72;
+/** Empty. Health goes now, slowly enough to walk somewhere about it. */
+const STARVE_DAMAGE = 1.6;
+/** Health regained per second while well fed. */
+const HEAL_RATE = 1.4;
+const HEAL_HUNGER = 50;
+/** Hunger restored by one unit of forage. */
+const FOOD_VALUE = 26;
+/** Eat automatically below this. With only two buttons, an "eat" key would
+ *  have to displace something you need more. */
+const AUTO_EAT_AT = 34;
+
+/** What one player can carry, in units, across everything in the pack. This
+ *  is the whole reason to walk back to the Fabricator. */
+const PACK_CAPACITY = 24;
+/** Units per second moved from a standing player's pack into the shared
+ *  stockpile. Automatic: being at the machine IS depositing. */
+const DEPOSIT_RATE = 6;
+
 /** How close you have to stand to use the Fabricator. Generous enough that
  *  "I'm at the machine" is obvious, tight enough that you have to go there. */
 const FABRICATOR_RANGE = 120;
@@ -152,11 +192,37 @@ const ALIEN_FRAMES = ["stand", "walk1", "walk2", "climb1", "climb2"];
 export type PlayerInput = { stick: StickState; buttons: ButtonState };
 export type Stockpile = Record<MaterialType, number>;
 
+/** Everything a pack can hold. Food never reaches the shared stockpile —
+ *  it is yours, and you eat it. */
+export type CarryType = MaterialType | "food";
+export type Pack = Record<CarryType, number>;
+
+export const emptyPack = (): Pack => ({ wood: 0, stone: 0, bogiron: 0, food: 0 });
+export const packLoad = (p: Pack): number =>
+  p.wood + p.stone + p.bogiron + p.food;
+
+/** What the HUD draws for one player. */
+export type Vitals = {
+  health: number;
+  hunger: number;
+  pack: Pack;
+  capacity: number;
+};
+
 /** What happened when a phone pressed BUILD. `carrying` means it went onto
  *  the builder's shoulder instead of into the world — nothing charged yet. */
 export type FabricateOutcome =
   | { ok: true; carrying: boolean }
   | { ok: false; reason: string };
+
+/** Does this harvest capability take that kind of thing?
+ *
+ *  A spec's `materials` are MaterialType — machines mine, they do not forage —
+ *  while a node can also hold food, so the two lists only overlap partially.
+ *  Comparing as strings keeps the widening in one place instead of casting at
+ *  every call site. */
+const gathers = (materials: readonly string[], m: CarryType): boolean =>
+  materials.includes(m);
 
 const idleInput = (): PlayerInput => ({
   stick: { x: 0, y: 0 },
@@ -195,6 +261,22 @@ type PlayerEntity = {
   /** A fabricated structure being carried to wherever it should stand.
    *  Nothing is charged until it is put down, so walking away costs nothing. */
   carrying: CarriedStructure | null;
+  /** What this player is hauling. Harvest fills it; standing at the
+   *  Fabricator empties it into the shared stockpile. */
+  pack: Pack;
+  health: number;
+  hunger: number;
+  /** Fractional progress toward the next whole unit deposited. */
+  depositCarry: number;
+};
+
+/** A pack left where somebody fell. Walk back and press A to take it. */
+type DroppedPack = {
+  sprite: Phaser.GameObjects.Image;
+  label: Phaser.GameObjects.Text;
+  contents: Pack;
+  x: number;
+  y: number;
 };
 
 /**
@@ -263,8 +345,10 @@ type ResourceNode = {
   /** Hex address — the stable identity used by world saves. */
   col: number;
   row: number;
-  material: MaterialType;
+  material: CarryType;
   remaining: number;
+  /** Berry overlay, on forage only. */
+  berries?: Phaser.GameObjects.Image;
 };
 
 /** What the minimap needs. Sampled on demand rather than pushed, because it
@@ -317,6 +401,8 @@ export class WorldScene extends Phaser.Scene {
   private nodeByHex = new Map<string, ResourceNode>();
   /** Hexes a structure already stands on — you cannot stack two on one tile. */
   private occupied = new Set<string>();
+  /** Packs dropped where players fell, waiting to be collected. */
+  private drops: DroppedPack[] = [];
   private nodesByChunk = new Map<ChunkKey, ResourceNode[]>();
   /** Nodes whose remaining count differs from the deterministic baseline —
    *  the only node state a save needs to carry. Survives chunk unload, which
@@ -349,6 +435,8 @@ export class WorldScene extends Phaser.Scene {
   onSplitChanged: ((split: boolean) => void) | null = null;
   /** Fired when a second player arrives, so the HUD can greet them. */
   onSlotActivated: ((slot: Slot) => void) | null = null;
+  /** Health, hunger and load, pushed whenever they change enough to redraw. */
+  onVitals: ((slot: Slot, v: Vitals) => void) | null = null;
 
   private markDirty() {
     this.onDirty?.();
@@ -381,6 +469,8 @@ export class WorldScene extends Phaser.Scene {
 
     makePadTexture(this);
     makeParticleTextures(this);
+    makeForageTexture(this);
+    makePackTexture(this);
 
     this.obstacles = this.physics.add.staticGroup();
 
@@ -510,6 +600,7 @@ export class WorldScene extends Phaser.Scene {
     for (let i = 0; i < 12; i++) this.field.update([cam1, this.cam2]);
 
     this.onStockpile?.(this.stockpile);
+    for (const p of this.players.values()) this.pushVitals(p);
     this.onReady?.();
   }
 
@@ -581,7 +672,20 @@ export class WorldScene extends Phaser.Scene {
         let bodyW: number;
         let bodyH: number;
         let bodyDY: number;
-        if (entry.art === "boulder") {
+        let berries: Phaser.GameObjects.Image | undefined;
+        if (entry.art === "bush") {
+          // Forage stands on the tile and is walked through — a berry bush
+          // that body-blocks you would be infuriating, and the whole point of
+          // food is that it is easy to reach.
+          sprite = this.add.image(c.x, cy2 + 6, entry.texture).setOrigin(0.5, 1);
+          berries = this.add
+            .image(c.x + 4, cy2 - 4, "berries")
+            .setOrigin(0.5, 1)
+            .setDepth(cy2 + 0.5);
+          bodyW = 0;
+          bodyH = 0;
+          bodyDY = 0;
+        } else if (entry.art === "boulder") {
           sprite = this.add
             .image(c.x - HEX_W / 2, c.y - 32, entry.texture)
             .setOrigin(0, 0);
@@ -599,16 +703,26 @@ export class WorldScene extends Phaser.Scene {
         sprite.setDepth(cy2);
         if (entry.tint) sprite.setTint(entry.tint);
 
+        // A zero-size body means "no obstacle" — forage only.
         const blocker = this.add
-          .rectangle(c.x, cy2 + bodyDY, bodyW, bodyH)
+          .rectangle(c.x, cy2 + bodyDY, Math.max(1, bodyW), Math.max(1, bodyH))
           .setVisible(false);
-        this.physics.add.existing(blocker, true);
-        this.obstacles.add(blocker);
+        if (bodyW > 0) {
+          this.physics.add.existing(blocker, true);
+          this.obstacles.add(blocker);
+        }
 
-        const material: MaterialType =
-          entry.kind === "tree" ? "wood" : entry.kind === "rock" ? "stone" : "bogiron";
+        const material: CarryType =
+          entry.kind === "tree"
+            ? "wood"
+            : entry.kind === "rock"
+              ? "stone"
+              : entry.kind === "food"
+                ? "food"
+                : "bogiron";
         const node: ResourceNode = {
           sprite,
+          berries,
           blocker,
           cx: c.x,
           cy: cy2,
@@ -632,6 +746,7 @@ export class WorldScene extends Phaser.Scene {
       this.nodeByHex.delete(`${node.col},${node.row}`);
       this.tweens.killTweensOf(node.sprite);
       node.sprite.destroy();
+      node.berries?.destroy();
       node.blocker.destroy();
     }
     this.nodesByChunk.delete(key);
@@ -672,6 +787,10 @@ export class WorldScene extends Phaser.Scene {
       nextHarvestAt: 0,
       atFabricator: false,
       carrying: null,
+      pack: emptyPack(),
+      health: HEALTH_MAX,
+      hunger: HUNGER_MAX,
+      depositCarry: 0,
     };
     this.players.set(slot, entity);
     return entity;
@@ -815,6 +934,7 @@ export class WorldScene extends Phaser.Scene {
       if (i >= 0) list.splice(i, 1);
     }
     node.blocker.destroy(); // frees the hex for walking immediately
+    node.berries?.destroy();
     if (!animate) {
       node.sprite.destroy();
       return;
@@ -1304,21 +1424,186 @@ export class WorldScene extends Phaser.Scene {
     return best;
   }
 
-  /** One gathering tick: take 1 unit if allowed. Returns true on success. */
-  private harvestHit(node: ResourceNode, materials: MaterialType[]): boolean {
-    if (!materials.includes(node.material)) return false;
+  /**
+   * One gathering tick: take 1 unit if allowed.
+   *
+   * `into` is the pack it goes into, or null to bank it straight to the
+   * shared stockpile — which is what an unattended structure does, and its
+   * whole advantage: it never has to walk anything home.
+   */
+  private harvestHit(
+    node: ResourceNode,
+    materials: readonly CarryType[],
+    into: PlayerEntity | null,
+  ): boolean {
+    if (!gathers(materials, node.material)) return false;
+    if (into && packLoad(into.pack) >= PACK_CAPACITY) {
+      this.floatText(node.cx, node.cy - 40, "pack is full", "#ff9f9f");
+      return false;
+    }
     node.remaining -= 1;
     this.harvestDeltas.set(`${node.col},${node.row}`, {
       col: node.col,
       row: node.row,
       remaining: Math.max(0, node.remaining),
     });
-    this.addStock(node.material, 1);
+    if (into) {
+      into.pack[node.material] += 1;
+      this.pushVitals(into);
+    } else if (node.material !== "food") {
+      this.addStock(node.material, 1);
+    }
+    this.markDirty();
 
     this.tweens.add({ targets: node.sprite, scale: { from: 1.12, to: 1 }, duration: 120 });
     this.floatText(node.cx, node.cy - 40, `+1 ${node.material}`, "#c9e77f");
 
     if (node.remaining <= 0) this.removeNode(node, true);
+    return true;
+  }
+
+  // ── survival ──────────────────────────────────────────────────
+
+  private pushVitals(p: PlayerEntity) {
+    this.onVitals?.(p.slot, {
+      health: p.health,
+      hunger: p.hunger,
+      pack: { ...p.pack },
+      capacity: PACK_CAPACITY,
+    });
+  }
+
+  /**
+   * Hunger, health and eating, once per frame per living player.
+   *
+   * Eating is automatic. With two buttons already spoken for, an "eat" key
+   * would have to displace something you need more often — and being told
+   * you are starving while holding berries is not interesting, it is fiddly.
+   */
+  private runVitals(p: PlayerEntity, dtMs: number, moving: boolean, sprinting: boolean) {
+    const dt = dtMs / 1000;
+    const effort = sprinting ? HUNGER_SPRINT : moving ? HUNGER_WALK : 1;
+    p.hunger = Math.max(0, p.hunger - HUNGER_DRAIN * effort * dt);
+
+    if (p.hunger < AUTO_EAT_AT && p.pack.food > 0) {
+      p.pack.food -= 1;
+      p.hunger = Math.min(HUNGER_MAX, p.hunger + FOOD_VALUE);
+      this.floatText(p.sprite.x, p.sprite.y - 46, `ate · +${FOOD_VALUE}`, "#c9e77f");
+    }
+
+    if (p.hunger <= 0) {
+      p.health -= STARVE_DAMAGE * dt;
+      if (p.health <= 0) {
+        this.killPlayer(p);
+        return;
+      }
+    } else if (p.hunger > HEAL_HUNGER && p.health < HEALTH_MAX) {
+      p.health = Math.min(HEALTH_MAX, p.health + HEAL_RATE * dt);
+    }
+    this.pushVitals(p);
+  }
+
+  /** Standing at the machine unloads your pack into the shared pile. There is
+   *  no deposit button: arriving is the action. */
+  private depositAtFabricator(p: PlayerEntity, dtMs: number) {
+    // Whole units, paced by an accumulator — never a fraction per frame.
+    // Materials are counted in whole things, and moving them a sliver at a
+    // time accumulates float error: twenty wood deposited across a hundred
+    // frames arrives as 19.983, which the HUD floors to 19. Nobody would
+    // ever find that bug from the outside; they'd just feel robbed.
+    p.depositCarry += (DEPOSIT_RATE * dtMs) / 1000;
+    let units = Math.floor(p.depositCarry);
+    if (units <= 0) return;
+    p.depositCarry -= units;
+
+    let any = false;
+    for (const m of ["wood", "stone", "bogiron"] as const) {
+      while (units > 0 && p.pack[m] >= 1) {
+        p.pack[m] -= 1;
+        this.stockpile[m] += 1;
+        units -= 1;
+        any = true;
+      }
+    }
+    if (!any) return;
+    this.onStockpile?.(this.stockpile);
+    this.pushVitals(p);
+    this.markDirty();
+  }
+
+  /**
+   * Death, the stress-free version: your load stays where you fell, you wake
+   * up at the Fabricator, and the shared stockpile is never touched. The cost
+   * of dying is the walk back to whatever you were carrying.
+   */
+  private killPlayer(p: PlayerEntity) {
+    if (p.driving) this.exitVehicle(p);
+    if (p.carrying) this.dropCarry(p);
+
+    if (packLoad(p.pack) > 0) this.dropPack(p);
+    p.pack = emptyPack();
+    // You come back winded, not fresh — but never so weak that waking up is
+    // immediately another death.
+    p.health = HEALTH_MAX * 0.6;
+    p.hunger = HUNGER_MAX * 0.5;
+
+    const spot = this.freeSpotNear(this.pad.x, this.pad.y + 60);
+    p.sprite.setPosition(spot.x, spot.y);
+    this.materializeFlash(spot.x, spot.y, 56);
+    this.floatText(spot.x, spot.y - 46, "you wake at the Fabricator", "#8fc1ff");
+    this.pushVitals(p);
+    this.markDirty();
+  }
+
+  private dropPack(p: PlayerEntity) {
+    const x = p.sprite.x;
+    const y = p.sprite.y;
+    const sprite = this.add.image(x, y, "pack").setDepth(y - 1);
+    const label = this.add
+      .text(x, y - 22, `${Math.floor(packLoad(p.pack))} carried`, {
+        fontFamily: "ui-monospace, Menlo, monospace",
+        fontSize: "10px",
+        fontStyle: "bold",
+        color: "#ffcf8f",
+        backgroundColor: "rgba(8,14,26,0.6)",
+        padding: { x: 4, y: 1 },
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(1e6);
+    this.drops.push({ sprite, label, contents: { ...p.pack }, x, y });
+  }
+
+  /** Pick up a dropped pack, as much of it as will fit. */
+  private tryCollectDrop(p: PlayerEntity): boolean {
+    const near = this.drops.find(
+      (d) => Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, d.x, d.y) < 52,
+    );
+    if (!near) return false;
+    let room = PACK_CAPACITY - packLoad(p.pack);
+    let took = 0;
+    for (const m of ["wood", "stone", "bogiron", "food"] as const) {
+      if (room <= 0) break;
+      const take = Math.min(near.contents[m], room);
+      if (take <= 0) continue;
+      near.contents[m] -= take;
+      p.pack[m] += take;
+      room -= take;
+      took += take;
+    }
+    if (took <= 0) {
+      this.floatText(p.sprite.x, p.sprite.y - 46, "no room", "#ff9f9f");
+      return true;
+    }
+    this.floatText(near.x, near.y - 34, `+${Math.floor(took)} recovered`, "#c9e77f");
+    if (packLoad(near.contents) <= 0.01) {
+      near.sprite.destroy();
+      near.label.destroy();
+      this.drops.splice(this.drops.indexOf(near), 1);
+    } else {
+      near.label.setText(`${Math.floor(packLoad(near.contents))} carried`);
+    }
+    this.pushVitals(p);
+    this.markDirty();
     return true;
   }
 
@@ -1342,6 +1627,17 @@ export class WorldScene extends Phaser.Scene {
       tools: [...this.players.values()]
         .filter((p) => p.tool)
         .map((p) => ({ slot: p.slot, designId: p.tool!.designId })),
+      vitals: [...this.players.values()].map((p) => ({
+        slot: p.slot,
+        health: Math.round(p.health),
+        hunger: Math.round(p.hunger),
+        pack: { ...p.pack },
+      })),
+      drops: this.drops.map((d) => ({
+        x: Math.round(d.x),
+        y: Math.round(d.y),
+        pack: { ...d.contents },
+      })),
     };
   }
 
@@ -1372,6 +1668,31 @@ export class WorldScene extends Phaser.Scene {
     for (const t of snap.tools) {
       const design = resolve(t.designId);
       if (design) this.placeDesign(design, t.slot);
+    }
+
+    for (const v of snap.vitals ?? []) {
+      const p = this.players.get(v.slot);
+      if (!p) continue;
+      p.health = v.health;
+      p.hunger = v.hunger;
+      p.pack = { ...emptyPack(), ...v.pack };
+      this.pushVitals(p);
+    }
+    // A pack you died next to is still there when you come back tomorrow.
+    for (const d of snap.drops ?? []) {
+      const sprite = this.add.image(d.x, d.y, "pack").setDepth(d.y - 1);
+      const label = this.add
+        .text(d.x, d.y - 22, `${Math.floor(d.pack.wood + d.pack.stone + d.pack.bogiron + d.pack.food)} carried`, {
+          fontFamily: "ui-monospace, Menlo, monospace",
+          fontSize: "10px",
+          fontStyle: "bold",
+          color: "#ffcf8f",
+          backgroundColor: "rgba(8,14,26,0.6)",
+          padding: { x: 4, y: 1 },
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(1e6);
+      this.drops.push({ sprite, label, contents: { ...emptyPack(), ...d.pack }, x: d.x, y: d.y });
     }
   }
 
@@ -1445,6 +1766,7 @@ export class WorldScene extends Phaser.Scene {
 
   update() {
     const now = this.time.now;
+    const dtMs = this.game.loop.delta;
 
     // Day/night. Dawn and dusk get most of the curve so the transition reads
     // as a sunset rather than a light switch.
@@ -1500,7 +1822,10 @@ export class WorldScene extends Phaser.Scene {
       // direction stays open at a wading pace, so you can never be trapped.
       const stranded = !this.walkable(feet.x, feet.y);
       const mod = stranded ? 0.5 : WALK_MODS[this.terrainAt(feet.x, feet.y)];
-      const speed = WALK_SPEED * mod * (input.buttons.b ? SPRINT_MULT : 1);
+      const sprinting = input.buttons.b;
+      // Hungry legs are slow legs — the warning arrives well before the harm.
+      const hungerMod = p.hunger < HUNGER_LOW ? HUNGRY_SPEED : 1;
+      const speed = WALK_SPEED * mod * hungerMod * (sprinting ? SPRINT_MULT : 1);
       const [vx, vy] = stranded
         ? [input.stick.x * speed, input.stick.y * speed]
         : this.slideAlongShore(feet, input.stick, speed);
@@ -1508,6 +1833,8 @@ export class WorldScene extends Phaser.Scene {
 
       const moving = Math.hypot(input.stick.x, input.stick.y) > 0.1;
       this.animatePlayer(p, input.stick.x, input.stick.y, moving);
+      this.runVitals(p, dtMs, moving, sprinting && moving);
+      if (p.atFabricator) this.depositAtFabricator(p, dtMs);
 
       // Carrying a structure takes over both buttons: A puts it down on the
       // outlined hex, B calls the whole thing off. Nothing else — you can't
@@ -1530,7 +1857,7 @@ export class WorldScene extends Phaser.Scene {
         const rate = p.tool?.spec.harvest?.rate ?? HAND_RATE;
         const materials = p.tool?.spec.harvest?.materials ?? HAND_MATERIALS;
         if (now >= p.nextHarvestAt) {
-          const hit = this.harvestHit(node, materials);
+          const hit = this.harvestHit(node, materials, p);
           if (!hit) {
             this.floatText(node.cx, node.cy - 40, "needs a better tool", "#ff9f9f");
             p.nextHarvestAt = now + 700;
@@ -1539,9 +1866,15 @@ export class WorldScene extends Phaser.Scene {
           }
         }
       } else if (aEdge) {
-        const vehicle = this.nearestEnterableVehicle(p);
-        if (vehicle) this.enterVehicle(p, vehicle);
-        else this.ping(p);
+        // Priority order is what you'd reach for: your dropped load first,
+        // then a machine to climb into, then the ping.
+        if (this.tryCollectDrop(p)) {
+          // collected
+        } else {
+          const vehicle = this.nearestEnterableVehicle(p);
+          if (vehicle) this.enterVehicle(p, vehicle);
+          else this.ping(p);
+        }
       }
 
       p.sprite.setDepth(p.sprite.y);
@@ -1738,11 +2071,13 @@ export class WorldScene extends Phaser.Scene {
       if (now < v.nextHarvestAt) continue;
       const reach = Math.max(v.spec.size.w, v.spec.size.h) / 2 + AUTOMATION_REACH;
       const node = this.nearestNode(v.container.x, v.container.y, reach);
-      if (!node || !hv.materials.includes(node.material)) {
+      if (!node || !gathers(hv.materials, node.material)) {
         v.nextHarvestAt = now + 1200; // nothing in reach — check back shortly
         continue;
       }
-      this.harvestHit(node, hv.materials);
+      // Unattended: banks straight to the shared pile, since a building has
+      // no legs to carry anything home with.
+      this.harvestHit(node, hv.materials, null);
       v.nextHarvestAt = now + 1000 / (hv.rate * AUTOMATION_RATE);
       // A visible tick so you can tell it is earning its keep, now that there
       // is no bolted-on drill to waggle: the whole machine flinches.
@@ -1880,10 +2215,11 @@ export class WorldScene extends Phaser.Scene {
         v.container.y,
         Math.max(v.spec.size.w, v.spec.size.h) / 2 + 26,
       );
-      if (node && hv.materials.includes(node.material)) {
+      if (node && gathers(hv.materials, node.material)) {
         harvesting = true;
         if (now >= v.nextHarvestAt) {
-          this.harvestHit(node, hv.materials);
+          // Into the driver's pack: a machine hauls for whoever is aboard.
+          this.harvestHit(node, hv.materials, p);
           v.nextHarvestAt = now + 1000 / hv.rate;
         }
       }

@@ -168,6 +168,58 @@ export function makeBogironTexture(scene: Phaser.Scene): void {
   canvas.refresh();
 }
 
+/** Berries, stamped over a biome's own bush so forage is unmistakable from
+ *  the decorative shrubbery growing next to it. */
+export function makeForageTexture(scene: Phaser.Scene): void {
+  if (scene.textures.exists("berries")) return;
+  const s = 16;
+  const canvas = scene.textures.createCanvas("berries", s, s)!;
+  const ctx = canvas.context;
+  for (const [x, y, r, fill] of [
+    [5, 9, 3, "#d8443f"],
+    [10.5, 7, 2.6, "#e8615a"],
+    [8, 12, 2.4, "#b8332f"],
+  ] as [number, number, number, string][]) {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.beginPath();
+    ctx.arc(x - r * 0.3, y - r * 0.35, r * 0.32, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  canvas.refresh();
+}
+
+/** A dropped pack — where somebody's load stayed when they didn't. */
+export function makePackTexture(scene: Phaser.Scene): void {
+  if (scene.textures.exists("pack")) return;
+  const w = 26;
+  const h = 24;
+  const canvas = scene.textures.createCanvas("pack", w, h)!;
+  const ctx = canvas.context;
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.beginPath();
+  ctx.ellipse(w / 2, h - 3, 10, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#7a5c3d";
+  ctx.beginPath();
+  ctx.roundRect(4, 6, w - 8, h - 10, 4);
+  ctx.fill();
+  ctx.fillStyle = "#a8845e";
+  ctx.beginPath();
+  ctx.roundRect(4, 6, w - 8, 5, 3);
+  ctx.fill();
+  ctx.strokeStyle = "#4f3a25";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(w / 2, 6);
+  ctx.lineTo(w / 2, h - 4);
+  ctx.stroke();
+  canvas.refresh();
+}
+
 /** Tiny soft textures for particle emitters (smoke puffs, sparks). */
 export function makeParticleTextures(scene: Phaser.Scene): void {
   if (!scene.textures.exists("puff")) {

@@ -1066,6 +1066,58 @@
         box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
       }
 
+      /* Health and hunger. Two thin bars rather than numbers: you should be
+         able to read "in trouble" from across a room without doing maths. */
+      .player-card .bars {
+        display: flex;
+        gap: 0.28em;
+        margin-top: 0.3em;
+      }
+      .player-card.p2 .bars {
+        flex-direction: row-reverse;
+      }
+      .bar {
+        position: relative;
+        width: 3.4em;
+        height: 0.34em;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.13);
+        overflow: hidden;
+      }
+      .bar i {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 100%;
+        border-radius: 999px;
+        transition: width 0.25s linear, background 0.3s;
+      }
+      .player-card.p2 .bar i {
+        inset: 0 0 0 auto;
+      }
+      .bar.health i {
+        background: #6fcf7f;
+      }
+      .bar.hunger i {
+        background: #e3b25a;
+      }
+      /* Trouble reads as red on both bars — the specific stat matters less
+         than noticing at all. */
+      .bar.low i {
+        background: #e8615a;
+      }
+      .player-card .carry {
+        display: block;
+        margin-top: 0.22em;
+        font-family: var(--mono);
+        font-size: 0.56em;
+        letter-spacing: 0.04em;
+        color: #93a1b4;
+        white-space: nowrap;
+      }
+      .player-card .carry.full {
+        color: var(--warm);
+      }
+
       /* The minimap is shared, like the stockpile, so it straddles the split
          rather than living in one player's half. It hangs under the resource
          bar: dead centre is the one place neither camera keeps a player. */

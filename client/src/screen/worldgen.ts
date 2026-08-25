@@ -212,14 +212,15 @@ export function terrainAtHex(col: number, row: number, seed: number): TerrainTyp
 
 // ── scatter: resource nodes ─────────────────────────────────────────────────
 
-export type NodeKind = "tree" | "rock" | "bogiron";
+export type NodeKind = "tree" | "rock" | "bogiron" | "food";
 
 export type ScatterEntry = {
   kind: NodeKind;
   /** Texture key for the prop. */
   texture: string;
-  /** Two art conventions in the pack; they anchor differently. */
-  art: "boulder" | "pine";
+  /** Three art conventions in the pack; they anchor differently. A "bush" is
+   *  a low prop you can walk through — food should never wall you in. */
+  art: "boulder" | "pine" | "bush";
   /** Units of material in the node. */
   units: number;
   tint?: number;
@@ -242,16 +243,26 @@ const boulder = (t: string, units = 4): ScatterEntry => ({
   art: "boulder",
   units,
 });
+/** Forage. Every walkable biome has something growing on it, because a
+ *  biome you cannot eat in is a biome you cannot cross. */
+const forage = (t: string, units = 3): ScatterEntry => ({
+  kind: "food",
+  texture: t,
+  art: "bush",
+  units,
+});
 const pick = <T>(r: number, xs: T[]): T => xs[Math.min(xs.length - 1, Math.floor(r * xs.length))];
 
 const SCATTER: Record<BiomeType, ScatterRule[]> = {
   grass: [
     { p: 0.1, make: (r) => pine(pick(r, ["pineGreen_low", "pineGreen_mid", "pineGreen_high"])) },
     { p: 0.04, make: (r) => boulder(pick(r, ["rockStone", "rockStone_moss1", "rockStone_moss2"])) },
+    { p: 0.05, make: () => forage("bushGrass", 3) },
   ],
   autumn: [
     { p: 0.15, make: (r) => pine(pick(r, ["treeAutumn_low", "treeAutumn_mid", "treeAutumn_high"]), 6) },
     { p: 0.03, make: (r) => boulder(pick(r, ["rockDirt_moss1", "rockDirt_moss3"])) },
+    { p: 0.06, make: () => forage("bushAutumn", 4) },
   ],
   magic: [
     {
@@ -259,20 +270,24 @@ const SCATTER: Record<BiomeType, ScatterRule[]> = {
       make: (r) => ({ ...boulder(pick(r, ["rockStone", "rockStone_moss3"]), 3), kind: "bogiron", tint: 0xd9813f }),
     },
     { p: 0.05, make: (r) => pine(pick(r, ["pineBlue_low", "pineBlue_mid"]), 4) },
+    { p: 0.035, make: () => forage("bushMagic", 2) },
   ],
   dirt: [
     { p: 0.05, make: (r) => boulder(pick(r, ["rockDirt", "rockDirt_moss2"])) },
     { p: 0.02, make: (r) => pine(pick(r, ["treeBlue_low", "treeBlue_mid"]), 3) },
+    { p: 0.03, make: () => forage("bushDirt", 2) },
   ],
   sand: [
     { p: 0.045, make: (r) => pine(pick(r, ["treeCactus_1", "treeCactus_2", "treeCactus_3"]), 3) },
     { p: 0.015, make: () => boulder("rockDirt", 3) },
+    { p: 0.025, make: () => forage("bushSand", 2) },
   ],
   stone: [{ p: 0.11, make: (r) => boulder(pick(r, ["rockStone", "rockStone_moss1"]), 5) }],
   rock: [{ p: 0.13, make: () => boulder("rockStone", 6) }],
   snow: [
     { p: 0.06, make: (r) => pine(pick(r, ["pineBlue_low", "pineBlue_mid", "pineBlue_high"]), 4) },
     { p: 0.055, make: (r) => boulder(pick(r, ["rockSnow_1", "rockSnow_2", "rockSnow_3"]), 5) },
+    { p: 0.025, make: () => forage("bushSnow", 2) },
   ],
   water: [],
   lava: [],

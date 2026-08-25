@@ -54,6 +54,24 @@ const ICONS: Record<MaterialType, string> = {
 
 const MATERIALS: MaterialType[] = ["wood", "stone", "bogiron"];
 
+/** One player's corner of the HUD: who they are, what they're holding, and
+ *  the two bars that say whether they're in trouble. */
+function vitalsCard(slot: Slot): string {
+  return `
+    <div class="player-card p${slot} glass" id="card-p${slot}">
+      <span class="dot"></span>
+      <span class="who">
+        <span class="name" id="name-p${slot}">Player ${slot}</span>
+        <span class="tool" id="tool-p${slot}">waiting to join…</span>
+        <span class="bars">
+          <span class="bar health"><i id="hp-p${slot}"></i></span>
+          <span class="bar hunger"><i id="hg-p${slot}"></i></span>
+        </span>
+        <span class="carry" id="carry-p${slot}"></span>
+      </span>
+    </div>`;
+}
+
 export function startScreen(code: string) {
   const upperCode = code.toUpperCase();
   const controllerUrl = `${window.location.origin}/c/${code}`;
@@ -306,23 +324,11 @@ export function startScreen(code: string) {
 
           <div class="hud">
             <div class="hud-top">
-              <div class="player-card p1 glass" id="card-p1">
-                <span class="dot"></span>
-                <span class="who">
-                  <span class="name" id="name-p1">Player 1</span>
-                  <span class="tool" id="tool-p1">waiting to join…</span>
-                </span>
-              </div>
+              ${vitalsCard(1)}
 
               <div class="resources glass">${resourceMarkup}</div>
 
-              <div class="player-card p2 glass" id="card-p2">
-                <span class="dot"></span>
-                <span class="who">
-                  <span class="name" id="name-p2">Player 2</span>
-                  <span class="tool" id="tool-p2">waiting to join…</span>
-                </span>
-              </div>
+              ${vitalsCard(2)}
             </div>
 
             <div class="hud-map glass" id="hud-map">
@@ -758,6 +764,33 @@ export function startScreen(code: string) {
     worldScene.onFabricatorRange = (slot, inRange) => {
       fabRange[slot] = inRange;
       conn.send({ scope: "ui", type: "fabricator-range", slot, inRange });
+    };
+
+    // ── vitals ──────────────────────────────────────────────────
+    const CARRY_ICON: Record<string, string> = {
+      wood: "🪵",
+      stone: "🪨",
+      bogiron: "⚙️",
+      food: "🍒",
+    };
+    worldScene.onVitals = (slot, v) => {
+      const hp = document.getElementById(`hp-p${slot}`);
+      const hg = document.getElementById(`hg-p${slot}`);
+      const carry = document.getElementById(`carry-p${slot}`);
+      if (!hp || !hg || !carry) return;
+      hp.style.width = `${Math.max(0, Math.min(100, v.health))}%`;
+      hg.style.width = `${Math.max(0, Math.min(100, v.hunger))}%`;
+      hp.parentElement!.classList.toggle("low", v.health < 35);
+      hg.parentElement!.classList.toggle("low", v.hunger < 25);
+
+      const load = v.pack.wood + v.pack.stone + v.pack.bogiron + v.pack.food;
+      const parts = (["wood", "stone", "bogiron", "food"] as const)
+        .filter((m) => v.pack[m] >= 1)
+        .map((m) => `${CARRY_ICON[m]}${Math.floor(v.pack[m])}`);
+      // An empty pack says so rather than showing nothing, or the row jumps
+      // around every time you pick something up and put it down.
+      carry.textContent = parts.length ? parts.join(" ") : "pack empty";
+      carry.classList.toggle("full", load >= v.capacity - 0.01);
     };
 
     worldScene.onToolEquipped = (slot, spec) => {

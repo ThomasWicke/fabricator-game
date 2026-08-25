@@ -247,6 +247,20 @@ export type WorldSnapshot = {
   built: { designId: string; x: number; y: number }[];
   /** Equipped hand tools, by player slot. */
   tools: { slot: Slot; designId: string }[];
+  /** What each player is carrying, and how they're holding up. Optional so a
+   *  save written before survival existed still loads. */
+  vitals?: {
+    slot: Slot;
+    health: number;
+    hunger: number;
+    pack: { wood: number; stone: number; bogiron: number; food: number };
+  }[];
+  /** Packs left where somebody fell, still waiting to be collected. */
+  drops?: {
+    x: number;
+    y: number;
+    pack: { wood: number; stone: number; bogiron: number; food: number };
+  }[];
 };
 
 /** Screen → server: persist this snapshot (debounced). */

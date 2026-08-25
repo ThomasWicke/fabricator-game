@@ -52,7 +52,7 @@ code, using every biome in the Kenney hexagon pack.
       make it read that way), with a visible ring, dead-zone, and travel feedback.
 - [x] **P5 · Design thumbnails.** Show the fabricated sprite in the design library
       on the phone, so you can see what you are about to pay for.
-- [ ] **P6 · Survival HUD.** Health and hunger in the in-frame HUD, plus the
+- [x] **P6 · Survival HUD.** Health and hunger in the in-frame HUD, plus the
       carried-inventory strip.
 
 ## Playing without two phones
@@ -93,18 +93,19 @@ assumed exactly two players.
 
 ## Player systems
 
-- [ ] **S1 · Inventory.** Per-player carried items with capacity, distinct from
+- [x] **S1 · Inventory.** Per-player carried items with capacity, distinct from
       the shared stockpile. Picking up, dropping, and depositing at the Fabricator.
-- [ ] **S2 · Tools.** Equip, swap, and holster fabricated tools from the inventory
-      instead of one permanently-attached tool per player.
+- [ ] **S2 · Tools.** Equip, swap, and holster fabricated tools. Still one
+      permanently-attached tool per player — the pack exists now, so a tool
+      should be an item in it rather than a property of the person.
 - [ ] **S3 · Weapons.** Fabricated weapons with a swing arc, damage, and cooldown,
       driven by the `weapon` primitive.
-- [ ] **S4 · Health.** Damage, regeneration when fed and rested.
-- [ ] **S5 · Hunger.** Drains with time and effort; low hunger slows you before it
+- [x] **S4 · Health.** Damage, regeneration when fed and rested.
+- [x] **S5 · Hunger.** Drains with time and effort; low hunger slows you before it
       hurts you.
-- [ ] **S6 · Food.** Berry bushes and fruit trees per biome, cooking at a
+- [x] **S6 · Food.** Berry bushes and fruit trees per biome, cooking at a
       fabricated fire, food as an inventory item.
-- [ ] **S7 · Death and respawn.** Stress-free: you wake up at the Fabricator, your
+- [x] **S7 · Death and respawn.** Stress-free: you wake up at the Fabricator, your
       carried inventory stays where you fell. The shared stockpile is never lost.
 
 ## Enemies — stress-free by design
