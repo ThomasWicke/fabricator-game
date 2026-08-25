@@ -12,6 +12,8 @@ import {
   findSpawn,
   isLiquid,
   landmarkAt,
+  SEAMS,
+  type ExoticNode,
   regionAt,
   regionName,
   sample,
@@ -225,7 +227,8 @@ console.log("\n── landmarks ────────────────
 for (const seedStr of SEEDS.slice(0, 3)) {
   const seed = worldSeed(seedStr);
   const kinds = new Map<string, number>();
-  const centres = new Set<string>();
+  /** Hexes belonging to each individual landmark, keyed by its centre. */
+  const spread = new Map<string, number>();
   let hexes = 0;
   for (let row = -110; row <= 110; row++) {
     for (let col = -110; col <= 110; col++) {
@@ -233,16 +236,77 @@ for (const seedStr of SEEDS.slice(0, 3)) {
       const l = landmarkAt(col, row, seed);
       if (!l) continue;
       kinds.set(l.mark.kind, (kinds.get(l.mark.kind) ?? 0) + 1);
-      centres.add(`${l.mark.col},${l.mark.row}`);
+      const at = `${l.mark.col},${l.mark.row}`;
+      spread.set(at, (spread.get(at) ?? 0) + 1);
     }
   }
-  const per10k = (centres.size / hexes) * 10_000;
+  const per10k = (spread.size / hexes) * 10_000;
   console.log(
-    `  ${seedStr.padEnd(14)} ${centres.size} landmarks (${per10k.toFixed(1)} per 10k hexes) · ` +
+    `  ${seedStr.padEnd(14)} ${spread.size} landmarks (${per10k.toFixed(1)} per 10k hexes) · ` +
       [...kinds].map(([k, v]) => `${k} ${v}hex`).join(", "),
   );
   check(`${seedStr}: landmarks are rare but findable`, per10k > 2 && per10k < 40, per10k.toFixed(1));
-  check(`${seedStr}: a landmark is a cluster, not one hex`, [...kinds.values()].every((v) => v > centres.size), "");
+  // Per landmark, not per kind against the total: once the kinds stopped being
+  // evenly spread, comparing one kind's hexes to the whole population said
+  // nothing about whether any single landmark was actually a cluster.
+  const smallest = Math.min(...spread.values());
+  check(
+    `${seedStr}: every landmark is a cluster, not one hex`,
+    smallest > 1,
+    `smallest is ${smallest} hexes`,
+  );
+  // All three set pieces must still occur, or one of them has been designed
+  // out of the world by a rule somewhere else.
+  check(
+    `${seedStr}: all three kinds of landmark occur`,
+    kinds.size === 3,
+    [...kinds.keys()].join("/"),
+  );
+}
+
+console.log("\n── seams ──────────────────────────────────────────────────");
+
+{
+  // Every exotic must be findable, must come only from its own ground, and
+  // must be rare enough that reaching it is the point.
+  const seed = worldSeed("FABR");
+  const found = new Map<ExoticNode, { hexes: number; biomes: Set<BiomeType> }>();
+  let land = 0;
+  for (let row = -160; row <= 160; row++) {
+    for (let col = -160; col <= 160; col++) {
+      const b = biomeAt(col, row, seed);
+      if (isLiquid(b)) continue;
+      land++;
+      const sc = scatterAt(col, row, seed, b);
+      if (!sc || sc.kind === "tree" || sc.kind === "rock" || sc.kind === "food") continue;
+      const e = found.get(sc.kind) ?? { hexes: 0, biomes: new Set<BiomeType>() };
+      e.hexes++;
+      e.biomes.add(b);
+      found.set(sc.kind, e);
+    }
+  }
+  for (const ore of ["bogiron", "basalt", "glass", "rime"] as ExoticNode[]) {
+    const e = found.get(ore);
+    const pct = e ? (e.hexes / land) * 100 : 0;
+    console.log(
+      `  ${ore.padEnd(8)} ${pct.toFixed(2)}% of land · from ${e ? [...e.biomes].join("/") : "nowhere"}`,
+    );
+    check(`${ore} exists`, !!e && e.hexes > 0);
+    check(`${ore} is worth a trip, not a chore`, pct > 0.02 && pct < 3, `${pct.toFixed(2)}%`);
+    // The whole design rests on this: a material means a place.
+    check(
+      `${ore} comes only from its own ground`,
+      !!e && [...e.biomes].every((b) => SEAMS[ore].biomes.includes(b)),
+      e ? [...e.biomes].join("/") : "",
+    );
+  }
+  check("no biome holds two different seams", true);
+  for (const b of Object.keys(BIOMES) as BiomeType[]) {
+    const owners = (["bogiron", "basalt", "glass", "rime"] as ExoticNode[]).filter((o) =>
+      SEAMS[o].biomes.includes(b),
+    );
+    check(`${b} holds at most one seam`, owners.length <= 1, owners.join("+"));
+  }
 }
 
 console.log("\n── scatter density ─────────────────────────────────────────");

@@ -213,12 +213,14 @@ export type FabricatorRangeMsg = {
 };
 
 /** Screen → phones: current team stockpile, so phones can price designs. */
+import type { MaterialType } from "../shared/fabricator/schema";
+
 export type StockpileMsg = {
   scope: "ui";
   type: "stockpile";
-  wood: number;
-  stone: number;
-  bogiron: number;
+  /** Every material by name. Listing them individually meant that adding one
+   *  compiled cleanly and then silently never reached the phone. */
+  stock: Partial<Record<MaterialType, number>>;
 };
 
 /** Server → everyone: the Fabricator could not compile the blueprint. */

@@ -1384,6 +1384,12 @@
       .res.zero {
         opacity: 0.45;
       }
+      /* An ore you have never held is not dimmed, it is absent: four extra
+         zeroes in the bar read as things that are broken rather than things
+         that are elsewhere. Wood and stone are always there. */
+      .res.ore:not(.seen) {
+        display: none;
+      }
       @keyframes resBump {
         0% {
           transform: scale(1);

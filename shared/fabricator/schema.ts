@@ -10,6 +10,18 @@
 // computed in code — swamp capability is priced in bogiron, which only
 // exists in the swamp. That's the material-gated progression loop.
 //
+// Wood and stone are everywhere; the other four are each the price of going
+// somewhere. Every hostile biome now holds exactly one, and each is spent on
+// the capability you would want in order to survive the place it comes from:
+//
+//   bogiron  bog     going where legs can't (swamp and water movement)
+//   basalt   rock    weapons
+//   glass    desert  growing food, and light
+//   rime     snow    keeping things at a distance
+//
+// The map's edges are the economy. None of them are needed to build a
+// harvester, so no gate can ever lock you out of the tool that opens it.
+//
 // ISOMORPHIC — must run in PartyKit workers AND browsers. No process.env,
 // no PartyKit imports, no Node APIs.
 
@@ -18,7 +30,9 @@ export type LocomotionType = "none" | "wheels" | "tracks" | "legs" | "float";
  *  collapse into these six for the purposes of "can this machine cross it, and
  *  how fast" — which is the only terrain question the Fabricator answers. */
 export type TerrainType = "grass" | "sand" | "swamp" | "rock" | "snow" | "water";
-export type MaterialType = "wood" | "stone" | "bogiron";
+export type MaterialType = "wood" | "stone" | "bogiron" | "basalt" | "glass" | "rime";
+/** The four that only one biome makes. Wood and stone are the commons. */
+export type ExoticMaterial = Exclude<MaterialType, "wood" | "stone">;
 
 export const TERRAINS: readonly TerrainType[] = [
   "grass",
@@ -34,7 +48,15 @@ export type TerrainModifiers = Record<TerrainType, number>;
  *  BEHIND the thing that makes it; light is the one that surrounds it. */
 export type EmissionKind = "light" | "smoke" | "steam" | "sparks";
 
-export const MATERIALS: readonly MaterialType[] = ["wood", "stone", "bogiron"];
+export const MATERIALS: readonly MaterialType[] = [
+  "wood",
+  "stone",
+  "bogiron",
+  "basalt",
+  "glass",
+  "rime",
+];
+export const EXOTICS: readonly ExoticMaterial[] = ["bogiron", "basalt", "glass", "rime"];
 
 export type MaterialCost = Record<MaterialType, number> & { total: number };
 

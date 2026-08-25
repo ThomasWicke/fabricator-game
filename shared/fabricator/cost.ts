@@ -1,16 +1,39 @@
 // Resource cost as a pure function of capability — the "balance is
 // computable" thesis. The LLM has no say in this.
 //
-// v1: cost is a per-material bill. Swamp capability is priced in bogiron,
-// a material that only spawns in the swamp — so the first swamp-capable
-// machine requires a hand-gathering trek (or a bogiron-capable harvester).
-// Immobile things never cost bogiron (clampSpec zeroes their terrain
-// modifiers), which keeps the loop free of chicken-and-egg deadlocks:
-// a mining drill TOOL is always buildable from wood + stone.
+// v1: cost is a per-material bill. Four of the six materials come from one
+// biome each, and each is charged for the capability you would want in order
+// to survive the place it comes from — so wanting a thing is what sends you
+// somewhere, rather than a quest marker saying go there.
+//
+//   bogiron  bog     swamp and water movement
+//   basalt   rock    weapons
+//   glass    desert  nourish, and emission
+//   rime     snow    wards
+//
+// The one invariant that must hold: a HARVESTER is always buildable from wood
+// and stone alone. Every exotic is gated behind a tool that can dig it, so if
+// any of them were charged for harvesting, the first such gate would close the
+// door behind it permanently. Immobile things also never pay for movement
+// (clampSpec zeroes their terrain modifiers), which keeps a mining drill cheap.
 //
 // ISOMORPHIC — no env access, no platform imports.
 
-import { TERRAINS, normalizeModifiers, type MaterialCost, type RawSpec } from "./schema";
+import {
+  EXOTICS,
+  MATERIALS,
+  TERRAINS,
+  normalizeModifiers,
+  type ExoticMaterial,
+  type MaterialCost,
+  type MaterialType,
+  type RawSpec,
+} from "./schema";
+
+/** Most of a bill that the exotics may claim between them. The remainder is
+ *  always wood and stone, so nothing is ever built from exotics alone — and a
+ *  machine that wants everything is expensive rather than unbuildable. */
+const EXOTIC_CEILING = 0.6;
 
 export function computeCost(spec: RawSpec): MaterialCost {
   const area = (spec.size.w * spec.size.h) / 400;
@@ -44,32 +67,48 @@ export function computeCost(spec: RawSpec): MaterialCost {
     ),
   );
 
-  // Material split. Going where bare legs can't is the bogiron sink: the bog
-  // and the sea are both gated behind a trek into the bog for the iron.
+  // Material split. Each exotic claims a share of the bill when the capability
+  // it gates is present; wood and stone divide whatever is left.
   const wetCapable =
     spec.category === "vehicle" &&
     (t.swamp > 0.45 || t.water > 0.2 || spec.locomotion.type === "float");
-  const bogiron = wetCapable ? Math.round(total * 0.35) : 0;
-  const stone = Math.round((total - bogiron) * 0.4);
-  const wood = total - bogiron - stone;
-  return { wood, stone, bogiron, total };
+  const share: Record<ExoticMaterial, number> = {
+    bogiron: wetCapable ? 0.35 : 0,
+    basalt: spec.weapon ? 0.3 : 0,
+    glass: spec.nourish || spec.emission ? 0.25 : 0,
+    rime: spec.ward ? 0.3 : 0,
+  };
+
+  // A thing can want several at once — a warded greenhouse with a gun on it —
+  // and the shares must not add up to the whole bill.
+  const demanded = EXOTICS.reduce((sum, m) => sum + share[m], 0);
+  const scale = demanded > EXOTIC_CEILING ? EXOTIC_CEILING / demanded : 1;
+
+  const bill = { wood: 0, stone: 0, bogiron: 0, basalt: 0, glass: 0, rime: 0, total };
+  let spent = 0;
+  for (const m of EXOTICS) {
+    // Round each in turn against what is left rather than independently, so
+    // the parts always sum to the total exactly.
+    const want = Math.round(total * share[m] * scale);
+    const take = Math.min(want, total - spent);
+    bill[m] = take;
+    spent += take;
+  }
+  bill.stone = Math.round((total - spent) * 0.4);
+  bill.wood = total - spent - bill.stone;
+  return bill;
 }
 
 export function canAfford(
-  stock: Record<"wood" | "stone" | "bogiron", number>,
+  stock: Record<MaterialType, number>,
   cost: MaterialCost,
 ): boolean {
-  return (
-    stock.wood >= cost.wood &&
-    stock.stone >= cost.stone &&
-    stock.bogiron >= cost.bogiron
-  );
+  return MATERIALS.every((m) => (stock[m] ?? 0) >= cost[m]);
 }
 
 export function formatCost(cost: MaterialCost): string {
-  const parts: string[] = [];
-  if (cost.wood) parts.push(`${cost.wood} wood`);
-  if (cost.stone) parts.push(`${cost.stone} stone`);
-  if (cost.bogiron) parts.push(`${cost.bogiron} bogiron`);
+  // Only what it actually costs: a bill listing four zeroes reads as a tax
+  // form, and most things are still wood and stone.
+  const parts = MATERIALS.filter((m) => cost[m]).map((m) => `${cost[m]} ${m}`);
   return parts.join(" + ") || "free";
 }

@@ -395,7 +395,33 @@ export function regionName(region: Region, seed: number): string {
 
 // ── scatter: resource nodes ─────────────────────────────────────────────────
 
-export type NodeKind = "tree" | "rock" | "bogiron" | "food";
+/** The four materials that only one biome makes. Kept in step with
+ *  schema.ts's ExoticMaterial by the typecheck in world.ts, which assigns a
+ *  node's kind straight into a pack keyed by MaterialType. */
+export type ExoticNode = "bogiron" | "basalt" | "glass" | "rime";
+export type NodeKind = "tree" | "rock" | ExoticNode | "food";
+
+/** Which ground holds which seam, and what colour it shows as. One table, so
+ *  the ordinary scatter and the landmark pits cannot drift apart — a snow pit
+ *  full of bogiron would be a lie the player has no way to check. */
+export const SEAMS: Record<ExoticNode, { tint: number; biomes: BiomeType[] }> = {
+  bogiron: { tint: 0xd9813f, biomes: ["magic"] },
+  basalt: { tint: 0x4d4a63, biomes: ["stone", "rock"] },
+  glass: { tint: 0x7fe4d8, biomes: ["sand"] },
+  rime: { tint: 0x9fc7ff, biomes: ["snow"] },
+};
+
+/** Is this node one of the four one-biome ores? */
+export const isSeam = (k: NodeKind): k is ExoticNode =>
+  k !== "tree" && k !== "rock" && k !== "food";
+
+/** The seam a biome holds, if it holds one. */
+export function seamOf(biome: BiomeType): ExoticNode | null {
+  for (const k of Object.keys(SEAMS) as ExoticNode[]) {
+    if (SEAMS[k].biomes.includes(biome)) return k;
+  }
+  return null;
+}
 
 export type ScatterEntry = {
   kind: NodeKind;
@@ -436,6 +462,20 @@ const forage = (t: string, units = 3): ScatterEntry => ({
 });
 const pick = <T>(r: number, xs: T[]): T => xs[Math.min(xs.length - 1, Math.floor(r * xs.length))];
 
+/**
+ * A seam of one of the four one-biome materials.
+ *
+ * Same boulder silhouette, different colour: the pack has no art for any of
+ * these, and a tinted rock reads as "ore in stone" far better than a made-up
+ * sprite would. The tint is the only thing telling the player this hex is
+ * worth a trip, so they are pitched well away from the greys around them.
+ */
+const seam = (kind: ExoticNode, texture: string, units = 4): ScatterEntry => ({
+  ...boulder(texture, units),
+  kind,
+  tint: SEAMS[kind].tint,
+});
+
 const SCATTER: Record<BiomeType, ScatterRule[]> = {
   grass: [
     { p: 0.1, make: (r) => pine(pick(r, ["pineGreen_low", "pineGreen_mid", "pineGreen_high"])) },
@@ -450,7 +490,7 @@ const SCATTER: Record<BiomeType, ScatterRule[]> = {
   magic: [
     {
       p: 0.085,
-      make: (r) => ({ ...boulder(pick(r, ["rockStone", "rockStone_moss3"]), 3), kind: "bogiron", tint: 0xd9813f }),
+      make: (r) => seam("bogiron", pick(r, ["rockStone", "rockStone_moss3"]), 3),
     },
     { p: 0.05, make: (r) => pine(pick(r, ["pineBlue_low", "pineBlue_mid"]), 4) },
     { p: 0.035, make: () => forage("bushMagic", 2) },
@@ -464,13 +504,25 @@ const SCATTER: Record<BiomeType, ScatterRule[]> = {
     { p: 0.045, make: (r) => pine(pick(r, ["treeCactus_1", "treeCactus_2", "treeCactus_3"]), 3) },
     { p: 0.015, make: () => boulder("rockDirt", 3) },
     { p: 0.025, make: () => forage("bushSand", 2) },
+    // Desert glass, where the sand has been fused. Rarer than bogiron: the
+    // desert is a big biome and a common seam would make it a quarry.
+    { p: 0.03, make: () => seam("glass", "rockDirt", 3) },
   ],
-  stone: [{ p: 0.11, make: (r) => boulder(pick(r, ["rockStone", "rockStone_moss1"]), 5) }],
-  rock: [{ p: 0.13, make: () => boulder("rockStone", 6) }],
+  // Bare highlands. Nothing grows, so the seam is the only reason to be here
+  // and it can afford to be generous.
+  stone: [
+    { p: 0.11, make: (r) => boulder(pick(r, ["rockStone", "rockStone_moss1"]), 5) },
+    { p: 0.035, make: () => seam("basalt", "rockStone", 4) },
+  ],
+  rock: [
+    { p: 0.13, make: () => boulder("rockStone", 6) },
+    { p: 0.055, make: () => seam("basalt", "rockStone", 5) },
+  ],
   snow: [
     { p: 0.06, make: (r) => pine(pick(r, ["pineBlue_low", "pineBlue_mid", "pineBlue_high"]), 4) },
     { p: 0.055, make: (r) => boulder(pick(r, ["rockSnow_1", "rockSnow_2", "rockSnow_3"]), 5) },
     { p: 0.025, make: () => forage("bushSnow", 2) },
+    { p: 0.035, make: (r) => seam("rime", pick(r, ["rockSnow_2", "rockSnow_3"]), 4) },
   ],
   water: [],
   lava: [],
@@ -492,7 +544,13 @@ const LANDMARK_CHANCE = 0.4;
 /** How far the set piece reaches from its middle. */
 const LANDMARK_RADIUS = 2.6;
 
-export type Landmark = { kind: LandmarkKind; col: number; row: number };
+export type Landmark = {
+  kind: LandmarkKind;
+  /** For a pit: which seam it is a rich pocket of. */
+  ore: ExoticNode | null;
+  col: number;
+  row: number;
+};
 
 function landmarkInCell(ix: number, iy: number, seed: number): Landmark | null {
   if (hash2(ix, iy, seed ^ 0x7f4a7c15) > LANDMARK_CHANCE) return null;
@@ -501,13 +559,22 @@ function landmarkInCell(ix: number, iy: number, seed: number): Landmark | null {
   const col = Math.round((ix + 0.2 + jx * 0.6) * LANDMARK_CELL);
   const row = Math.round((iy + 0.2 + jy * 0.6) * LANDMARK_CELL);
 
-  // The ground decides what stands on it: no groves on bare rock, no bogiron
-  // pits outside the bog.
+  // The ground decides what stands on it: no groves on bare rock, and a pit is
+  // always a pocket of whatever that biome's seam already is. Ground that
+  // holds nothing gets a ring of stones — a place, but not a payday.
   const biome = biomeAt(col, row, seed);
   if (biome === "water" || biome === "lava") return null;
+  const ore = seamOf(biome);
+  // Ground with a seam under it USUALLY gets the pit — but not always, or the
+  // ring of stones would only ever appear on dirt, and the one set piece that
+  // reads as built by somebody would vanish from four fifths of the map.
   const kind: LandmarkKind =
-    biome === "magic" ? "pit" : biome === "grass" || biome === "autumn" ? "grove" : "stones";
-  return { kind, col, row };
+    ore && hash2(col, row, seed ^ 0x2545f491) < 0.6
+      ? "pit"
+      : biome === "grass" || biome === "autumn"
+        ? "grove"
+        : "stones";
+  return { kind, ore: kind === "pit" ? ore : null, col, row };
 }
 
 /** The landmark this hex belongs to, if any, with how far out it is. */
@@ -531,11 +598,11 @@ export function landmarkAt(
 
 /** What a landmark puts on a given hex of itself, if anything. */
 function landmarkScatter(
-  kind: LandmarkKind,
+  mark: Landmark,
   dist: number,
   variant: number,
 ): ScatterEntry | null {
-  switch (kind) {
+  switch (mark.kind) {
     case "stones":
       // A ring, not a heap: the middle is left clear so it reads as built.
       if (dist < 1.4 || dist > LANDMARK_RADIUS) return null;
@@ -546,11 +613,9 @@ function landmarkScatter(
       return pine(pick(variant, ["treeGreen_low", "treeGreen_mid", "treeGreen_high"]), 8);
     case "pit":
       if (dist > LANDMARK_RADIUS - 0.6) return null;
-      return {
-        ...boulder(pick(variant, ["rockStone", "rockStone_moss3"]), 5),
-        kind: "bogiron",
-        tint: 0xd9813f,
-      };
+      // Richer than the seams scattered around it — that is what makes the
+      // walk worth it rather than just further.
+      return seam(mark.ore!, pick(variant, ["rockStone", "rockStone_moss3"]), 8);
   }
 }
 
@@ -568,11 +633,15 @@ export function scatterAt(
   // ground would have grown, this is a place, and it looks arranged.
   const here = landmarkAt(col, row, seed);
   if (here) {
-    return landmarkScatter(
-      here.mark.kind,
-      here.dist,
-      hash2(col, row, seed ^ 0x632be59b),
-    );
+    const entry = landmarkScatter(here.mark, here.dist, hash2(col, row, seed ^ 0x632be59b));
+    // A pit is centred on its biome but reaches 2.6 hexes out, which is
+    // enough to cross a border — and ore lying one hex into the grass would
+    // break the only promise the whole economy makes, that a material means a
+    // place. Past the edge the pit is spoil: the rock, without the seam in it.
+    if (entry && isSeam(entry.kind) && seamOf(biome) !== entry.kind) {
+      return { ...entry, kind: "rock", tint: undefined };
+    }
+    return entry;
   }
 
   const rules = SCATTER[biome];

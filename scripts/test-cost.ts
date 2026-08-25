@@ -5,8 +5,8 @@
 // on meaningful capability, never on fields the compiler fills in
 // arbitrarily — and the material split must never deadlock progression.
 
-import { clampSpec, type RawSpec } from "../shared/fabricator/schema";
-import { computeCost } from "../shared/fabricator/cost";
+import { clampSpec, type MaterialType, type RawSpec } from "../shared/fabricator/schema";
+import { computeCost, formatCost } from "../shared/fabricator/cost";
 import { mockCompile } from "../shared/fabricator/mock";
 
 let failures = 0;
@@ -137,6 +137,61 @@ const mockBuggy = mockCompile({ name: "Swamp Buggy" });
 check("mock: 'Swamp Buggy' costs bogiron", mockBuggy.cost.bogiron > 0);
 const mockLantern = mockCompile({ name: "Lantern" });
 check("mock: 'Lantern' emits light", mockLantern.emission?.kind === "light");
+
+// ── the exotic gates ───────────────────────────────────────────────
+//
+// Each of the four materials is the price of one capability, and the shape of
+// the whole progression is that wanting a thing sends you somewhere.
+
+/** Immobile things have their modifiers zeroed anyway; naming it says so. */
+const DRY = { grass: 0, sand: 0, swamp: 0, rock: 0, snow: 0, water: 0 };
+
+const weaponised = clampSpec(structure(DRY));
+weaponised.weapon = { damage: 20, reach: 90, cooldown: 0.6 };
+const wcost = computeCost(weaponised);
+check("a weapon is priced in basalt", wcost.basalt > 0, `${wcost.basalt}`);
+check("…and nothing else exotic", wcost.glass === 0 && wcost.rime === 0 && wcost.bogiron === 0);
+
+const farm = clampSpec(structure(DRY));
+farm.nourish = { rate: 8 };
+check("a farm is priced in glass", computeCost(farm).glass > 0);
+
+const fence = clampSpec(structure(DRY));
+fence.ward = { radius: 200 };
+check("a ward is priced in rime", computeCost(fence).rime > 0);
+
+// The one that must never break. Every exotic sits behind a harvester that
+// can dig it; if a harvester ever cost an exotic, the first gate would close
+// the door behind it and the world would be unplayable past that point.
+for (const ore of ["wood", "stone", "bogiron", "basalt", "glass", "rime"] as MaterialType[]) {
+  const digger = clampSpec(structure(DRY));
+  digger.category = "tool";
+  digger.harvest = { rate: 4, materials: [ore] };
+  const c = computeCost(digger);
+  check(
+    `a ${ore} harvester is buildable from wood and stone alone`,
+    c.bogiron === 0 && c.basalt === 0 && c.glass === 0 && c.rime === 0,
+    formatCost(c),
+  );
+}
+
+// A machine that wants everything is expensive, not unbuildable.
+const everything = clampSpec(
+  vehicle("float", { grass: 0.3, sand: 0.3, swamp: 0.9, rock: 0.3, snow: 0.3, water: 1 }),
+);
+everything.weapon = { damage: 30, reach: 120, cooldown: 0.5 };
+everything.emission = { kind: "light", intensity: 1 };
+const ec = computeCost(everything);
+const exoticSum = ec.bogiron + ec.basalt + ec.glass + ec.rime;
+check("a do-everything machine still needs wood and stone", ec.wood > 0 && ec.stone > 0, formatCost(ec));
+check("the exotics never take the whole bill", exoticSum < ec.total * 0.65, `${exoticSum}/${ec.total}`);
+
+// Every bill must add up, or the stockpile drifts against what was charged.
+for (const spec of [harvester, glowing, weaponised, farm, fence, everything]) {
+  const c = computeCost(spec);
+  const sum = c.wood + c.stone + c.bogiron + c.basalt + c.glass + c.rime;
+  check(`${spec.displayName || "spec"}: parts sum to the total`, sum === c.total, `${sum} vs ${c.total}`);
+}
 
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);

@@ -19,13 +19,14 @@ import { RoomConnection } from "../socket";
 import { keepScreenAwake } from "../wake-lock";
 import type {
   ButtonState,
+  StockpileMsg,
   Phase,
   PublicPlayer,
   Slot,
   StickState,
 } from "../../../party/protocol";
 import type { DesignSummary } from "../../../party/designs";
-import type { MaterialType } from "../../../shared/fabricator/schema";
+import { MATERIALS, type MaterialType } from "../../../shared/fabricator/schema";
 
 const SEND_INTERVAL_MS = 33;
 const SKETCH_MAX_SIDE = 256;
@@ -48,7 +49,9 @@ export function startController(code: string) {
   // The catalog and the stockpile arrive while the lobby is still up, so they
   // live out here and the game view renders whatever has accumulated.
   const designs = new Map<string, DesignSummary>();
-  const stock: Record<MaterialType, number> = { wood: 0, stone: 0, bogiron: 0 };
+  const stock: Record<MaterialType, number> = Object.fromEntries(
+    MATERIALS.map((m) => [m, 0]),
+  ) as Record<MaterialType, number>;
 
   /** Standing at the Fabricator? Lives at controller scope because the world
    *  reports it while the lobby may still be up, before the pad view exists. */
@@ -312,12 +315,18 @@ export function startController(code: string) {
     const designsStock = document.getElementById("designs-stock")!;
 
     const costMarkup = (cost: Record<MaterialType, number>) =>
-      (["wood", "stone", "bogiron"] as MaterialType[])
-        .filter((m) => cost[m] > 0)
+      MATERIALS.filter((m) => cost[m] > 0)
         .map((m) => {
-          const short = { wood: "🪵", stone: "🪨", bogiron: "⚙️" }[m];
+          const short: Record<MaterialType, string> = {
+            wood: "🪵",
+            stone: "🪨",
+            bogiron: "⚙️",
+            basalt: "🌑",
+            glass: "💠",
+            rime: "❄️",
+          };
           const lack = stock[m] < cost[m];
-          return `<span class="${lack ? "lack" : ""}">${short} ${cost[m]}</span>`;
+          return `<span class="${lack ? "lack" : ""}">${short[m]} ${cost[m]}</span>`;
         })
         .join(" · ") || "free";
 
@@ -492,10 +501,8 @@ export function startController(code: string) {
         // the game view has to open already knowing them rather than showing
         // a wrong state until the next update happens to land.
         if (msg.type === "stockpile") {
-          const s = msg as unknown as Record<MaterialType, number>;
-          stock.wood = s.wood;
-          stock.stone = s.stone;
-          stock.bogiron = s.bogiron;
+          const s = (msg as unknown as StockpileMsg).stock;
+          for (const m of MATERIALS) stock[m] = s[m] ?? 0;
         } else if (msg.type === "fabricator-range") {
           const m = msg as unknown as { slot: Slot; inRange: boolean };
           if (m.slot === slot && m.inRange !== atFabricator) {

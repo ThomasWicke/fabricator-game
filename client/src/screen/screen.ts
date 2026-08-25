@@ -51,6 +51,11 @@ const ICONS: Record<MaterialType, string> = {
   wood: `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><rect x="1" y="5" width="11.5" height="7" rx="3.2" fill="#8a6a48"/><ellipse cx="12.4" cy="8.5" rx="2.5" ry="3.5" fill="#a8845e"/><ellipse cx="12.4" cy="8.5" rx="1.1" ry="1.7" fill="#6d5236"/></svg>`,
   stone: `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2 12.5 L4 5.2 L8 3 L13.2 6.2 L14 12.5 Z" fill="#98a0ab"/><path d="M4 5.2 L8 3 L11.2 5.1 L6.2 7 Z" fill="#c2c9d3"/></svg>`,
   bogiron: `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2 12.5 L4 5.2 L8 3 L13.2 6.2 L14 12.5 Z" fill="#463b32"/><circle cx="6" cy="8.2" r="1.4" fill="#d9813f"/><circle cx="10.2" cy="7" r="1.1" fill="#e8a468"/><circle cx="9" cy="10.6" r="1" fill="#c97b3d"/></svg>`,
+  // The three seams read by silhouette, not colour: at 15px on a dark bar a
+  // tinted copy of the same rock is four identical grey lumps.
+  basalt: `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M3 13 L3 6 L6 3 L9 6 L9 13 Z" fill="#4d4a63"/><path d="M9 13 L9 7 L11.5 4.6 L13.6 7 L13.6 13 Z" fill="#39374b"/><path d="M3 6 L6 3 L9 6 Z" fill="#6b6787"/></svg>`,
+  glass: `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 1.6 L12.6 8 L8 14.4 L3.4 8 Z" fill="#7fe4d8" opacity="0.85"/><path d="M8 1.6 L12.6 8 L8 8 Z" fill="#c4f5ee"/><path d="M8 8 L12.6 8 L8 14.4 Z" fill="#4fbfb2"/></svg>`,
+  rime: `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><g stroke="#9fc7ff" stroke-width="1.5" stroke-linecap="round"><path d="M8 2 L8 14"/><path d="M2.8 5 L13.2 11"/><path d="M13.2 5 L2.8 11"/></g><circle cx="8" cy="8" r="1.7" fill="#dbeaff"/></svg>`,
 };
 
 const MATERIALS: MaterialType[] = ["wood", "stone", "bogiron"];
@@ -79,7 +84,7 @@ export function startScreen(code: string) {
 
   const resourceMarkup = MATERIALS.map(
     (m) =>
-      `<div class="res" id="res-${m}" title="${m}">${ICONS[m]}<span class="n" id="n-${m}">0</span></div>`,
+      `<div class="res${m === "wood" || m === "stone" ? "" : " ore"}" id="res-${m}" title="${m}">${ICONS[m]}<span class="n" id="n-${m}">0</span></div>`,
   ).join("");
 
   const app = document.getElementById("app")!;
@@ -739,13 +744,18 @@ export function startScreen(code: string) {
     const shown: Record<string, number> = {};
     worldScene.onStockpile = (s) => {
       lastStock = { ...s };
-      conn.send({ scope: "ui", type: "stockpile", wood: s.wood, stone: s.stone, bogiron: s.bogiron });
+      conn.send({ scope: "ui", type: "stockpile", stock: { ...s } });
       for (const m of MATERIALS) {
         const { el, box } = counters.get(m)!;
         const next = Math.floor(s[m]);
         const prev = shown[m];
         el.textContent = String(next);
         box.classList.toggle("zero", next === 0);
+        // Six materials is too many chips for a phone's top bar, and four of
+        // them mean nothing until you have walked somewhere. An ore appears
+        // the first time you own any and then stays, so the bar starts as
+        // calm as it was with three and grows as the map opens up.
+        if (next > 0) box.classList.add("seen");
         if (prev !== undefined && next !== prev) {
           // replay the animation from scratch on every change
           const cls = next > prev ? "bump" : "spend";

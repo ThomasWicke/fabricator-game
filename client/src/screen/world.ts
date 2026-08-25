@@ -28,13 +28,14 @@ import type {
   StickState,
   WorldSnapshot,
 } from "../../../party/protocol";
-import type {
-  EmissionKind,
-  FabricatedSpec,
-  MaterialType,
-  TerrainType,
+import {
+  MATERIALS,
+  normalizeModifiers,
+  type EmissionKind,
+  type FabricatedSpec,
+  type MaterialType,
+  type TerrainType,
 } from "../../../shared/fabricator/schema";
-import { normalizeModifiers } from "../../../shared/fabricator/schema";
 import { canAfford, formatCost } from "../../../shared/fabricator/cost";
 import { HEX_POINTS, HEX_W, ROW_H, hexToWorld, worldToHex } from "./hexgrid";
 import {
@@ -111,7 +112,13 @@ const CAMERA_ZOOM = 1.6;
 /** Bare hands: slow, and bogiron is beyond them. */
 const HAND_RATE = 0.8;
 const HAND_MATERIALS: CarryType[] = ["wood", "stone", "food"];
-const STARTING_STOCK: Record<MaterialType, number> = { wood: 25, stone: 15, bogiron: 0 };
+/** You land with enough to build the first harvester and nothing else. Every
+ *  exotic starts at zero by construction — they exist to be walked to. */
+const STARTING_STOCK: Record<MaterialType, number> = {
+  ...(Object.fromEntries(MATERIALS.map((m) => [m, 0])) as Record<MaterialType, number>),
+  wood: 25,
+  stone: 15,
+};
 const PLAYER_SCALE = 0.45;
 /** Pines carry 8px of transparent padding below the trunk in every size
  *  variant, so origin(0.5,1) alone would bury them. */
@@ -263,9 +270,11 @@ export type Stockpile = Record<MaterialType, number>;
 export type CarryType = MaterialType | "food";
 export type Pack = Record<CarryType, number>;
 
-export const emptyPack = (): Pack => ({ wood: 0, stone: 0, bogiron: 0, food: 0 });
+export const CARRIABLE: readonly CarryType[] = [...MATERIALS, "food"];
+export const emptyPack = (): Pack =>
+  Object.fromEntries(CARRIABLE.map((m) => [m, 0])) as Pack;
 export const packLoad = (p: Pack): number =>
-  p.wood + p.stone + p.bogiron + p.food;
+  CARRIABLE.reduce((sum, m) => sum + p[m], 0);
 
 /** What the HUD draws for one player. */
 export type Vitals = {
@@ -880,14 +889,12 @@ export class WorldScene extends Phaser.Scene {
           this.obstacles.add(blocker);
         }
 
+        // Trees and rocks are named for the thing, not the material; every
+        // seam is named for its material already. The fallback used to be a
+        // bare "bogiron", which quietly turned all four seams into the same
+        // ore the moment there was more than one.
         const material: CarryType =
-          entry.kind === "tree"
-            ? "wood"
-            : entry.kind === "rock"
-              ? "stone"
-              : entry.kind === "food"
-                ? "food"
-                : "bogiron";
+          entry.kind === "tree" ? "wood" : entry.kind === "rock" ? "stone" : entry.kind;
         const node: ResourceNode = {
           sprite,
           berries,
@@ -1204,9 +1211,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private charge(cost: FabricatedSpec["cost"]) {
-    this.stockpile.wood -= cost.wood;
-    this.stockpile.stone -= cost.stone;
-    this.stockpile.bogiron -= cost.bogiron;
+    for (const m of MATERIALS) this.stockpile[m] -= cost[m];
     this.onStockpile?.(this.stockpile);
   }
 
@@ -1613,16 +1618,15 @@ export class WorldScene extends Phaser.Scene {
    * shared stockpile — which is what an unattended structure does, and its
    * whole advantage: it never has to walk anything home.
    */
+  /** Why a swing produced nothing, so the caller can say which it was — a
+   *  full pack and the wrong tool used to print both messages at once. */
   private harvestHit(
     node: ResourceNode,
     materials: readonly CarryType[],
     into: PlayerEntity | null,
-  ): boolean {
-    if (!gathers(materials, node.material)) return false;
-    if (into && packLoad(into.pack) >= this.capacityOf(into)) {
-      this.floatText(node.cx, node.cy - 40, "pack is full", "#ff9f9f");
-      return false;
-    }
+  ): "ok" | "wrong-tool" | "full" {
+    if (!gathers(materials, node.material)) return "wrong-tool";
+    if (into && packLoad(into.pack) >= this.capacityOf(into)) return "full";
     node.remaining -= 1;
     this.harvestDeltas.set(`${node.col},${node.row}`, {
       col: node.col,
@@ -1643,7 +1647,7 @@ export class WorldScene extends Phaser.Scene {
     this.floatText(node.cx, node.cy - 40, `+1 ${node.material}`, "#c9e77f");
 
     if (node.remaining <= 0) this.removeNode(node, true);
-    return true;
+    return "ok";
   }
 
   // ── wildlife ──────────────────────────────────────────────────
@@ -1951,7 +1955,7 @@ export class WorldScene extends Phaser.Scene {
   /** Stacking order, bottom to top. Grouped by kind rather than by pickup
    *  order: a woodpile with a rock in the middle of it looks like a mistake,
    *  and grouping falls out of the counts for free. */
-  private static readonly STACK_ORDER: CarryType[] = ["wood", "stone", "bogiron", "food"];
+  private static readonly STACK_ORDER: readonly CarryType[] = CARRIABLE;
 
   /**
    * Reconcile the visible pile to what's actually in the pack.
@@ -2272,7 +2276,13 @@ export class WorldScene extends Phaser.Scene {
     snap: WorldSnapshot,
     resolve: (designId: string) => PlaceableDesign | null,
   ): void {
-    this.stockpile = { ...snap.stockpile };
+    // A save from before a material existed simply has no key for it. Merging
+    // onto a full zeroed set means an old world opens with an empty seam
+    // count rather than NaN the first time someone mines one.
+    this.stockpile = {
+      ...(Object.fromEntries(MATERIALS.map((m) => [m, 0])) as Stockpile),
+      ...snap.stockpile,
+    };
     this.onStockpile?.(this.stockpile);
 
     for (const h of snap.harvested) {
@@ -2492,11 +2502,18 @@ export class WorldScene extends Phaser.Scene {
         const materials = p.tool?.spec.harvest?.materials ?? HAND_MATERIALS;
         if (now >= p.nextHarvestAt) {
           const hit = this.harvestHit(node, materials, p);
-          if (!hit) {
-            this.floatText(node.cx, node.cy - 40, "needs a better tool", "#ff9f9f");
-            p.nextHarvestAt = now + 700;
-          } else {
+          if (hit === "ok") {
             p.nextHarvestAt = now + 1000 / rate;
+          } else {
+            // Name the ore. "Needs a better tool" standing in front of four
+            // different seams tells you nothing about which tool to build.
+            this.floatText(
+              node.cx,
+              node.cy - 40,
+              hit === "full" ? "pack is full" : `needs a ${node.material} harvester`,
+              "#ff9f9f",
+            );
+            p.nextHarvestAt = now + 700;
           }
         }
       } else if (aEdge) {
