@@ -112,6 +112,9 @@ likely way somebody tries it for the first time.
 
 - [x] **S1 · Inventory.** Per-player carried items with capacity, distinct from
       the shared stockpile. Picking up, dropping, and depositing at the Fabricator.
+- [x] **S8 · The carried stack.** You can see what you're hauling: logs, blocks
+      and berries pile up over your head as you gather, whip behind you when
+      you run, and lob one by one into the machine when you get home.
 - [ ] **S2 · Tools.** Equip, swap, and holster fabricated tools. Still one
       permanently-attached tool per player — the pack exists now, so a tool
       should be an item in it rather than a property of the person.

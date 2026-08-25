@@ -50,6 +50,7 @@ import {
   makeNestTexture,
   makePackTexture,
   makePadTexture,
+  makeCarryTextures,
   makeParticleTextures,
   makeShadowTexture,
   mulberry32,
@@ -205,6 +206,30 @@ const FOOD_VALUE = 26;
  *  have to displace something you need more. */
 const AUTO_EAT_AT = 34;
 
+/**
+ * The carried stack — the pile of logs and rock wobbling over your head.
+ *
+ * The whole effect is the lag. Parenting the items rigidly to the player
+ * gives you a stiff pole; each one trailing the one beneath it gives a whip
+ * that leans into corners and settles when you stop, and that is what makes
+ * hauling twenty logs feel like hauling twenty logs.
+ */
+const STACK_STEP = 7;
+/** Where the bottom of the stack sits, relative to the player's centre. */
+const STACK_BASE = -26;
+/** How hard each item is pulled toward the one below it, per second. */
+const STACK_FOLLOW = 26;
+/** The furthest one item may sit from the one below it.
+ *
+ *  Lag alone is not enough: it compounds along the pile, so a 24-log stack at
+ *  a sprint ended up trailing 233px behind its owner — lying flat on the
+ *  ground rather than leaning. Clamping each link bounds the total lean to
+ *  links × this, so the stack can whip hard and still be a stack. */
+const STACK_MAX_LEAN = 3;
+/** Items shrink slightly with height, which reads as perspective and keeps a
+ *  full pack from becoming a wall down the middle of the screen. */
+const STACK_SHRINK = 0.006;
+
 /** What one player can carry, in units, across everything in the pack. This
  *  is the whole reason to walk back to the Fabricator. */
 const PACK_CAPACITY = 24;
@@ -306,6 +331,21 @@ type PlayerEntity = {
   depositCarry: number;
   /** Rate limit on bare-handed shoves. */
   nextShoveAt: number;
+  /** The visible pile above their head, bottom-first.
+   *
+   *  `bx`/`by` are the item's place in the chain; the sprite is drawn at that
+   *  plus a fixed jitter. Keeping the two apart matters — jittering the chain
+   *  position itself would feed the offset into the next item up and the pile
+   *  would drift sideways as it grew. */
+  stack: {
+    img: Phaser.GameObjects.Image;
+    type: CarryType;
+    bx: number;
+    by: number;
+    /** Stable per-item wonk, so the pile looks stacked by hand. */
+    jx: number;
+    tilt: number;
+  }[];
 };
 
 /** One animal. Nests own them; chunks own the nests. */
@@ -553,6 +593,7 @@ export class WorldScene extends Phaser.Scene {
     makePackTexture(this);
     makeNestTexture(this);
     makeShadowTexture(this);
+    makeCarryTextures(this);
 
     this.obstacles = this.physics.add.staticGroup();
     // Wildlife wanders and spawns with jitter; seeded so replaying the same
@@ -902,6 +943,7 @@ export class WorldScene extends Phaser.Scene {
       hunger: HUNGER_MAX,
       depositCarry: 0,
       nextShoveAt: 0,
+      stack: [],
     };
     this.players.set(slot, entity);
     return entity;
@@ -1569,6 +1611,8 @@ export class WorldScene extends Phaser.Scene {
     });
     if (into) {
       into.pack[node.material] += 1;
+      // Born at the node, so the follow carries it up onto the pile.
+      this.syncStack(into, node.cx, node.cy - 20);
       this.pushVitals(into);
     } else if (node.material !== "food") {
       this.addStock(node.material, 1);
@@ -1845,12 +1889,133 @@ export class WorldScene extends Phaser.Scene {
     // should just mean a fight you won wasn't for nothing.
     if (packLoad(by.pack) < PACK_CAPACITY) {
       by.pack.food += 1;
+      this.syncStack(by, e.sprite.x, e.sprite.y - 14);
       this.floatText(e.sprite.x, e.sprite.y - 30, "+1 food", "#c9e77f");
       this.pushVitals(by);
     }
   }
 
   // ── survival ──────────────────────────────────────────────────
+
+  // ── the carried stack ─────────────────────────────────────────
+
+  /** Stacking order, bottom to top. Grouped by kind rather than by pickup
+   *  order: a woodpile with a rock in the middle of it looks like a mistake,
+   *  and grouping falls out of the counts for free. */
+  private static readonly STACK_ORDER: CarryType[] = ["wood", "stone", "bogiron", "food"];
+
+  /**
+   * Reconcile the visible pile to what's actually in the pack.
+   *
+   * New items are born wherever they came from — the tree, the boulder, the
+   * pack on the ground — and the per-frame follow does the rest, so a log
+   * flies up onto the stack without anyone writing a tween for it.
+   */
+  private syncStack(p: PlayerEntity, fromX?: number, fromY?: number) {
+    const wanted: CarryType[] = [];
+    for (const type of WorldScene.STACK_ORDER) {
+      for (let i = 0; i < Math.floor(p.pack[type]); i++) wanted.push(type);
+    }
+
+    // Trim from the top, and re-key anything whose kind no longer matches.
+    while (p.stack.length > wanted.length) p.stack.pop()!.img.destroy();
+    for (let i = 0; i < p.stack.length; i++) {
+      if (p.stack[i].type === wanted[i]) continue;
+      p.stack[i].type = wanted[i];
+      p.stack[i].img.setTexture(`carry-${wanted[i]}`);
+    }
+    for (let i = p.stack.length; i < wanted.length; i++) {
+      const x = fromX ?? p.sprite.x;
+      const y = fromY ?? p.sprite.y + STACK_BASE;
+      const img = this.add
+        .image(x, y, `carry-${wanted[i]}`)
+        .setFlipX(i % 2 === 1)
+        .setDepth(1e6 - 5);
+      // Deterministic from the index, so an item doesn't jump when the pile
+      // is rebuilt around it.
+      const wobble = Math.sin(i * 12.9898) * 43758.5453;
+      const frac = wobble - Math.floor(wobble);
+      p.stack.push({
+        img,
+        type: wanted[i],
+        bx: x,
+        by: y,
+        jx: (frac - 0.5) * 3.4,
+        tilt: (frac - 0.5) * 0.16,
+      });
+    }
+  }
+
+  /** Drop the whole pile at once — death, or handing it over. */
+  private clearStack(p: PlayerEntity) {
+    for (const item of p.stack) item.img.destroy();
+    p.stack.length = 0;
+  }
+
+  /** One item leaves the top and flies to the machine. The visible half of
+   *  depositing: the counter going up is the receipt, this is the payment. */
+  private flyToPad(type: CarryType, from: { x: number; y: number }) {
+    const img = this.add.image(from.x, from.y, `carry-${type}`).setDepth(1e6 - 4);
+    const midX = (from.x + this.pad.x) / 2;
+    const midY = Math.min(from.y, this.pad.y) - 46;
+    this.tweens.addCounter({
+      from: 0,
+      to: 1,
+      duration: 420,
+      ease: "Quad.easeIn",
+      onUpdate: (tw) => {
+        // A quadratic arc, so it lobs into the machine rather than sliding.
+        const t = tw.getValue() ?? 0;
+        const u = 1 - t;
+        img.x = u * u * from.x + 2 * u * t * midX + t * t * this.pad.x;
+        img.y = u * u * from.y + 2 * u * t * midY + t * t * (this.pad.y + 6);
+        img.setScale(1 - t * 0.5);
+        img.setAlpha(1 - t * 0.35);
+      },
+      onComplete: () => {
+        img.destroy();
+        this.materializeFlash(this.pad.x, this.pad.y + 6, 22);
+      },
+    });
+  }
+
+  /**
+   * Make the pile trail its owner. Each item chases the one below it, so the
+   * lag compounds upward and the top of a full stack swings noticeably wide.
+   */
+  private updateStacks(dtMs: number) {
+    const k = Math.min(1, (STACK_FOLLOW * dtMs) / 1000);
+    for (const p of this.players.values()) {
+      if (!p.stack.length) continue;
+      // Riding a machine hides you, and your luggage with you.
+      const visible = p.sprite.visible;
+      let leadX = p.sprite.x;
+      let leadY = p.sprite.y + STACK_BASE;
+      for (let i = 0; i < p.stack.length; i++) {
+        const item = p.stack[i];
+        item.img.setVisible(visible);
+        item.bx += (leadX - item.bx) * k;
+        item.by += (leadY - item.by) * k;
+
+        const dx = item.bx - leadX;
+        const dy = item.by - leadY;
+        const slack = Math.hypot(dx, dy);
+        if (slack > STACK_MAX_LEAN) {
+          item.bx = leadX + (dx / slack) * STACK_MAX_LEAN;
+          item.by = leadY + (dy / slack) * STACK_MAX_LEAN;
+        }
+        // Lean by how far this item is trailing — the lag compounds upward,
+        // so the top of the pile tips hardest and a corner looks like one.
+        const lean = ((leadX - item.bx) / STACK_MAX_LEAN) * 0.22;
+        item.img.setPosition(item.bx + item.jx, item.by);
+        item.img.setRotation(lean + item.tilt);
+        item.img.setScale(1 - i * STACK_SHRINK);
+        item.img.setDepth(p.sprite.y + 1 + i * 0.01);
+        leadX = item.bx;
+        leadY = item.by - STACK_STEP;
+      }
+    }
+  }
 
   private pushVitals(p: PlayerEntity) {
     this.onVitals?.(p.slot, {
@@ -1875,6 +2040,7 @@ export class WorldScene extends Phaser.Scene {
 
     if (p.hunger < AUTO_EAT_AT && p.pack.food > 0) {
       p.pack.food -= 1;
+      this.syncStack(p);
       p.hunger = Math.min(HUNGER_MAX, p.hunger + FOOD_VALUE);
       this.floatText(p.sprite.x, p.sprite.y - 46, `ate · +${FOOD_VALUE}`, "#c9e77f");
     }
@@ -1907,6 +2073,11 @@ export class WorldScene extends Phaser.Scene {
     let any = false;
     for (const m of ["wood", "stone", "bogiron"] as const) {
       while (units > 0 && p.pack[m] >= 1) {
+        // Throw from wherever the top of the pile currently is, before the
+        // stack is rebuilt a line below — otherwise it launches from the
+        // player's feet and the hand-off doesn't read.
+        const top = p.stack[p.stack.length - 1]?.img;
+        this.flyToPad(m, top ?? { x: p.sprite.x, y: p.sprite.y + STACK_BASE });
         p.pack[m] -= 1;
         this.stockpile[m] += 1;
         units -= 1;
@@ -1914,6 +2085,7 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     if (!any) return;
+    this.syncStack(p);
     this.onStockpile?.(this.stockpile);
     this.pushVitals(p);
     this.markDirty();
@@ -1930,6 +2102,7 @@ export class WorldScene extends Phaser.Scene {
 
     if (packLoad(p.pack) > 0) this.dropPack(p);
     p.pack = emptyPack();
+    this.clearStack(p);
     // You come back winded, not fresh — but never so weak that waking up is
     // immediately another death.
     p.health = HEALTH_MAX * 0.6;
@@ -1982,6 +2155,7 @@ export class WorldScene extends Phaser.Scene {
       this.floatText(p.sprite.x, p.sprite.y - 46, "no room", "#ff9f9f");
       return true;
     }
+    this.syncStack(p, near.x, near.y - 14);
     this.floatText(near.x, near.y - 34, `+${Math.floor(took)} recovered`, "#c9e77f");
     if (packLoad(near.contents) <= 0.01) {
       near.sprite.destroy();
@@ -2064,6 +2238,7 @@ export class WorldScene extends Phaser.Scene {
       p.health = v.health;
       p.hunger = v.hunger;
       p.pack = { ...emptyPack(), ...v.pack };
+      this.syncStack(p);
       this.pushVitals(p);
     }
     // A pack you died next to is still there when you come back tomorrow.
@@ -2285,6 +2460,7 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
+    this.updateStacks(dtMs);
     this.runEnemies(now, dtMs, night);
     this.runStructureEmissions();
     this.runAutomation(now);

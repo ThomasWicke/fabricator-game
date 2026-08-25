@@ -193,6 +193,120 @@ export function makeForageTexture(scene: Phaser.Scene): void {
 }
 
 /**
+ * The things you carry, drawn small enough to stack.
+ *
+ * Each sits in the same 22×12 box so a mixed stack lines up, and each is lit
+ * from the same direction as the terrain art. They are seen from slightly
+ * above, like everything else here.
+ */
+export function makeCarryTextures(scene: Phaser.Scene): void {
+  const W = 22;
+  const H = 12;
+  const make = (key: string, draw: (ctx: CanvasRenderingContext2D) => void) => {
+    if (scene.textures.exists(key)) return;
+    const canvas = scene.textures.createCanvas(key, W, H)!;
+    draw(canvas.context);
+    canvas.refresh();
+  };
+
+  // A log, seen end-on: the pale cut face is what makes a woodpile read.
+  make("carry-wood", (ctx) => {
+    ctx.fillStyle = "#8a6a48";
+    ctx.beginPath();
+    ctx.roundRect(1, 2, 18, 9, 4);
+    ctx.fill();
+    ctx.fillStyle = "#6d5236";
+    ctx.beginPath();
+    ctx.roundRect(1, 7, 18, 4, 2);
+    ctx.fill();
+    ctx.fillStyle = "#a8845e";
+    ctx.beginPath();
+    ctx.ellipse(17.5, 6.5, 3.4, 4.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#6d5236";
+    ctx.beginPath();
+    ctx.ellipse(17.5, 6.5, 1.5, 2.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  /**
+   * A cuboid block: lit top, two shaded faces.
+   *
+   * Drawn with real vertical extent rather than as a flat diamond — a diamond
+   * reads as a disc lying on the ground, and a stack of discs looks like a
+   * stack of nothing. The faces match the terrain's lighting so a block on
+   * your back belongs to the same world as the rock you took it from.
+   */
+  const block = (
+    ctx: CanvasRenderingContext2D,
+    top: string,
+    left: string,
+    right: string,
+  ) => {
+    const cx = 11;
+    const midY = 5;
+    const halfW = 9;
+    const halfD = 4;
+    const depth = 3.5;
+    ctx.fillStyle = left;
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW, midY);
+    ctx.lineTo(cx, midY + halfD);
+    ctx.lineTo(cx, midY + halfD + depth);
+    ctx.lineTo(cx - halfW, midY + depth);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = right;
+    ctx.beginPath();
+    ctx.moveTo(cx, midY + halfD);
+    ctx.lineTo(cx + halfW, midY);
+    ctx.lineTo(cx + halfW, midY + depth);
+    ctx.lineTo(cx, midY + halfD + depth);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = top;
+    ctx.beginPath();
+    ctx.moveTo(cx, midY - halfD);
+    ctx.lineTo(cx + halfW, midY);
+    ctx.lineTo(cx, midY + halfD);
+    ctx.lineTo(cx - halfW, midY);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  make("carry-stone", (ctx) => block(ctx, "#c2c9d3", "#7f8794", "#98a0ab"));
+
+  // Bogiron: the same block, dark, with the rusty flecks that name it.
+  make("carry-bogiron", (ctx) => {
+    block(ctx, "#5d4e42", "#332b24", "#463b32");
+    for (const [x, y, r] of [[8, 5, 1.2], [13, 4.2, 1], [11, 6.4, 0.85]] as [number, number, number][]) {
+      ctx.fillStyle = "#d9813f";
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+
+  // A handful of berries.
+  make("carry-food", (ctx) => {
+    for (const [x, y, r, fill] of [
+      [8, 7, 3, "#b8332f"],
+      [13, 5.5, 2.7, "#d8443f"],
+      [11, 9, 2.3, "#9c2a27"],
+    ] as [number, number, number, string][]) {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.45)";
+      ctx.beginPath();
+      ctx.arc(x - r * 0.3, y - r * 0.35, r * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+}
+
+/**
  * A soft contact shadow for boulders.
  *
  * The pack's pines carry their own baked shadow; the rocks don't, and on
