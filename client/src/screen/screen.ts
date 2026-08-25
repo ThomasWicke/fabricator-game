@@ -89,10 +89,15 @@ export function startScreen(code: string) {
   const upperCode = code.toUpperCase();
   const controllerUrl = `${window.location.origin}/c/${code}`;
 
-  const resourceMarkup = MATERIALS.map(
-    (m) =>
-      `<div class="res${m === "wood" || m === "stone" ? "" : " ore"}" id="res-${m}" title="${m}">${ICONS[m]}<span class="n" id="n-${m}">0</span></div>`,
-  ).join("");
+  const resourceMarkup =
+    MATERIALS.map(
+      (m) =>
+        `<div class="res${m === "wood" || m === "stone" ? "" : " ore"}" id="res-${m}" title="${m}">${ICONS[m]}<span class="n" id="n-${m}">0</span></div>`,
+    ).join("") +
+    // The pantry: banked food, shown like an ore — absent until it exists.
+    `<div class="res ore" id="res-food" title="pantry — banked food; fed to whoever is hungry at the Fabricator">` +
+    `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="6.4" cy="6.4" r="4.4" fill="#e3b25a"/><path d="M9.8 9.8 13.4 13.4" stroke="#e3b25a" stroke-width="2.6" stroke-linecap="round"/></svg>` +
+    `<span class="n" id="n-food">0</span></div>`;
 
   const app = document.getElementById("app")!;
 
@@ -1011,6 +1016,15 @@ export function startScreen(code: string) {
       // around every time you pick something up and put it down.
       carry.textContent = parts.length ? parts.join(" ") : "pack empty";
       carry.classList.toggle("full", load >= v.capacity - 0.01);
+    };
+
+    worldScene.onPantry = (count) => {
+      const el = document.getElementById("n-food")!;
+      const box = document.getElementById("res-food")!;
+      el.textContent = String(Math.floor(count));
+      box.classList.toggle("zero", count === 0);
+      if (count > 0) box.classList.add("seen");
+      conn.send({ scope: "ui", type: "stockpile", stock: { ...worldScene.stockpile, food: count } });
     };
 
     worldScene.onToolEquipped = (slot, belt) => {

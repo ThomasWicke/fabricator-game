@@ -221,9 +221,10 @@ import type { MaterialType } from "../shared/fabricator/schema";
 export type StockpileMsg = {
   scope: "ui";
   type: "stockpile";
-  /** Every material by name. Listing them individually meant that adding one
-   *  compiled cleanly and then silently never reached the phone. */
-  stock: Partial<Record<MaterialType, number>>;
+  /** Every material by name — plus the pantry's banked food. Listing them
+   *  individually meant that adding one compiled cleanly and then silently
+   *  never reached the phone. */
+  stock: Partial<Record<MaterialType | "food", number>>;
 };
 
 /** Throw a design away for good. Sent by a phone it is a request, which the
@@ -293,6 +294,9 @@ export type WorldSnapshot = {
   /** Keyed by name and partial, so a save survives a material being added —
    *  and so a material added later actually gets written down. */
   stockpile: Partial<Record<MaterialType, number>>;
+  /** Banked food — eaten, never spent, so it lives beside the stockpile
+   *  rather than in it. Absent in older saves. */
+  pantry?: number;
   /** Only nodes that have been touched; remaining 0 = harvested out. */
   harvested: { col: number; row: number; remaining: number }[];
   /** Manufactured objects, at their current position (vehicles get driven). */

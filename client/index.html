@@ -773,7 +773,10 @@
       .screen-stage.solo .hud-map {
         left: auto;
         right: 0.6em;
-        top: 4.4em;
+        /* 4.4em of top clearance exists to duck under the centred resource
+           bar — a reason that only applies when the map is centred. In the
+           corner there is nothing above it, and the clearance was a gap. */
+        top: 0.75em;
         transform: none;
       }
 

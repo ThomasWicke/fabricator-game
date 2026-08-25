@@ -254,6 +254,8 @@ const STACK_SHRINK = 0.006;
 /** What one player can carry, in units, across everything in the pack. This
  *  is the whole reason to walk back to the Fabricator. */
 const PACK_CAPACITY = 24;
+/** Food kept back when banking at base — the snack you take to the field. */
+const FOOD_RATION = 3;
 /** Units per second moved from a standing player's pack into the shared
  *  stockpile. Automatic: being at the machine IS depositing. */
 const DEPOSIT_RATE = 6;
@@ -593,6 +595,10 @@ export class WorldScene extends Phaser.Scene {
   private dropCache = new Map<string, number>();
 
   stockpile: Stockpile = { ...STARTING_STOCK };
+  /** Banked food. Separate from the stockpile on purpose: food is eaten, not
+   *  spent — it must never leak into costs or canAfford. */
+  pantry = 0;
+  onPantry: ((count: number) => void) | null = null;
   /** Screen shell subscribes for the HUD. */
   onStockpile: ((s: Stockpile) => void) | null = null;
   onToolEquipped:
@@ -2542,6 +2548,14 @@ export class WorldScene extends Phaser.Scene {
       this.syncStack(p);
       p.hunger = Math.min(HUNGER_MAX, p.hunger + FOOD_VALUE);
       this.floatText(p.sprite.x, p.sprite.y - 46, `ate · +${FOOD_VALUE}`, "#c9e77f");
+    } else if (p.hunger < AUTO_EAT_AT && p.atFabricator && this.pantry > 0) {
+      // The pantry feeds you at the machine — banked food would otherwise be
+      // food you can never eat again.
+      this.pantry -= 1;
+      this.onPantry?.(this.pantry);
+      p.hunger = Math.min(HUNGER_MAX, p.hunger + FOOD_VALUE);
+      this.floatText(p.sprite.x, p.sprite.y - 46, `ate from the pantry · +${FOOD_VALUE}`, "#c9e77f");
+      this.markDirty();
     }
 
     // The mechanics are automatic (forage → auto-eat → heal while fed), and
@@ -2583,7 +2597,10 @@ export class WorldScene extends Phaser.Scene {
     p.depositCarry -= units;
 
     let any = false;
-    for (const m of ["wood", "stone", "bogiron"] as const) {
+    // Every material — this list was hand-written as wood/stone/bogiron, so
+    // the three ores added since could be MINED but never DEPOSITED: they sat
+    // in the pack forever, silently uncappable wealth.
+    for (const m of MATERIALS) {
       while (units > 0 && p.pack[m] >= 1) {
         // Throw from wherever the top of the pile currently is, before the
         // stack is rebuilt a line below — otherwise it launches from the
@@ -2595,6 +2612,18 @@ export class WorldScene extends Phaser.Scene {
         units -= 1;
         any = true;
       }
+    }
+    // Food banks too — into the pantry, not the build stockpile — but only
+    // the SURPLUS: a few rations stay in the pack, or banking at base would
+    // quietly strip the food you meant to take into the field.
+    while (units > 0 && p.pack.food >= FOOD_RATION + 1) {
+      const top = p.stack[p.stack.length - 1]?.img;
+      this.flyTo("food", top ?? { x: p.sprite.x, y: p.sprite.y + STACK_BASE }, into);
+      p.pack.food -= 1;
+      this.pantry += 1;
+      units -= 1;
+      any = true;
+      this.onPantry?.(this.pantry);
     }
     if (!any) return;
     this.syncStack(p);
@@ -2696,6 +2725,7 @@ export class WorldScene extends Phaser.Scene {
       v: 2,
       seed: this.seedText,
       stockpile: { ...this.stockpile },
+      pantry: this.pantry,
       harvested: [...this.harvestDeltas.values()],
       built: [
         ...this.vehicles.map((v) => ({
@@ -2750,6 +2780,8 @@ export class WorldScene extends Phaser.Scene {
       ...(Object.fromEntries(MATERIALS.map((m) => [m, 0])) as Stockpile),
       ...snap.stockpile,
     };
+    this.pantry = snap.pantry ?? 0;
+    this.onPantry?.(this.pantry);
     this.onStockpile?.(this.stockpile);
 
     for (const h of snap.harvested) {
