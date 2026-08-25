@@ -831,15 +831,26 @@
         text-align: center;
       }
       /* Stacked down the right edge, under the top bar, so nothing overlaps:
-         Fabricator button, then the map beneath it. */
+         Fabricator button, the swap button, then the map beneath them. */
       .screen-stage.touch .touch-fab {
         top: 3.9em;
+      }
+      .screen-stage.touch .touch-swap {
+        top: 6.5em;
       }
       .screen-stage.touch .hud-map {
         left: auto;
         right: 0.6em;
-        top: 7.4em;
+        top: 10em;
         transform: none;
+      }
+      /* The swap button is only ever drawn on a device playing on its own
+         controls; on a desktop the keyboard has Q. */
+      .touch-swap {
+        display: none;
+      }
+      .screen-stage.touch .touch-swap:not(.hidden) {
+        display: block;
       }
 
       /* ── small screens ───────────────────────────────────────── */
@@ -2023,6 +2034,11 @@
         font-weight: 700;
         pointer-events: none;
         z-index: 5;
+      }
+      /* There is no global .hidden in this stylesheet — every one is scoped to
+         the thing it hides, so a new control needs its own. */
+      .fab-btn.hidden {
+        display: none;
       }
       .fabricating-note.hidden {
         display: none;

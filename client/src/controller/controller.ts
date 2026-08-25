@@ -18,6 +18,7 @@ import { createTouchPad, type TouchPad } from "../touchpad";
 import { RoomConnection } from "../socket";
 import { keepScreenAwake } from "../wake-lock";
 import type {
+  BeltMsg,
   ButtonState,
   StockpileMsg,
   Phase,
@@ -52,6 +53,13 @@ export function startController(code: string) {
   const stock: Record<MaterialType, number> = Object.fromEntries(
     MATERIALS.map((m) => [m, 0]),
   ) as Record<MaterialType, number>;
+
+  /** The belt arrives whether or not the game view exists yet, so the last
+   *  one is kept and replayed when the view is built. */
+  let lastBelt: BeltMsg = { scope: "ui", type: "belt", slot: 1, count: 0, index: -1, held: null };
+  let applyBelt: (b: BeltMsg) => void = (b) => {
+    lastBelt = b;
+  };
 
   /** Standing at the Fabricator? Lives at controller scope because the world
    *  reports it while the lobby may still be up, before the pad view exists. */
@@ -231,13 +239,16 @@ export function startController(code: string) {
           <button class="fab-btn" id="designs-btn">
             <span class="ico">▦</span><span class="txt">DESIGNS</span><span class="badge" id="designs-count">0</span>
           </button>
+          <button class="fab-btn hidden" id="swap-btn">
+            <span class="ico">⇄</span><span class="txt">TOOL</span>
+          </button>
         </div>
         <div class="fab-hint" id="fab-hint"></div>
         <div class="fabricating-note hidden" id="fabricating-note">FABRICATING…</div>
         <div class="designs-overlay hidden" id="designs-overlay">
           <div class="designs-head">
             <h2>Design store</h2>
-            <div class="stock" id="designs-stock">🪵 0 · 🪨 0 · ⚙️ 0</div>
+            <div class="stock" id="designs-stock">🪵 0 · 🪨 0</div>
           </div>
           <div class="designs-list" id="designs-list"></div>
           <button class="designs-close" id="designs-close">Close</button>
@@ -295,6 +306,25 @@ export function startController(code: string) {
     // ── the pad ─────────────────────────────────────────────────
     // Stick and buttons come from the shared module, so this phone and a
     // tablet playing on its own behave identically down to the edge cases.
+    // Swapping is a whole-belt verb, not a pad button: it has to work while
+    // the stick and both actions are already spoken for.
+    const swapBtn = document.getElementById("swap-btn")!;
+    swapBtn.addEventListener("click", () => {
+      if (slot) conn.send({ scope: "ui", type: "tool-cycle", slot });
+    });
+    applyBelt = (b: BeltMsg) => {
+      // Still recorded: the game view can be torn down and rebuilt (a phone
+      // rejoining, the lobby coming back), and it has to be redrawn from the
+      // last thing the screen said rather than from an empty belt.
+      lastBelt = b;
+      // Nothing on the belt means nothing to swap between, so the control is
+      // absent rather than present and inert.
+      swapBtn.classList.toggle("hidden", b.count < 1);
+      const label = swapBtn.querySelector(".txt")!;
+      label.textContent = b.held ?? "HANDS";
+    };
+    applyBelt(lastBelt);
+
     touchPad = createTouchPad(root, (s, immediate) => {
       stick.x = s.stick.x;
       stick.y = s.stick.y;
@@ -314,17 +344,19 @@ export function startController(code: string) {
     const designsCount = document.getElementById("designs-count")!;
     const designsStock = document.getElementById("designs-stock")!;
 
+    const SHORT: Record<MaterialType, string> = {
+      wood: "🪵",
+      stone: "🪨",
+      bogiron: "⚙️",
+      basalt: "🌑",
+      glass: "💠",
+      rime: "❄️",
+    };
+
     const costMarkup = (cost: Record<MaterialType, number>) =>
       MATERIALS.filter((m) => cost[m] > 0)
         .map((m) => {
-          const short: Record<MaterialType, string> = {
-            wood: "🪵",
-            stone: "🪨",
-            bogiron: "⚙️",
-            basalt: "🌑",
-            glass: "💠",
-            rime: "❄️",
-          };
+          const short = SHORT;
           const lack = stock[m] < cost[m];
           return `<span class="${lack ? "lack" : ""}">${short[m]} ${cost[m]}</span>`;
         })
@@ -332,8 +364,13 @@ export function startController(code: string) {
 
     renderDesigns = () => {
       designsCount.textContent = String(designs.size);
-      designsStock.textContent =
-        `🪵 ${Math.floor(stock.wood)} · 🪨 ${Math.floor(stock.stone)} · ⚙️ ${Math.floor(stock.bogiron)}`;
+      // Wood and stone always; an ore once there is any, so the line grows as
+      // the map opens up instead of showing four permanent zeroes.
+      designsStock.textContent = MATERIALS.filter(
+        (m) => m === "wood" || m === "stone" || stock[m] > 0,
+      )
+        .map((m) => `${SHORT[m]} ${Math.floor(stock[m])}`)
+        .join(" · ");
       if (designs.size === 0) {
         designsList.innerHTML =
           `<div class="designs-empty">No designs yet.<br>Tap ✏️ BLUEPRINT to sketch one —<br>the Fabricator will design it, then you can build it as often as you like.</div>`;
@@ -503,6 +540,9 @@ export function startController(code: string) {
         if (msg.type === "stockpile") {
           const s = (msg as unknown as StockpileMsg).stock;
           for (const m of MATERIALS) stock[m] = s[m] ?? 0;
+        } else if (msg.type === "belt") {
+          const b = msg as unknown as BeltMsg;
+          if (b.slot === slot) applyBelt(b);
         } else if (msg.type === "fabricator-range") {
           const m = msg as unknown as { slot: Slot; inRange: boolean };
           if (m.slot === slot && m.inRange !== atFabricator) {

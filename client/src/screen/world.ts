@@ -37,6 +37,7 @@ import {
   type TerrainType,
 } from "../../../shared/fabricator/schema";
 import { canAfford, formatCost } from "../../../shared/fabricator/cost";
+import { BELT_MAX, nextBeltIndex } from "./belt";
 import { HEX_POINTS, HEX_W, ROW_H, hexToWorld, worldToHex } from "./hexgrid";
 import {
   CHUNK_COLS,
@@ -276,6 +277,10 @@ export const emptyPack = (): Pack =>
 export const packLoad = (p: Pack): number =>
   CARRIABLE.reduce((sum, m) => sum + p[m], 0);
 
+/** A tool on the belt. The body key is kept so re-equipping can rebuild the
+ *  icon without going back to the design catalog. */
+export type CarriedTool = { designId: string; spec: FabricatedSpec; bodyKey: string };
+
 /** What the HUD draws for one player. */
 export type Vitals = {
   health: number;
@@ -323,6 +328,14 @@ type PlayerEntity = {
   prevB: boolean;
   color: number;
   driving: VehicleEntity | null;
+  /** Everything blueprinted for this player to hold. A tool used to be a
+   *  property of the person — one, forever — which stopped working the moment
+   *  four different ores each needed their own harvester. */
+  belt: CarriedTool[];
+  /** Index into `belt`, or -1 for bare hands. Hands are a real choice: they
+   *  gather wood, stone and food, which a single-ore drill does not. */
+  equipped: number;
+  /** Live visuals for whatever `equipped` points at. */
   tool: {
     designId: string;
     spec: FabricatedSpec;
@@ -554,7 +567,9 @@ export class WorldScene extends Phaser.Scene {
   stockpile: Stockpile = { ...STARTING_STOCK };
   /** Screen shell subscribes for the HUD. */
   onStockpile: ((s: Stockpile) => void) | null = null;
-  onToolEquipped: ((slot: Slot, spec: FabricatedSpec) => void) | null = null;
+  onToolEquipped:
+    | ((slot: Slot, belt: { equipped: FabricatedSpec | null; count: number; index: number }) => void)
+    | null = null;
   /** Fired when a player boards or leaves a vehicle, for the HUD. */
   onRideChanged: ((slot: Slot, vehicle: string | null, driving: boolean) => void) | null =
     null;
@@ -955,6 +970,8 @@ export class WorldScene extends Phaser.Scene {
       skin,
       sprite,
       label,
+      belt: [],
+      equipped: -1,
       net: idleInput(),
       prevA: false,
       prevB: false,
@@ -1349,28 +1366,80 @@ export class WorldScene extends Phaser.Scene {
     this.dropCarry(p);
   }
 
-  /** Hand tools attach to the player who blueprinted them. */
+  /** Hand tools go onto the belt of the player who blueprinted them, and the
+   *  newest is equipped — you built it because you wanted it now. */
   private equipTool(design: PlaceableDesign, bodyKey: string, bySlot: Slot) {
-    const spec = design.spec;
     const p = this.players.get(bySlot) ?? this.players.get(1)!;
+    const already = p.belt.findIndex((t) => t.designId === design.id);
+    if (already >= 0) {
+      // Building a second copy of something you already carry just brings it
+      // to hand: a belt with two identical drills on it is a worse belt.
+      this.equip(p, already);
+      return;
+    }
+    if (p.belt.length >= BELT_MAX) {
+      // Replace what is in hand rather than refusing, so a full belt is never
+      // a dead end — and never silently drops something you are not holding.
+      const at = p.equipped >= 0 ? p.equipped : BELT_MAX - 1;
+      p.belt[at] = { designId: design.id, spec: design.spec, bodyKey };
+      this.equip(p, at);
+      this.floatText(p.sprite.x, p.sprite.y - 52, "belt full — swapped", "#ffd98f");
+      return;
+    }
+    p.belt.push({ designId: design.id, spec: design.spec, bodyKey });
+    this.equip(p, p.belt.length - 1);
+    this.materializeFlash(p.sprite.x, p.sprite.y, 40);
+  }
+
+  /** Put belt slot `index` in hand, or -1 for bare hands. */
+  private equip(p: PlayerEntity, index: number) {
     if (p.tool) {
       p.tool.icon.destroy();
       p.tool.glow?.destroy();
+      p.tool = null;
     }
-    const icon = this.add.image(p.sprite.x, p.sprite.y - 34, bodyKey).setDepth(1e6);
-    const scale = 22 / Math.max(icon.width, icon.height);
-    icon.setScale(scale);
-    let glow: Phaser.GameObjects.Image | undefined;
-    if (spec.emission?.kind === "light") {
-      glow = this.add
-        .image(p.sprite.x, p.sprite.y, "glow")
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setScale(0.8 + spec.emission.intensity * 1.5)
-        .setDepth(DEPTH_LIGHT);
+    p.equipped = index >= 0 && index < p.belt.length ? index : -1;
+    const held = p.equipped >= 0 ? p.belt[p.equipped] : null;
+    if (held) {
+      const icon = this.add.image(p.sprite.x, p.sprite.y - 34, held.bodyKey).setDepth(1e6);
+      icon.setScale(22 / Math.max(icon.width, icon.height));
+      let glow: Phaser.GameObjects.Image | undefined;
+      if (held.spec.emission?.kind === "light") {
+        glow = this.add
+          .image(p.sprite.x, p.sprite.y, "glow")
+          .setBlendMode(Phaser.BlendModes.ADD)
+          .setScale(0.8 + held.spec.emission.intensity * 1.5)
+          .setDepth(DEPTH_LIGHT);
+      }
+      p.tool = { designId: held.designId, spec: held.spec, icon, glow };
+      // A tool taken out while driving would otherwise hang in mid-air beside
+      // an empty seat until the driver got out again.
+      if (p.driving) {
+        icon.setVisible(false);
+        glow?.setVisible(false);
+      }
     }
-    p.tool = { designId: design.id, spec, icon, glow };
-    this.onToolEquipped?.(p.slot, spec);
-    this.materializeFlash(p.sprite.x, p.sprite.y, 40);
+    this.pushBelt(p);
+  }
+
+  /** Next thing on the belt, wrapping through bare hands. One control does
+   *  the whole job, which is what lets a phone, a keyboard and a thumb on
+   *  glass all offer it without inventing three different UIs. */
+  cycleTool(slot: Slot) {
+    const p = this.players.get(slot);
+    if (!p || p.belt.length === 0) return;
+    this.equip(p, nextBeltIndex(p.equipped, p.belt.length));
+    const held = p.equipped >= 0 ? p.belt[p.equipped].spec.displayName : "bare hands";
+    this.floatText(p.sprite.x, p.sprite.y - 52, held, "#8fc1ff");
+  }
+
+  private pushBelt(p: PlayerEntity) {
+    this.onToolEquipped?.(p.slot, {
+      equipped: p.equipped >= 0 ? p.belt[p.equipped].spec : null,
+      count: p.belt.length,
+      index: p.equipped,
+    });
+    this.markDirty();
   }
 
   private buildVehicle(
@@ -2253,9 +2322,10 @@ export class WorldScene extends Phaser.Scene {
         x: Math.round(v.container.x),
         y: Math.round(v.container.y),
       })),
-      tools: [...this.players.values()]
-        .filter((p) => p.tool)
-        .map((p) => ({ slot: p.slot, designId: p.tool!.designId })),
+      tools: [...this.players.values()].flatMap((p) =>
+        p.belt.map((t) => ({ slot: p.slot, designId: t.designId })),
+      ),
+      equipped: [...this.players.values()].map((p) => ({ slot: p.slot, index: p.equipped })),
       vitals: [...this.players.values()].map((p) => ({
         slot: p.slot,
         health: Math.round(p.health),
@@ -2303,6 +2373,14 @@ export class WorldScene extends Phaser.Scene {
     for (const t of snap.tools) {
       const design = resolve(t.designId);
       if (design) this.placeDesign(design, t.slot);
+    }
+    // Restoring a belt equips each tool as it lands, so whatever was actually
+    // in hand has to be put back afterwards. Without the record — an older
+    // save — the last one restored stays in hand, which is what that save
+    // meant when it only ever held one.
+    for (const e of snap.equipped ?? []) {
+      const p = this.players.get(e.slot);
+      if (p) this.equip(p, e.index);
     }
 
     for (const v of snap.vitals ?? []) {

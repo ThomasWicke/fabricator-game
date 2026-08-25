@@ -223,6 +223,21 @@ export type StockpileMsg = {
   stock: Partial<Record<MaterialType, number>>;
 };
 
+/** Screens → phone: what is on this player's belt, and what is in hand. The
+ *  phone owns no game state, so it cannot work either out for itself. */
+export type BeltMsg = {
+  scope: "ui";
+  type: "belt";
+  slot: Slot;
+  count: number;
+  /** Belt position in hand, -1 for bare hands. */
+  index: number;
+  held: string | null;
+};
+
+/** Phone → screens: put the next thing on my belt in my hand. */
+export type ToolCycleMsg = { scope: "ui"; type: "tool-cycle"; slot: Slot };
+
 /** Server → everyone: the Fabricator could not compile the blueprint. */
 export type FabricateErrorMsg = {
   scope: "ui";
@@ -247,13 +262,19 @@ export type WorldSnapshot = {
    *  lets you type one. Stored so a save can be recognised as belonging to
    *  the world it describes. */
   seed: string;
-  stockpile: { wood: number; stone: number; bogiron: number };
+  /** Keyed by name and partial, so a save survives a material being added —
+   *  and so a material added later actually gets written down. */
+  stockpile: Partial<Record<MaterialType, number>>;
   /** Only nodes that have been touched; remaining 0 = harvested out. */
   harvested: { col: number; row: number; remaining: number }[];
   /** Manufactured objects, at their current position (vehicles get driven). */
   built: { designId: string; x: number; y: number }[];
-  /** Equipped hand tools, by player slot. */
+  /** Hand tools, in belt order, by player slot. A save from when a player
+   *  could only hold one simply has a single entry per slot. */
   tools: { slot: Slot; designId: string }[];
+  /** Which belt position each player had in hand, -1 for bare hands. Absent
+   *  in older saves, where holding the last thing built is the right guess. */
+  equipped?: { slot: Slot; index: number }[];
   /** What each player is carrying, and how they're holding up. Optional so a
    *  save written before survival existed still loads. */
   vitals?: {

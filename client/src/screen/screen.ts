@@ -255,8 +255,14 @@ export function startScreen(code: string) {
         `${snap.built.length === 1 ? "" : "s"} built, ` +
         `${snap.harvested.length} resource node` +
         `${snap.harvested.length === 1 ? "" : "s"} worked, ` +
-        `stockpile ${Math.floor(stock.wood)} wood · ${Math.floor(stock.stone)} stone · ` +
-        `${Math.floor(stock.bogiron)} bogiron.`;
+        // Whatever is actually in it: a resumed expedition that has been to
+        // the snow should say so, and one that never left the grass should
+        // not list four empty seams.
+        `stockpile ${
+          MATERIALS.filter((m) => (stock[m] ?? 0) >= 1)
+            .map((m) => `${Math.floor(stock[m] ?? 0)} ${m}`)
+            .join(" · ") || "empty"
+        }.`;
       startBtn.textContent = "RESUME EXPEDITION";
     };
     onSnapshot();
@@ -393,6 +399,7 @@ export function startScreen(code: string) {
           </div>
 
           <button class="touch-fab hidden" id="touch-fab">✎ FABRICATOR</button>
+          <button class="touch-fab touch-swap hidden" id="touch-swap">⇄ TOOL</button>
 
           <div class="key-hints" id="key-hints"></div>
 
@@ -521,6 +528,10 @@ export function startScreen(code: string) {
       const touchFab = document.getElementById("touch-fab")!;
       touchFab.classList.remove("hidden");
       touchFab.addEventListener("click", () => openFab(1));
+      // Only worth showing once there is something to swap between, so a
+      // player who has built nothing is not asked about a belt they lack.
+      const touchSwap = document.getElementById("touch-swap")!;
+      touchSwap.addEventListener("click", () => worldScene.cycleTool(1));
     }
 
     // ── the Fabricator, on the screen ───────────────────────────
@@ -660,6 +671,14 @@ export function startScreen(code: string) {
       }
       // Ignore the shortcut while someone is typing into the panel itself.
       if (document.activeElement instanceof HTMLInputElement) return;
+      // Swapping tools has to work anywhere, not at the Fabricator — the
+      // whole point is choosing what to hold while you are out in the snow.
+      const swap = e.key.toLowerCase();
+      if (swap === "q" || swap === "j") {
+        e.preventDefault();
+        scene?.cycleTool(swap === "q" ? 1 : 2);
+        return;
+      }
       if (e.key !== "1" && e.key !== "2") return;
       // The panel focuses its name field, and this same keystroke would then
       // land in it — every blueprint opened with 1 was called "1Something".
@@ -795,9 +814,9 @@ export function startScreen(code: string) {
     const applyLayout = () => {
       stageEl.classList.toggle("solo", !split);
       hintsEl.innerHTML = split
-        ? `<b>P1</b> WASD · F use · G run · <b>1</b> Fabricator` +
-          `<span class="sep"></span><b>P2</b> arrows · K use · L run · <b>2</b> Fabricator`
-        : `<b>WASD</b> move · <b>F</b> use · <b>G</b> run · <b>1</b> Fabricator` +
+        ? `<b>P1</b> WASD · F use · G run · <b>Q</b> swap · <b>1</b> Fabricator` +
+          `<span class="sep"></span><b>P2</b> arrows · K use · L run · <b>J</b> swap · <b>2</b> Fabricator`
+        : `<b>WASD</b> move · <b>F</b> use · <b>G</b> run · <b>Q</b> swap tool · <b>1</b> Fabricator` +
           `<span class="sep"></span>arrow keys or a second phone to join`;
     };
     applyLayout();
@@ -846,11 +865,34 @@ export function startScreen(code: string) {
       carry.classList.toggle("full", load >= v.capacity - 0.01);
     };
 
-    worldScene.onToolEquipped = (slot, spec) => {
+    worldScene.onToolEquipped = (slot, belt) => {
+      conn.send({
+        scope: "ui",
+        type: "belt",
+        slot,
+        count: belt.count,
+        index: belt.index,
+        held: belt.equipped?.displayName ?? null,
+      });
       const el = document.getElementById(`tool-${slot === 1 ? "p1" : "p2"}`)!;
-      const gathers = spec.harvest ? ` · ${spec.harvest.materials.join("/")}` : "";
-      el.textContent = `🔧 ${spec.displayName}${gathers}`;
+      // What is in hand, and how much else there is to reach for — the second
+      // half is what tells you a swap is available at all.
+      if (belt.count === 0) {
+        el.textContent = "";
+        el.classList.remove("has");
+        return;
+      }
       el.classList.add("has");
+      if (slot === 1) {
+        document.getElementById("touch-swap")?.classList.toggle("hidden", belt.count < 1);
+      }
+      if (!belt.equipped) {
+        el.textContent = `✊ bare hands · ${belt.count} on belt`;
+        return;
+      }
+      const gathers = belt.equipped.harvest ? ` · ${belt.equipped.harvest.materials.join("/")}` : "";
+      const of = belt.count > 1 ? ` (${belt.index + 1}/${belt.count})` : "";
+      el.textContent = `🔧 ${belt.equipped.displayName}${gathers}${of}`;
     };
 
     const connChip = document.getElementById("conn-chip")!;
@@ -1016,6 +1058,8 @@ export function startScreen(code: string) {
                 `<span class="cost">−${formatCost(d.spec.cost)}</span>`,
             );
           }
+        } else if (msg.type === "tool-cycle") {
+          scene?.cycleTool((msg as unknown as { slot: Slot }).slot);
         } else if (msg.type === "fabricate-error") {
           scene?.clearFabricating();
           toast(String(msg.message ?? "Fabrication failed."), true);
