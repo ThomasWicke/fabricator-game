@@ -44,6 +44,8 @@ import {
   CHUNK_ROWS,
   ChunkField,
   chunkKey,
+  CHUNK_H,
+  CHUNK_W,
   chunkOfHex,
   type ChunkKey,
 } from "./chunks";
@@ -540,6 +542,16 @@ export class WorldScene extends Phaser.Scene {
   /** One night overlay per viewport: an endless world has no rectangle a
    *  single quad could cover, and the two cameras can be anywhere. */
   private darkness: Phaser.GameObjects.Rectangle[] = [];
+  /** The debug grid: hex outlines, chunk borders, a cursor readout. Exists
+   *  for exactly one job — letting a player point at a rendering artefact
+   *  and read out the precise hex it lives on. */
+  private gridDebug: {
+    hexes: Phaser.GameObjects.Graphics;
+    chunks: Phaser.GameObjects.Graphics;
+    labels: Phaser.GameObjects.Text[];
+    cursor: Phaser.GameObjects.Text;
+    lastKey: string;
+  } | null = null;
   private spawnCount = 0;
   private field!: ChunkField;
   private rng!: () => number;
@@ -664,6 +676,17 @@ export class WorldScene extends Phaser.Scene {
     this.pad = { x: padWorld.x, y: padWorld.y };
 
     // ── terrain streaming ───────────────────────────────────────
+    // The ground tiles' edges are antialiased in the source art (alpha 95-223
+    // along the diagonals). Tiles are meant to tessellate exactly, and a soft
+    // edge over the darker slab of the row beneath blends into a 1-2px dark
+    // rim along every hex boundary — measured on a live frame as a ~5%
+    // luminance dip recurring at exact hex-row intervals, the "overlapping
+    // zigzag lines" reported twice from production. Rounding the stamps to
+    // whole pixels (the earlier fix) removed the RESAMPLED half of the seam;
+    // this removes the half that is baked into the art. Ground tiles only —
+    // props sit on varied backgrounds and keep their soft edges.
+    this.hardenGroundTiles();
+
     this.field = new ChunkField(this, this.seed, {
       onLoad: (cx, cy) => {
         this.loadChunkNodes(cx, cy);
@@ -1208,6 +1231,148 @@ export class WorldScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setDepth(1e6);
     this.fabFx = [ring, text];
+  }
+
+  /** Threshold the ground tiles' alpha so they tessellate with no blend. */
+  private hardenGroundTiles() {
+    for (const key of BIOME_TILE_KEYS) {
+      const src = this.textures.get(key).getSourceImage() as HTMLImageElement;
+      const canvas = document.createElement("canvas");
+      canvas.width = src.width;
+      canvas.height = src.height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(src, 0, 0);
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = img.data;
+      for (let i = 3; i < d.length; i += 4) {
+        // Mostly-there edge pixels become fully there; faint fringe goes.
+        d[i] = d[i] >= 48 ? 255 : 0;
+      }
+      ctx.putImageData(img, 0, 0);
+      this.textures.remove(key);
+      this.textures.addCanvas(key, canvas);
+    }
+  }
+
+  /** Debug grid on/off — bound to the 0 key by the shell. */
+  toggleDebugGrid() {
+    if (this.gridDebug) {
+      this.gridDebug.hexes.destroy();
+      this.gridDebug.chunks.destroy();
+      for (const l of this.gridDebug.labels) l.destroy();
+      this.gridDebug.cursor.destroy();
+      this.gridDebug = null;
+      return;
+    }
+    const mono = {
+      fontFamily: "ui-monospace, Menlo, monospace",
+      fontSize: "9px",
+      color: "#8affde",
+      backgroundColor: "rgba(8,14,26,0.7)",
+      padding: { x: 3, y: 1 },
+    };
+    this.gridDebug = {
+      hexes: this.add.graphics().setDepth(999_900),
+      chunks: this.add.graphics().setDepth(999_901),
+      labels: [],
+      cursor: this.add
+        .text(0, 0, "", { ...mono, fontSize: "11px", color: "#ffe28a" })
+        .setDepth(999_999)
+        .setOrigin(0, 1),
+      lastKey: "",
+    };
+  }
+
+  /** Redraw the debug grid when a camera has moved a hex's worth. */
+  private refreshDebugGrid() {
+    const d = this.gridDebug;
+    if (!d) return;
+    const cams = [this.cameras.main, this.cam2].filter((c) => c.visible);
+
+    // The cursor readout runs every frame — it chases the mouse. Which
+    // camera's world the pointer is in depends on which half of the screen
+    // it is over, or the split-screen right half would read out nonsense.
+    const pointer = this.input.activePointer;
+    const cam =
+      cams.length > 1 && pointer.x >= this.cam2.x ? this.cam2 : this.cameras.main;
+    const world = pointer.positionToCamera(cam) as Phaser.Math.Vector2;
+    const at = worldToHex(world.x, world.y);
+    const { cx, cy } = chunkOfHex(at.col, at.row);
+    const ix = ((at.col % CHUNK_COLS) + CHUNK_COLS) % CHUNK_COLS;
+    const iy = ((at.row % CHUNK_ROWS) + CHUNK_ROWS) % CHUNK_ROWS;
+    d.cursor
+      .setPosition(world.x + 12, world.y - 12)
+      .setText(`hex ${at.col},${at.row} · chunk ${cx},${cy} (${ix},${iy})`);
+
+    // The lattice itself only needs redrawing when the view actually moved.
+    const key =
+      cams.map((c) => `${Math.floor(c.worldView.x / 16)},${Math.floor(c.worldView.y / 16)}`).join("|") +
+      `@${this.cameras.main.zoom}`;
+    if (key === d.lastKey) return;
+    d.lastKey = key;
+
+    d.hexes.clear();
+    d.chunks.clear();
+    let labelIdx = 0;
+    const mono = {
+      fontFamily: "ui-monospace, Menlo, monospace",
+      fontSize: "9px",
+      color: "#8affde",
+      backgroundColor: "rgba(8,14,26,0.7)",
+      padding: { x: 3, y: 1 },
+    };
+    const label = (x: number, y: number, text: string, color: string) => {
+      let t = d.labels[labelIdx];
+      if (!t) {
+        t = this.add.text(0, 0, "", mono).setDepth(999_902).setOrigin(0.5, 0.5);
+        d.labels.push(t);
+      }
+      t.setVisible(true).setPosition(x, y).setText(text).setColor(color);
+      labelIdx++;
+    };
+
+    for (const c of cams) {
+      const v = c.worldView;
+      // Hex outlines on the FLAT lattice — no relief drop — so what the lines
+      // say is "this is the hex's address", not "this is where its art sits".
+      d.hexes.lineStyle(1, 0x2affc8, 0.4);
+      const row0 = Math.floor(v.y / ROW_H) - 1;
+      const row1 = Math.ceil((v.y + v.height) / ROW_H) + 1;
+      const col0 = Math.floor(v.x / HEX_W) - 1;
+      const col1 = Math.ceil((v.x + v.width) / HEX_W) + 1;
+      for (let row = row0; row <= row1; row++) {
+        for (let col = col0; col <= col1; col++) {
+          const cpt = hexToWorld(col, row);
+          d.hexes.beginPath();
+          HEX_POINTS.forEach(([px, py], i) => {
+            if (i === 0) d.hexes.moveTo(cpt.x + px, cpt.y + py);
+            else d.hexes.lineTo(cpt.x + px, cpt.y + py);
+          });
+          d.hexes.closePath();
+          d.hexes.strokePath();
+          // An address every third column and row: dense enough that any
+          // artefact in a screenshot sits next to a printed coordinate.
+          if (col % 3 === 0 && row % 3 === 0) {
+            label(cpt.x, cpt.y, `${col},${row}`, "#8affde");
+          }
+        }
+      }
+      // Chunk borders in a colour that cannot be confused with the lattice —
+      // whether a fault follows these rectangles or the hex edges is the
+      // single most diagnostic fact about it.
+      d.chunks.lineStyle(2, 0xff5588, 0.75);
+      const kx0 = Math.floor(v.x / CHUNK_W) - 1;
+      const kx1 = Math.ceil((v.x + v.width) / CHUNK_W);
+      const ky0 = Math.floor(v.y / CHUNK_H) - 1;
+      const ky1 = Math.ceil((v.y + v.height) / CHUNK_H);
+      for (let ky = ky0; ky <= ky1; ky++) {
+        for (let kx = kx0; kx <= kx1; kx++) {
+          d.chunks.strokeRect(kx * CHUNK_W, ky * CHUNK_H, CHUNK_W, CHUNK_H);
+          label(kx * CHUNK_W + 34, ky * CHUNK_H + 10, `chunk ${kx},${ky}`, "#ff9ab8");
+        }
+      }
+    }
+    for (let i = labelIdx; i < d.labels.length; i++) d.labels[i].setVisible(false);
   }
 
   /** Update the pad's status line in place — the ring keeps pulsing. */
@@ -2888,6 +3053,7 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
+    this.refreshDebugGrid();
     this.updateStacks(dtMs);
     this.trackRegions();
     this.runStructureServices(dtMs);

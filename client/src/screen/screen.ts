@@ -809,6 +809,12 @@ export function startScreen(code: string) {
         scene?.cycleTool(swap === "q" ? 1 : 2);
         return;
       }
+      // Debug lattice: hex outlines, chunk borders, and a cursor readout, so
+      // a rendering artefact can be reported by exact address.
+      if (e.key === "0") {
+        scene?.toggleDebugGrid();
+        return;
+      }
       if (e.key !== "1" && e.key !== "2") return;
       // The panel focuses its name field, and this same keystroke would then
       // land in it — every blueprint opened with 1 was called "1Something".
@@ -952,7 +958,7 @@ export function startScreen(code: string) {
       hintsEl.innerHTML = split
         ? `<b>P1</b> WASD · F use · G run · <b>Q</b> swap · <b>1</b> Fabricator` +
           `<span class="sep"></span><b>P2</b> arrows · K use · L run · <b>J</b> swap · <b>2</b> Fabricator`
-        : `<b>WASD</b> move · <b>F</b> use · <b>G</b> run · <b>Q</b> swap tool · <b>1</b> Fabricator` +
+        : `<b>WASD</b> move · <b>F</b> use · <b>G</b> run · <b>Q</b> swap tool · <b>1</b> Fabricator · <b>0</b> grid` +
           `<span class="sep"></span>arrow keys or a second phone to join`;
     };
     applyLayout();
