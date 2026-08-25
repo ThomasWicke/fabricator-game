@@ -24,13 +24,24 @@ export function computeCost(spec: RawSpec): MaterialCost {
     ? spec.harvest.rate * 3 + spec.harvest.materials.length * 2
     : 0;
   const emission = spec.emission ? spec.emission.intensity * 3 : 0;
+  // Each new capability is priced on what it saves you. A weapon is reach
+  // times damage per second; storage is trips you don't make; a farm is food
+  // you don't forage; a ward is the area it keeps quiet.
+  const weapon = spec.weapon
+    ? (spec.weapon.damage / spec.weapon.cooldown) * 0.5 + spec.weapon.reach / 12
+    : 0;
+  const storage = spec.storage ? spec.storage.capacity * 0.5 : 0;
+  const nourish = spec.nourish ? spec.nourish.rate * 2.5 : 0;
+  const ward = spec.ward ? spec.ward.radius / 12 : 0;
   // Seats are the one thing left that scales with "how much machine is this":
   // the parts list used to carry that weight, and dropping it without a
   // replacement would have made every vehicle several units cheaper overnight.
   const chassis = spec.category === "vehicle" ? 4 + spec.seats * 2 : 0;
   const total = Math.max(
     1,
-    Math.round(area + mobility + versatility + chassis + harvest + emission),
+    Math.round(
+      area + mobility + versatility + chassis + harvest + emission + weapon + storage + nourish + ward,
+    ),
   );
 
   // Material split. Going where bare legs can't is the bogiron sink: the bog

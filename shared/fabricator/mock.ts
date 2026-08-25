@@ -22,6 +22,23 @@ export function mockCompile(input: CompileInput): FabricatedSpec {
   const noLoco = { type: "none" as const, speed: 0, terrainModifiers: { ...NO_TERRAIN } };
 
   // hand tools
+  // weapons, before tools — a spear is not a pickaxe
+  if (has("spear", "sword", "axe blade", "club", "prod", "lance", "pike", "blade")) {
+    const raw: RawSpec = {
+      category: "tool",
+      displayName: input.name.slice(0, 32) || "Weapon",
+      size: { w: 40, h: 30 },
+      locomotion: noLoco,
+      weapon: has("pike", "lance", "spear")
+        ? { damage: 11, reach: 120, cooldown: 0.75 }
+        : { damage: 20, reach: 62, cooldown: 1.2 },
+      seats: 0,
+      flavor: "[offline mock] Compiled by keyword heuristics.",
+    };
+    const clamped = clampSpec(raw);
+    return { ...clamped, cost: computeCost(clamped) };
+  }
+
   const isTool = has("axe", "saw", "pick", "pickaxe", "hammer", "torch") ||
     (has("drill", "cutter") && has("hand", "tool")) ||
     (has("drill") && !has("truck", "car", "vehicle", "rig", "machine", "tank"));
@@ -46,6 +63,50 @@ export function mockCompile(input: CompileInput): FabricatedSpec {
   }
 
   // structures
+  if (has("farm", "greenhouse", "garden", "plot")) {
+    const raw: RawSpec = {
+      category: "structure",
+      displayName: input.name.slice(0, 32) || "Farm",
+      size: { w: 110, h: 80 },
+      locomotion: noLoco,
+      nourish: { rate: 5 },
+      seats: 0,
+      flavor: "[offline mock] Compiled by keyword heuristics.",
+    };
+    const clamped = clampSpec(raw);
+    return { ...clamped, cost: computeCost(clamped) };
+  }
+
+  if (has("fence", "totem", "scarecrow", "ward", "floodlight")) {
+    const raw: RawSpec = {
+      category: "structure",
+      displayName: input.name.slice(0, 32) || "Ward",
+      size: { w: 50, h: 76 },
+      locomotion: noLoco,
+      ward: { radius: 170 },
+      emission: has("floodlight") ? { kind: "light", intensity: 0.8 } : undefined,
+      seats: 0,
+      flavor: "[offline mock] Compiled by keyword heuristics.",
+    };
+    const clamped = clampSpec(raw);
+    return { ...clamped, cost: computeCost(clamped) };
+  }
+
+  if (has("crate", "chest", "silo", "depot", "store", "pannier")) {
+    const structure = !has("pannier", "pack", "bag");
+    const raw: RawSpec = {
+      category: structure ? "structure" : "tool",
+      displayName: input.name.slice(0, 32) || "Store",
+      size: structure ? { w: 80, h: 70 } : { w: 38, h: 30 },
+      locomotion: noLoco,
+      storage: { capacity: structure ? 30 : 10 },
+      seats: 0,
+      flavor: "[offline mock] Compiled by keyword heuristics.",
+    };
+    const clamped = clampSpec(raw);
+    return { ...clamped, cost: computeCost(clamped) };
+  }
+
   if (has("house", "hut", "shelter", "tower", "wall", "base", "lantern", "beacon", "lamp")) {
     const light = has("lantern", "beacon", "lamp", "light");
     const raw: RawSpec = {

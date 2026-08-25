@@ -75,6 +75,35 @@ export type FabricatedSpec = {
     /** 0..1 — scales radius / particle frequency. */
     intensity: number;
   };
+  /**
+   * Something to hit things with. On a tool it arms the carrier; without it
+   * you still have bare hands, just slower and weaker.
+   */
+  weapon?: {
+    /** Damage per swing, 4..40. */
+    damage: number;
+    /** How far the swing reaches, in world pixels, 40..150. */
+    reach: number;
+    /** Seconds between swings, 0.25..2. */
+    cooldown: number;
+  };
+  /** Room for more. On a tool it enlarges the carrier's pack; on a structure
+   *  it is a depot — somewhere out in the world to unload without walking all
+   *  the way back to the Fabricator. */
+  storage?: {
+    /** Extra units, 4..40. */
+    capacity: number;
+  };
+  /** Grows food. Structures only — a farm, a still, a greenhouse. */
+  nourish?: {
+    /** Food per minute, 1..12. */
+    rate: number;
+  };
+  /** Keeps wildlife off. Structures only. */
+  ward?: {
+    /** Radius in world pixels, 60..260. */
+    radius: number;
+  };
   seats: number;
   /** One in-world line from the Fabricator about its interpretation. */
   flavor: string;
@@ -141,6 +170,34 @@ export const SPEC_JSON_SCHEMA = {
       required: ["kind", "intensity"],
       additionalProperties: false,
     },
+    weapon: {
+      type: "object",
+      properties: {
+        damage: { type: "number" },
+        reach: { type: "number" },
+        cooldown: { type: "number" },
+      },
+      required: ["damage", "reach", "cooldown"],
+      additionalProperties: false,
+    },
+    storage: {
+      type: "object",
+      properties: { capacity: { type: "number" } },
+      required: ["capacity"],
+      additionalProperties: false,
+    },
+    nourish: {
+      type: "object",
+      properties: { rate: { type: "number" } },
+      required: ["rate"],
+      additionalProperties: false,
+    },
+    ward: {
+      type: "object",
+      properties: { radius: { type: "number" } },
+      required: ["radius"],
+      additionalProperties: false,
+    },
     seats: { type: "number" },
     flavor: { type: "string" },
   },
@@ -192,6 +249,16 @@ export function validateSpec(raw: unknown): string[] {
     }
     if (typeof em.intensity !== "number") errs.push("bad emission.intensity");
   }
+  const num = (obj: unknown, field: string, label: string) => {
+    if (obj === undefined || obj === null) return;
+    if (typeof (obj as Record<string, unknown>)[field] !== "number") errs.push(label);
+  };
+  num(o.weapon, "damage", "bad weapon.damage");
+  num(o.weapon, "reach", "bad weapon.reach");
+  num(o.weapon, "cooldown", "bad weapon.cooldown");
+  num(o.storage, "capacity", "bad storage.capacity");
+  num(o.nourish, "rate", "bad nourish.rate");
+  num(o.ward, "radius", "bad ward.radius");
   if (typeof o.seats !== "number") errs.push("bad seats");
   if (typeof o.flavor !== "string") errs.push("bad flavor");
   return errs;
@@ -270,6 +337,26 @@ export function clampSpec(raw: RawSpec): RawSpec {
     emission: raw.emission
       ? { kind: raw.emission.kind, intensity: clamp(raw.emission.intensity, 0, 1) }
       : undefined,
+    weapon: raw.weapon
+      ? {
+          damage: clamp(raw.weapon.damage, 4, 40),
+          reach: clamp(raw.weapon.reach, 40, 150),
+          cooldown: clamp(raw.weapon.cooldown, 0.25, 2),
+        }
+      : undefined,
+    storage: raw.storage
+      ? { capacity: Math.round(clamp(raw.storage.capacity, 4, 40)) }
+      : undefined,
+    // Only a building can farm or ward: both are things that sit somewhere and
+    // work on the ground around them, which is what a structure IS.
+    nourish:
+      raw.nourish && raw.category === "structure"
+        ? { rate: clamp(raw.nourish.rate, 1, 12) }
+        : undefined,
+    ward:
+      raw.ward && raw.category === "structure"
+        ? { radius: clamp(raw.ward.radius, 60, 260) }
+        : undefined,
     seats: clamp(Math.round(raw.seats), 0, 2),
     flavor: raw.flavor.slice(0, 120),
   };

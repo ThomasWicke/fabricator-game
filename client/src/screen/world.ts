@@ -59,6 +59,9 @@ import {
   AGGRO_NIGHT_BONUS,
   AGGRO_RANGE,
   ENEMY_KEYS,
+  HAND_COOLDOWN,
+  HAND_DAMAGE,
+  HAND_REACH,
   HUNGRY_SPEED,
   LEASH_RANGE,
   LOSE_RANGE,
@@ -169,10 +172,8 @@ const DUST_TINT: Record<TerrainType, number> = {
 const BITE_RANGE = 34;
 const BITE_COOLDOWN = 1100;
 const BITE_KNOCKBACK = 210;
-/** Bare hands: enough to see something off, not enough to make you a hunter. */
-const SHOVE_RANGE = 62;
-const SHOVE_COOLDOWN = 420;
-const SHOVE_KNOCKBACK = 300;
+/** Knockback per point of damage — a heavy weapon shoves harder. */
+const HIT_KNOCKBACK = 26;
 /** A nest keeps its brood topped up on this cadence. */
 const NEST_RESPAWN_MS = 22_000;
 /** Idle wandering: how far from the nest, and how often they pick a new spot. */
@@ -432,6 +433,8 @@ type VehicleEntity = {
   /** Second rider, when the spec has the seats for one. */
   passenger: Slot | null;
   nextHarvestAt: number;
+  /** Fractional progress toward the next unit of food a farm hands out. */
+  farmCarry?: number;
   /** Spec'd exhaust — smoke, steam or sparks — emitted behind the machine. */
   trail?: Emission;
   /** Ground kicked up by motion. Not spec'd: every vehicle gets it, tinted
@@ -1599,7 +1602,7 @@ export class WorldScene extends Phaser.Scene {
     into: PlayerEntity | null,
   ): boolean {
     if (!gathers(materials, node.material)) return false;
-    if (into && packLoad(into.pack) >= PACK_CAPACITY) {
+    if (into && packLoad(into.pack) >= this.capacityOf(into)) {
       this.floatText(node.cx, node.cy - 40, "pack is full", "#ff9f9f");
       return false;
     }
@@ -1738,11 +1741,16 @@ export class WorldScene extends Phaser.Scene {
     );
 
     // ── who, if anyone, are we after ──
+    // Standing on warded ground calls the whole thing off — for the animal,
+    // not the player. Checked against the ANIMAL's position so a ward defends
+    // its ground rather than following whoever built it around the map.
     let target: PlayerEntity | null = null;
-    if (homeDist < LEASH_RANGE) {
+    if (homeDist < LEASH_RANGE && !this.isWarded(e.sprite.x, e.sprite.y)) {
       let best = Infinity;
       for (const p of this.players.values()) {
         if (!this.activeSlots.has(p.slot) || p.driving) continue; // riders are safe
+        // …and a player inside a ward is off the menu wherever the animal is.
+        if (this.isWarded(p.sprite.x, p.sprite.y)) continue;
         const d = Phaser.Math.Distance.Between(e.sprite.x, e.sprite.y, p.sprite.x, p.sprite.y);
         // Already chasing? Keep at it out to LOSE_RANGE; otherwise you have
         // to come within aggro range to be noticed at all.
@@ -1850,25 +1858,49 @@ export class WorldScene extends Phaser.Scene {
     return best;
   }
 
-  /** Bare-handed: shove the nearest animal off you. Not a weapon system —
-   *  that arrives with the `weapon` primitive — just enough that being cornered
-   *  is something you can act on rather than only run from. */
-  private tryShove(p: PlayerEntity, now: number): boolean {
+  /**
+   * Swing at the nearest animal — with whatever you're carrying.
+   *
+   * Bare hands always work, which keeps being cornered survivable for someone
+   * who has built nothing. A fabricated weapon is strictly a trade against
+   * those numbers: further, harder, or faster, and the cost system charges
+   * for all three.
+   */
+  private trySwing(p: PlayerEntity, now: number): boolean {
     if (now < p.nextShoveAt) return false;
-    const best = this.enemyWithin(p, SHOVE_RANGE);
-    if (!best) return false;
-    p.nextShoveAt = now + SHOVE_COOLDOWN;
-    best.health -= 1;
+    const w = p.tool?.spec.weapon;
+    const reach = w?.reach ?? HAND_REACH;
+    const target = this.enemyWithin(p, reach);
+    if (!target) return false;
 
-    const away = new Phaser.Math.Vector2(best.sprite.x - p.sprite.x, best.sprite.y - p.sprite.y)
+    const damage = w?.damage ?? HAND_DAMAGE;
+    p.nextShoveAt = now + (w ? w.cooldown * 1000 : HAND_COOLDOWN);
+    target.health -= damage;
+
+    const away = new Phaser.Math.Vector2(
+      target.sprite.x - p.sprite.x,
+      target.sprite.y - p.sprite.y,
+    )
       .normalize()
-      .scale(SHOVE_KNOCKBACK);
-    (best.sprite.body as Phaser.Physics.Arcade.Body).setVelocity(away.x, away.y);
-    best.sprite.setTexture(best.def.hit);
-    best.sprite.setTint(0xffd0d0);
-    best.flashUntil = now + 220;
+      .scale(damage * HIT_KNOCKBACK);
+    (target.sprite.body as Phaser.Physics.Arcade.Body).setVelocity(away.x, away.y);
+    target.sprite.setTexture(target.def.hit);
+    target.sprite.setTint(0xffd0d0);
+    target.flashUntil = now + 220;
+    this.floatText(target.sprite.x, target.sprite.y - 26, `−${Math.round(damage)}`, "#ffd8a8");
+    // An arc of the swing, so a long weapon visibly reaches further than a fist.
+    const arc = this.add
+      .circle(p.sprite.x, p.sprite.y, reach * 0.5, 0xffe9a8, 0.14)
+      .setDepth(p.sprite.y - 1);
+    this.tweens.add({
+      targets: arc,
+      radius: reach,
+      alpha: 0,
+      duration: 180,
+      onComplete: () => arc.destroy(),
+    });
 
-    if (best.health <= 0) this.killEnemy(best, p);
+    if (target.health <= 0) this.killEnemy(target, p);
     return true;
   }
 
@@ -1887,7 +1919,7 @@ export class WorldScene extends Phaser.Scene {
     });
     // Something to eat. Not much — hunting shouldn't out-earn foraging, it
     // should just mean a fight you won wasn't for nothing.
-    if (packLoad(by.pack) < PACK_CAPACITY) {
+    if (packLoad(by.pack) < this.capacityOf(by)) {
       by.pack.food += 1;
       this.syncStack(by, e.sprite.x, e.sprite.y - 14);
       this.floatText(e.sprite.x, e.sprite.y - 30, "+1 food", "#c9e77f");
@@ -1954,10 +1986,14 @@ export class WorldScene extends Phaser.Scene {
 
   /** One item leaves the top and flies to the machine. The visible half of
    *  depositing: the counter going up is the receipt, this is the payment. */
-  private flyToPad(type: CarryType, from: { x: number; y: number }) {
+  private flyTo(
+    type: CarryType,
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+  ) {
     const img = this.add.image(from.x, from.y, `carry-${type}`).setDepth(1e6 - 4);
-    const midX = (from.x + this.pad.x) / 2;
-    const midY = Math.min(from.y, this.pad.y) - 46;
+    const midX = (from.x + to.x) / 2;
+    const midY = Math.min(from.y, to.y) - 46;
     this.tweens.addCounter({
       from: 0,
       to: 1,
@@ -1967,14 +2003,14 @@ export class WorldScene extends Phaser.Scene {
         // A quadratic arc, so it lobs into the machine rather than sliding.
         const t = tw.getValue() ?? 0;
         const u = 1 - t;
-        img.x = u * u * from.x + 2 * u * t * midX + t * t * this.pad.x;
-        img.y = u * u * from.y + 2 * u * t * midY + t * t * (this.pad.y + 6);
+        img.x = u * u * from.x + 2 * u * t * midX + t * t * to.x;
+        img.y = u * u * from.y + 2 * u * t * midY + t * t * (to.y + 6);
         img.setScale(1 - t * 0.5);
         img.setAlpha(1 - t * 0.35);
       },
       onComplete: () => {
         img.destroy();
-        this.materializeFlash(this.pad.x, this.pad.y + 6, 22);
+        this.materializeFlash(to.x, to.y + 6, 22);
       },
     });
   }
@@ -2017,12 +2053,18 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /** What this player can carry: their own back, plus whatever they built to
+   *  carry things in. */
+  private capacityOf(p: PlayerEntity): number {
+    return PACK_CAPACITY + (p.tool?.spec.storage?.capacity ?? 0);
+  }
+
   private pushVitals(p: PlayerEntity) {
     this.onVitals?.(p.slot, {
       health: p.health,
       hunger: p.hunger,
       pack: { ...p.pack },
-      capacity: PACK_CAPACITY,
+      capacity: this.capacityOf(p),
     });
   }
 
@@ -2060,6 +2102,10 @@ export class WorldScene extends Phaser.Scene {
   /** Standing at the machine unloads your pack into the shared pile. There is
    *  no deposit button: arriving is the action. */
   private depositAtFabricator(p: PlayerEntity, dtMs: number) {
+    this.depositInto(p, dtMs, this.pad);
+  }
+
+  private depositInto(p: PlayerEntity, dtMs: number, into: { x: number; y: number }) {
     // Whole units, paced by an accumulator — never a fraction per frame.
     // Materials are counted in whole things, and moving them a sliver at a
     // time accumulates float error: twenty wood deposited across a hundred
@@ -2077,7 +2123,7 @@ export class WorldScene extends Phaser.Scene {
         // stack is rebuilt a line below — otherwise it launches from the
         // player's feet and the hand-off doesn't read.
         const top = p.stack[p.stack.length - 1]?.img;
-        this.flyToPad(m, top ?? { x: p.sprite.x, y: p.sprite.y + STACK_BASE });
+        this.flyTo(m, top ?? { x: p.sprite.x, y: p.sprite.y + STACK_BASE }, into);
         p.pack[m] -= 1;
         this.stockpile[m] += 1;
         units -= 1;
@@ -2140,7 +2186,7 @@ export class WorldScene extends Phaser.Scene {
       (d) => Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, d.x, d.y) < 52,
     );
     if (!near) return false;
-    let room = PACK_CAPACITY - packLoad(p.pack);
+    let room = this.capacityOf(p) - packLoad(p.pack);
     let took = 0;
     for (const m of ["wood", "stone", "bogiron", "food"] as const) {
       if (room <= 0) break;
@@ -2441,7 +2487,7 @@ export class WorldScene extends Phaser.Scene {
         // then a machine to climb into, then the ping.
         if (this.tryCollectDrop(p)) {
           // collected
-        } else if (this.tryShove(p, now)) {
+        } else if (this.trySwing(p, now)) {
           // saw something off
         } else {
           const vehicle = this.nearestEnterableVehicle(p);
@@ -2461,6 +2507,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.updateStacks(dtMs);
+    this.runStructureServices(dtMs);
     this.runEnemies(now, dtMs, night);
     this.runStructureEmissions();
     this.runAutomation(now);
@@ -2632,6 +2679,59 @@ export class WorldScene extends Phaser.Scene {
       const o = this.trailOrigin(v);
       this.pump(v.trail, o.x, o.y, dt, o.y);
     }
+  }
+
+  /**
+   * Everything a building does just by standing there: depots take your load,
+   * farms hand out food, wards keep the wildlife off.
+   *
+   * All three are proximity effects on the ground around the thing, which is
+   * why they are structures-only in the schema — a depot you can drive away
+   * is just a pack, and a ward that follows you is a bodyguard.
+   */
+  private runStructureServices(dtMs: number) {
+    for (const v of this.vehicles) {
+      if (v.spec.category !== "structure") continue;
+      const reach = Math.max(v.spec.size.w, v.spec.size.h) / 2 + 46;
+
+      for (const p of this.players.values()) {
+        if (!this.activeSlots.has(p.slot) || p.driving) continue;
+        const d = Phaser.Math.Distance.Between(
+          p.sprite.x,
+          p.sprite.y,
+          v.container.x,
+          v.container.y,
+        );
+        if (d > reach) continue;
+
+        // A depot is a second Fabricator as far as unloading goes. Building
+        // one next to a distant grove is the whole point: it turns a long
+        // haul into a short one.
+        if (v.spec.storage) this.depositInto(p, dtMs, v.container);
+
+        // A farm tops you up while you stand in it.
+        if (v.spec.nourish && packLoad(p.pack) < this.capacityOf(p)) {
+          v.farmCarry = (v.farmCarry ?? 0) + (v.spec.nourish.rate * dtMs) / 60_000;
+          if (v.farmCarry >= 1) {
+            v.farmCarry -= 1;
+            p.pack.food += 1;
+            this.syncStack(p, v.container.x, v.container.y - 10);
+            this.pushVitals(p);
+            this.markDirty();
+          }
+        }
+      }
+    }
+  }
+
+  /** Is this spot inside something's warded ground? */
+  private isWarded(x: number, y: number): boolean {
+    for (const v of this.vehicles) {
+      const r = v.spec.ward?.radius;
+      if (!r) continue;
+      if (Phaser.Math.Distance.Between(x, y, v.container.x, v.container.y) < r) return true;
+    }
+    return false;
   }
 
   /**

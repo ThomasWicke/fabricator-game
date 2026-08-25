@@ -38,6 +38,13 @@ export const LOSE_TIME = 2.4;
  *  their nest. This is the promise that you can always leave. */
 export const LEASH_RANGE = 620;
 
+/** What a bare hand does, and how often. Everything a weapon offers is
+ *  measured against this — a design that beats neither number is not worth
+ *  the materials, and the compiler is told so. */
+export const HAND_DAMAGE = 6;
+export const HAND_COOLDOWN = 420;
+export const HAND_REACH = 62;
+
 export type SpeciesId = "spider" | "snake" | "mouse" | "bat" | "slime";
 
 export type Species = {
@@ -56,7 +63,8 @@ export type Species = {
   speed: number;
   /** Contact damage per bite. */
   damage: number;
-  /** Bare-handed shoves needed to see it off. */
+  /** Hit points. Bare hands do HAND_DAMAGE a swing; a fabricated weapon does
+   *  whatever its spec says, which is the entire reason to build one. */
   health: number;
   /** Display height in world pixels; art is scaled to it. */
   size: number;
@@ -72,7 +80,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     dead: "spider_dead",
     speed: 196,
     damage: 8,
-    health: 3,
+    health: 20,
     size: 26,
     brood: 3,
   },
@@ -83,7 +91,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     dead: "snake_dead",
     speed: 190,
     damage: 10,
-    health: 3,
+    health: 24,
     size: 20,
     brood: 2,
   },
@@ -94,7 +102,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     dead: "mouse_dead",
     speed: 202,
     damage: 6,
-    health: 2,
+    health: 14,
     size: 20,
     brood: 3,
   },
@@ -105,7 +113,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     dead: "bat_dead",
     speed: 205,
     damage: 7,
-    health: 2,
+    health: 16,
     size: 24,
     brood: 3,
   },
@@ -116,7 +124,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     dead: "slimeGreen_dead",
     speed: 178,
     damage: 11,
-    health: 4,
+    health: 30,
     size: 24,
     brood: 2,
   },

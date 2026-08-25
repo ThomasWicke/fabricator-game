@@ -95,10 +95,12 @@ likely way somebody tries it for the first time.
 - [x] **F2 · Structure placement.** Carry a fabricated structure as a translucent
       ghost, highlight the hex under it, place it centred on that hex with the
       action button.
-- [ ] **F3 · Extend the capability matrix.** New primitives beyond
+- [x] **F3 · Extend the capability matrix.** Four new primitives beyond
       locomotion/harvest/emission: `weapon` (damage, reach, cooldown), `storage`
-      (inventory capacity), `nourish` (food value), `defense`, `production`
-      (converts materials over time).
+      (a bigger pack on a tool, a depot on a structure), `nourish` (a farm that
+      grows food), `ward` (ground that wildlife keeps off). `production` was
+      left out on purpose — with three materials there is no conversion worth
+      making, so it needs a reason to exist before it needs code.
 - [x] **F4 · Terrain classes in the spec.** `terrainModifiers` grows to cover the
       new movement classes (rock, snow, water) so vehicles can be built for the
       new biomes. `float` becomes the water unlock.
@@ -118,8 +120,9 @@ likely way somebody tries it for the first time.
 - [ ] **S2 · Tools.** Equip, swap, and holster fabricated tools. Still one
       permanently-attached tool per player — the pack exists now, so a tool
       should be an item in it rather than a property of the person.
-- [ ] **S3 · Weapons.** Fabricated weapons with a swing arc, damage, and cooldown,
-      driven by the `weapon` primitive.
+- [x] **S3 · Weapons.** Fabricated weapons with a swing arc, damage, reach and
+      cooldown, driven by the `weapon` primitive. Bare hands still work, so
+      being cornered always has an answer.
 - [x] **S4 · Health.** Damage, regeneration when fed and rested.
 - [x] **S5 · Hunger.** Drains with time and effort; low hunger slows you before it
       hurts you.
@@ -142,6 +145,7 @@ likely way somebody tries it for the first time.
 
 ## Known bugs carried over
 
-- [ ] **ART-1 · Chroma key assumes magenta.** When the model returns a different
-      background the sprite renders fully opaque. Fix: sample the actual corner
-      colour, flood-fill from the edges, sanity-check the result before using it.
+- [x] **ART-1 · Chroma key assumes magenta.** The key is learned from the
+      border, removal is a flood fill inward, and the result is sanity-checked
+      before it is trusted — a background it cannot read leaves the sprite
+      untouched rather than destroying it.

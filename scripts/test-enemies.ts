@@ -10,6 +10,8 @@
 
 import {
   AGGRO_RANGE,
+  HAND_COOLDOWN,
+  HAND_DAMAGE,
   HUNGRY_SPEED,
   LEASH_RANGE,
   LOSE_RANGE,
@@ -22,6 +24,8 @@ import {
   type SpeciesId,
 } from "../client/src/screen/enemies";
 import { biomeAt, worldSeed, findSpawn, type BiomeType } from "../client/src/screen/worldgen";
+import { NO_TERRAIN, clampSpec } from "../shared/fabricator/schema";
+import { computeCost } from "../shared/fabricator/cost";
 
 let failures = 0;
 const check = (label: string, pass: boolean, detail = "") => {
@@ -53,7 +57,63 @@ for (const [id, s] of Object.entries(SPECIES) as [SpeciesId, (typeof SPECIES)[Sp
   // Not so slow it can never touch you, or it stops being a hazard at all.
   check(`${id} is faster than a hungry walk`, s.speed > hungryWalk, `${s.speed} > ${hungryWalk.toFixed(0)}`);
   check(`${id} cannot one-shot a full-health player`, s.damage < 100, `${s.damage}`);
-  check(`${id} dies to a handful of bare-handed shoves`, s.health <= 4, `${s.health}`);
+  // Bare hands have to stay viable: somebody who has built nothing yet must
+  // still be able to see an animal off, or being cornered has no answer.
+  const swings = Math.ceil(s.health / HAND_DAMAGE);
+  const seconds = (swings * HAND_COOLDOWN) / 1000;
+  check(
+    `${id} falls to bare hands in a fight, not a chore`,
+    swings >= 2 && seconds <= 3.5,
+    `${swings} swings, ${seconds.toFixed(1)}s`,
+  );
+}
+
+console.log("\n── a weapon is worth building ──────────────────────────────");
+{
+  // Every weapon the schema allows, at its extremes, against the toughest
+  // thing in the world — and against a bare hand.
+  const toughest = Math.max(...Object.values(SPECIES).map((s) => s.health));
+  const dps = (damage: number, cooldown: number) => damage / cooldown;
+  const hands = dps(HAND_DAMAGE, HAND_COOLDOWN / 1000);
+  const weakest = dps(4, 2); // the feeblest spec clampSpec will allow
+  const best = dps(40, 0.25);
+  console.log(
+    `  bare hands ${hands.toFixed(1)} dps · worst legal weapon ${weakest.toFixed(1)} · ` +
+      `best ${best.toFixed(1)} · toughest animal ${toughest} hp`,
+  );
+  check("the best weapon clearly beats bare hands", best > hands * 3, `${best.toFixed(1)} vs ${hands.toFixed(1)}`);
+  // A weapon CAN come out worse than a fist, and that is fine — the whole
+  // premise is that a vague idea compiles into a mediocre object. What must
+  // hold is that the good end is PAID for, or there is no decision to make.
+  const arm = (damage: number, reach: number, cooldown: number) =>
+    computeCost(
+      clampSpec({
+        category: "tool",
+        displayName: "W",
+        size: { w: 40, h: 30 },
+        locomotion: { type: "none", speed: 0, terrainModifiers: NO_TERRAIN },
+        weapon: { damage, reach, cooldown },
+        seats: 0,
+        flavor: "x",
+      }),
+    ).total;
+  const feeble = arm(4, 40, 2);
+  const mighty = arm(40, 150, 0.25);
+  console.log(`  a feeble weapon costs ${feeble}, a mighty one ${mighty}`);
+  check("power is paid for", mighty > feeble * 3, `${mighty} > ${feeble * 3}`);
+  // And a weapon must cost more than the same object without one, or the
+  // capability is free.
+  const unarmed = computeCost(
+    clampSpec({
+      category: "tool",
+      displayName: "W",
+      size: { w: 40, h: 30 },
+      locomotion: { type: "none", speed: 0, terrainModifiers: NO_TERRAIN },
+      seats: 0,
+      flavor: "x",
+    }),
+  ).total;
+  check("arming something costs extra", feeble > unarmed, `${feeble} > ${unarmed}`);
 }
 
 console.log("\n── they give up ────────────────────────────────────────────");
