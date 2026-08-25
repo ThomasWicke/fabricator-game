@@ -598,6 +598,8 @@ export class WorldScene extends Phaser.Scene {
   /** Banked food. Separate from the stockpile on purpose: food is eaten, not
    *  spent — it must never leak into costs or canAfford. */
   pantry = 0;
+  /** Cheat-console offset into the day cycle — /day and /night set it. */
+  private clockShiftMs = 0;
   onPantry: ((count: number) => void) | null = null;
   /** Screen shell subscribes for the HUD. */
   onStockpile: ((s: Stockpile) => void) | null = null;
@@ -1259,6 +1261,99 @@ export class WorldScene extends Phaser.Scene {
       ctx.putImageData(img, 0, 0);
       this.textures.remove(key);
       this.textures.addCanvas(key, canvas);
+    }
+  }
+
+  /**
+   * The cheat console's interpreter. One entry point, parsed here rather
+   * than in the shell, because every command is a statement about world
+   * state and the world should own what can be said about it. Returns the
+   * line to print back.
+   */
+  cheat(line: string): string {
+    const [cmd, ...args] = line.trim().replace(/^\//, "").split(/\s+/);
+    switch (cmd) {
+      case "help":
+        return [
+          "/bank-add <material|food> <n> — add to the stockpile or pantry",
+          "/pack-add <material|food> <n> [slot] — add to a player's pack",
+          "/heal [slot] — full health and hunger",
+          "/tp <col> <row> [slot] — teleport to a hex",
+          "/day · /night — set the time of day",
+          "/grid — toggle the debug grid",
+          "/where [slot] — print the player's address",
+        ].join("\n");
+      case "bank-add": {
+        const [mat, nStr] = args;
+        const n = Number(nStr);
+        if (!Number.isFinite(n)) return "usage: /bank-add <material|food> <n>";
+        if (mat === "food") {
+          this.pantry = Math.max(0, this.pantry + n);
+          this.onPantry?.(this.pantry);
+          this.markDirty();
+          return `pantry: ${this.pantry}`;
+        }
+        if (!MATERIALS.includes(mat as MaterialType)) {
+          return `no such material — ${MATERIALS.join(", ")} or food`;
+        }
+        const m = mat as MaterialType;
+        this.stockpile[m] = Math.max(0, this.stockpile[m] + n);
+        this.onStockpile?.(this.stockpile);
+        this.markDirty();
+        return `${m}: ${this.stockpile[m]}`;
+      }
+      case "pack-add": {
+        const [mat, nStr, slotStr] = args;
+        const n = Number(nStr);
+        const p = this.players.get((Number(slotStr) as Slot) || 1);
+        if (!p || !Number.isFinite(n)) return "usage: /pack-add <material|food> <n> [slot]";
+        if (!CARRIABLE.includes(mat as CarryType)) {
+          return `no such thing — ${CARRIABLE.join(", ")}`;
+        }
+        p.pack[mat as CarryType] = Math.max(0, p.pack[mat as CarryType] + n);
+        this.syncStack(p);
+        this.pushVitals(p);
+        return `P${p.slot} pack ${mat}: ${p.pack[mat as CarryType]}`;
+      }
+      case "heal": {
+        const p = this.players.get((Number(args[0]) as Slot) || 1);
+        if (!p) return "no such player";
+        p.health = HEALTH_MAX;
+        p.hunger = HUNGER_MAX;
+        this.pushVitals(p);
+        return `P${p.slot} healed`;
+      }
+      case "tp": {
+        const [colStr, rowStr, slotStr] = args;
+        const col = Number(colStr);
+        const row = Number(rowStr);
+        const p = this.players.get((Number(slotStr) as Slot) || 1);
+        if (!p || !Number.isFinite(col) || !Number.isFinite(row)) {
+          return "usage: /tp <col> <row> [slot]";
+        }
+        const c = hexToWorld(col, row);
+        p.sprite.setPosition(c.x, c.y);
+        return `P${p.slot} → hex ${col},${row} (${regionName(regionAt(col, row, this.seed), this.seed)})`;
+      }
+      case "day":
+      case "night": {
+        // Aim the cycle at noon or midnight from wherever it is now.
+        const want = cmd === "day" ? 0 : DAY_MS / 2;
+        this.clockShiftMs = want - (this.time.now % DAY_MS);
+        return `it is now ${cmd}`;
+      }
+      case "grid":
+        this.toggleDebugGrid();
+        return this.gridDebug ? "grid on" : "grid off";
+      case "where": {
+        const p = this.players.get((Number(args[0]) as Slot) || 1);
+        if (!p) return "no such player";
+        const h = worldToHex(p.sprite.x, p.sprite.y);
+        const { cx, cy } = chunkOfHex(h.col, h.row);
+        return `P${p.slot}: hex ${h.col},${h.row} · chunk ${cx},${cy} · ${this.regionNameFor(p.slot)}`;
+      }
+      default:
+        return `unknown command — /help lists them`;
     }
   }
 
@@ -2927,7 +3022,7 @@ export class WorldScene extends Phaser.Scene {
 
     // Day/night. Dawn and dusk get most of the curve so the transition reads
     // as a sunset rather than a light switch.
-    const t = (now % DAY_MS) / DAY_MS; // 0 = dawn, 0.5 = dusk
+    const t = ((now + this.clockShiftMs) % DAY_MS) / DAY_MS; // 0 = dawn, 0.5 = dusk
     const night = (1 - Math.cos(t * Math.PI * 2)) / 2; // 0 at noon, 1 at midnight
     const gloom = night * night * NIGHT_ALPHA;
     const cams = [this.cameras.main, this.cam2];

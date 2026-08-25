@@ -443,6 +443,11 @@ export function startScreen(code: string) {
           </div>
 
           <button class="touch-fab hidden" id="touch-fab">✎ FABRICATOR</button>
+          <div class="cheat hidden" id="cheat">
+            <pre class="cheat-out" id="cheat-out"></pre>
+            <input id="cheat-in" type="text" spellcheck="false" autocomplete="off"
+              placeholder="/help — Enter runs · Esc closes" />
+          </div>
           <button class="touch-fab touch-swap hidden" id="touch-swap">⇄ TOOL</button>
 
           <div class="key-hints" id="key-hints"></div>
@@ -718,6 +723,35 @@ export function startScreen(code: string) {
     requestDiscardRef = requestDiscard;
     renderFabListRef = renderFabList;
 
+    // ── the cheat console ───────────────────────────────────────
+    const cheatEl = document.getElementById("cheat")!;
+    const cheatIn = document.getElementById("cheat-in") as HTMLInputElement;
+    const cheatOut = document.getElementById("cheat-out")!;
+    const openCheat = () => {
+      cheatEl.classList.remove("hidden");
+      worldScene.setUiOpen(true); // the keyboard belongs to the input now
+      cheatIn.focus();
+    };
+    const closeCheat = () => {
+      cheatEl.classList.add("hidden");
+      worldScene.setUiOpen(false);
+      cheatIn.blur();
+    };
+    cheatIn.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        closeCheat();
+        return;
+      }
+      if (e.key !== "Enter") return;
+      const line = cheatIn.value.trim();
+      if (!line) return;
+      // Stays open after a command: cheats come in bursts, and reopening the
+      // console between each one is friction with no safety payoff.
+      cheatOut.textContent = `> ${line}\n${scene?.cheat(line) ?? "world not ready"}`;
+      cheatIn.value = "";
+    });
+
     const openFab = (slot: Slot) => {
       if (!scene?.isAtFabricator(slot)) {
         toast(`Player ${slot} has to be standing at the Fabricator.`, true);
@@ -824,6 +858,13 @@ export function startScreen(code: string) {
       // a rendering artefact can be reported by exact address.
       if (e.key === "0") {
         scene?.toggleDebugGrid();
+        return;
+      }
+      // The cheat console — testing needs levers, and typing them beats
+      // rebuilding a save to reach the situation you want to look at.
+      if (e.key.toLowerCase() === "t") {
+        e.preventDefault(); // or the "t" lands in the input it just opened
+        openCheat();
         return;
       }
       if (e.key !== "1" && e.key !== "2") return;

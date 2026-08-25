@@ -2076,6 +2076,52 @@
       .fab-btn.hidden {
         display: none;
       }
+      /* The cheat console: bottom-left, out of the HUD's way, styled like the
+         debug tool it is rather than like part of the game. */
+      .cheat {
+        position: absolute;
+        left: 0.6em;
+        bottom: 3.4em;
+        z-index: 30;
+        width: min(30em, 70vw);
+        display: flex;
+        flex-direction: column;
+        gap: 0.3em;
+        pointer-events: auto;
+      }
+      .cheat.hidden {
+        display: none;
+      }
+      .cheat-out {
+        margin: 0;
+        max-height: 11em;
+        overflow-y: auto;
+        font-family: var(--mono);
+        font-size: 0.62em;
+        line-height: 1.5;
+        color: #8affde;
+        background: rgba(8, 14, 26, 0.88);
+        border: 1px solid rgba(42, 255, 200, 0.25);
+        border-radius: 8px;
+        padding: 0.5em 0.7em;
+        white-space: pre-wrap;
+      }
+      .cheat-out:empty {
+        display: none;
+      }
+      .cheat input {
+        font-family: var(--mono);
+        font-size: 0.7em;
+        color: #dfe8f4;
+        background: rgba(8, 14, 26, 0.92);
+        border: 1px solid rgba(42, 255, 200, 0.4);
+        border-radius: 8px;
+        padding: 0.55em 0.8em;
+        outline: none;
+      }
+      .cheat input:focus {
+        border-color: rgba(42, 255, 200, 0.8);
+      }
       /* A modification's parent art, ghosted under the ink as a guide. On the
          element's background, never on the canvas itself — the export crops
          to drawn pixels, and an underlay drawn onto the canvas would ship
