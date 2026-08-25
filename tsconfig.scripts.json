@@ -1,0 +1,25 @@
+// The scripts are run with tsx, which STRIPS types rather than checking them —
+// so until this existed, nothing checked them at all. That is how the eval
+// quietly went four primitives out of date: it imports the schema, the schema
+// grew, and no build ever had an opinion about it.
+//
+// Separate from the main config because these run in node: they need node's
+// types and its globals, which the browser and worker configs deliberately
+// do not have.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["scripts/**/*", "shared/**/*", "client/src/screen/worldgen.ts", "client/src/screen/enemies.ts", "client/src/screen/belt.ts", "client/src/touchpad.ts"]
+}

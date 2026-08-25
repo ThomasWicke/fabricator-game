@@ -126,7 +126,7 @@ likely way somebody tries it for the first time.
 - [x] **S8 · The carried stack.** You can see what you're hauling: logs, blocks
       and berries pile up over your head as you gather, whip behind you when
       you run, and lob one by one into the machine when you get home.
-- [ ] **S2 · Tools.** Equip, swap, and holster fabricated tools. Still one
+- [x] **S2 · Tools.** Equip, swap, and holster fabricated tools. Still one
       permanently-attached tool per player — the pack exists now, so a tool
       should be an item in it rather than a property of the person.
 - [x] **S3 · Weapons.** Fabricated weapons with a swing arc, damage, reach and
@@ -142,7 +142,7 @@ likely way somebody tries it for the first time.
 
 ## Reasons to go somewhere
 
-- [ ] **S9 · A material per hostile biome.** Bogiron gates the bog and gates it
+- [x] **S9 · A material per hostile biome.** Bogiron gates the bog and gates it
       well. Nothing gates the snow, the bare rock or the desert, so the map's
       edges are scenery. One material each, wanted by something worth building.
 - [ ] **S10 · Co-op verbs.** Actions with no single-player equivalent: carrying
@@ -152,11 +152,11 @@ likely way somebody tries it for the first time.
 
 ## Housekeeping
 
-- [ ] **H1 · Eval the new primitives.** `scripts/eval-compiler.ts` predates
+- [x] **H1 · Eval the new primitives.** `scripts/eval-compiler.ts` predates
       weapon/storage/nourish/ward. Canned blueprints asserting that a spear
       compiles to a weapon and a silo to storage would catch prompt
       regressions — costs real API calls to run, so it stays opt-in.
-- [ ] **H2 · Design deletion.** The store only ever grows, capped at 500. There
+- [x] **H2 · Design deletion.** The store only ever grows, capped at 500. There
       is no way to throw out a failed experiment.
 
 ## Enemies — stress-free by design

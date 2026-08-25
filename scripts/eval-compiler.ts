@@ -2,8 +2,13 @@
 // with a configured key, asserts the design invariants, and prints a
 // comparison table with measured token usage (doubles as the cost meter).
 //
+// This is the ONE script here that spends money — 22 pairs per configured
+// provider, sequential. Everything else under scripts/ is free and runs in
+// CI; this is opt-in, on purpose.
+//
 // Run:  npx tsx scripts/eval-compiler.ts
 // Keys: GOOGLE_API_KEY / ANTHROPIC_API_KEY env vars (reads .env too).
+//       A provider with no key is skipped, so it costs nothing by accident.
 // Throttles itself (sequential, 6s apart) to stay under Gemini free-tier
 // rate limits. No sketch images in the canned set — the name is the strong
 // semantic signal; sketch interpretation is evaluated interactively in-game.
@@ -108,6 +113,80 @@ const PAIRS: Pair[] = [
       s.emission?.kind === "smoke" && s.locomotion.type !== "none"
         ? ok
         : "expected smoking vehicle",
+  },
+  // ── weapon / storage / nourish / ward ──
+  //
+  // These four shipped after this eval was written, so nothing was checking
+  // that the prompt actually reached them. Each pair below is one primitive
+  // the compiler must select, plus the two ways it most plausibly gets it
+  // wrong: reaching for a primitive that was not asked for, and confusing a
+  // mining pick for a weapon.
+  {
+    name: "Iron Spear",
+    intent: "For fighting off animals.",
+    check: (s) =>
+      s.weapon && s.category === "tool"
+        ? s.weapon.reach >= 40
+          ? ok
+          : `weapon reach ${s.weapon.reach} is shorter than bare hands`
+        : "expected a handheld weapon",
+  },
+  {
+    name: "Heavy Maul",
+    intent: "A huge two-handed hammer. Slow, and it hits like a falling tree.",
+    check: (s) =>
+      !s.weapon
+        ? "expected a weapon"
+        : s.weapon.damage >= 14 && s.weapon.cooldown >= 0.5
+          ? ok
+          : `expected slow and heavy, got ${s.weapon.damage} dmg / ${s.weapon.cooldown}s`,
+  },
+  {
+    name: "Grain Silo",
+    check: (s) => (s.storage && s.storage.capacity >= 4 ? ok : "expected storage capacity"),
+  },
+  {
+    name: "Pack Frame",
+    intent: "A harness that lets you carry far more than your arms can.",
+    check: (s) =>
+      s.category === "tool" && s.storage ? ok : "expected a tool that enlarges the pack",
+  },
+  {
+    name: "Greenhouse",
+    intent: "Grows food under glass.",
+    check: (s) =>
+      s.nourish && s.category === "structure" ? ok : "expected a food-producing structure",
+  },
+  {
+    name: "Scarecrow",
+    intent: "Keeps the creatures off the crops.",
+    check: (s) =>
+      s.ward && s.category === "structure" ? ok : "expected a warding structure",
+  },
+  // The discipline cases. Most things have none of these primitives, and a
+  // compiler that reaches for them anyway inflates every bill in the game.
+  {
+    name: "Wooden Bench",
+    intent: "Somewhere to sit.",
+    check: (s) =>
+      s.weapon || s.nourish || s.ward || s.harvest
+        ? `a bench should have no capabilities, got ${
+            [
+              s.weapon && "weapon",
+              s.nourish && "nourish",
+              s.ward && "ward",
+              s.harvest && "harvest",
+            ]
+              .filter(Boolean)
+              .join("+")
+          }`
+        : ok,
+  },
+  {
+    name: "Mining Pick",
+    intent: "For breaking ore out of stone.",
+    check: (s) =>
+      s.weapon ? "a pick is a harvester, not a weapon" : s.harvest ? ok : "expected harvest",
   },
 ];
 
