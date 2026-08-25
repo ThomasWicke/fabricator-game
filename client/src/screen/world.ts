@@ -123,10 +123,47 @@ const HAND_RATE = 0.8;
 const HAND_MATERIALS: CarryType[] = ["wood", "stone", "food"];
 /** You land with enough to build the first harvester and nothing else. Every
  *  exotic starts at zero by construction — they exist to be walked to. */
+/**
+ * The Fabricator's repair tiers — the story spine's spine.
+ *
+ * The machine survived the crash damaged. Each tier is a firmware subsystem
+ * brought back online with a material bill, and each unlocks a CATEGORY the
+ * machine can build. Designs can be drawn at any tier — dreaming is free —
+ * but the printer cannot print what its damaged subsystems cannot shape,
+ * which staggers the vocabulary into unlock beats and makes early gathering
+ * literally working for the company.
+ */
+export const FAB_TIERS: {
+  name: string;
+  /** Bill to REACH this tier (index 0 is the crash state, no bill). */
+  cost: Partial<Record<MaterialType, number>>;
+  /** The firmware's line when the subsystem comes online. */
+  line: string;
+}[] = [
+  { name: "Field Provisioning", cost: {}, line: "" },
+  {
+    name: "Claims Infrastructure",
+    cost: { wood: 20, stone: 10 },
+    line: "Claims Infrastructure online. Structures may now be sited. VibeTech thanks you for your initiative, Privateer.",
+  },
+  {
+    name: "Logistics",
+    cost: { wood: 45, stone: 30 },
+    line: "Logistics online. Vehicular fabrication restored. Do not use company assets for leisure.",
+  },
+  {
+    name: "Communications",
+    cost: { bogiron: 20, glass: 15 },
+    line: "Communications partially restored. The uplink array remains beyond my current capabilities. We will discuss this.",
+  },
+];
+
 const STARTING_STOCK: Record<MaterialType, number> = {
   ...(Object.fromEntries(MATERIALS.map((m) => [m, 0])) as Record<MaterialType, number>),
-  wood: 25,
-  stone: 15,
+  // Enough for a first hand tool and NOT enough for the first repair — the
+  // opening minutes are bare-hands salvage on the company's clock, by design.
+  wood: 12,
+  stone: 6,
 };
 const PLAYER_SCALE = 0.45;
 /** Pines carry 8px of transparent padding below the trunk in every size
@@ -598,6 +635,13 @@ export class WorldScene extends Phaser.Scene {
   /** Banked food. Separate from the stockpile on purpose: food is eaten, not
    *  spent — it must never leak into costs or canAfford. */
   pantry = 0;
+  /** Repair state of the machine, 0..FAB_TIERS.length-1. */
+  fabTier = 0;
+  onTier: ((tier: number) => void) | null = null;
+  /** Firmware one-liners — the shell renders them however it likes. */
+  onFirmware: ((line: string) => void) | null = null;
+  /** Once-per-session interjection memory. */
+  private firmwareSaid = new Set<string>();
   /** Cheat-console offset into the day cycle — /day and /night set it. */
   private clockShiftMs = 0;
   onPantry: ((count: number) => void) | null = null;
@@ -1504,9 +1548,45 @@ export class WorldScene extends Phaser.Scene {
    * and is charged when they put it down — so wandering off with one, or
    * changing your mind about where the smelter goes, costs nothing.
    */
+  /** What the damaged machine can currently print. */
+  tierAllows(category: FabricatedSpec["category"]): boolean {
+    if (category === "tool") return true;
+    if (category === "structure") return this.fabTier >= 1;
+    return this.fabTier >= 2; // vehicles
+  }
+
+  /** The tier a category needs, for lock labels. */
+  tierFor(category: FabricatedSpec["category"]): number {
+    return category === "tool" ? 0 : category === "structure" ? 1 : 2;
+  }
+
+  /** Pay the next tier's bill and bring the subsystem online. */
+  repairFabricator(): { ok: boolean; reason?: string } {
+    const next = FAB_TIERS[this.fabTier + 1];
+    if (!next) return { ok: false, reason: "Nothing left to repair." };
+    const bill = { ...(Object.fromEntries(MATERIALS.map((m) => [m, 0])) as Record<MaterialType, number>), ...next.cost, total: 0 };
+    if (!canAfford(this.stockpile, bill as FabricatedSpec["cost"])) {
+      return { ok: false, reason: `Needs ${formatCost(bill as FabricatedSpec["cost"])}.` };
+    }
+    for (const m of MATERIALS) this.stockpile[m] -= bill[m];
+    this.onStockpile?.(this.stockpile);
+    this.fabTier += 1;
+    this.onTier?.(this.fabTier);
+    this.onFirmware?.(next.line);
+    this.materializeFlash(this.pad.x, this.pad.y, 70);
+    this.markDirty();
+    return { ok: true };
+  }
+
   tryFabricate(design: PlaceableDesign, bySlot: Slot): FabricateOutcome {
     this.clearFabricating();
     const { spec } = design;
+    if (!this.tierAllows(spec.category)) {
+      return {
+        ok: false,
+        reason: `The ${FAB_TIERS[this.tierFor(spec.category)].name} subsystem is still damaged — repair the Fabricator first.`,
+      };
+    }
     if (!canAfford(this.stockpile, spec.cost)) {
       return {
         ok: false,
@@ -2007,6 +2087,25 @@ export class WorldScene extends Phaser.Scene {
 
     this.vehicles.push(vehicle);
     this.materializeFlash(x, y, Math.max(w, h));
+
+    // Firmware interjections — the arc, audible. Once per session each.
+    const say = (key: string, line: string) => {
+      if (this.firmwareSaid.has(key)) return;
+      this.firmwareSaid.add(key);
+      this.onFirmware?.(line);
+    };
+    if (spec.nourish) {
+      say("farm", "A farm, Privateer? The contract specifies extraction, not… agriculture. I will file this under morale.");
+    }
+    if (spec.production) {
+      say("converter", "Automated conversion online. Quarterly numbers: strong. VibeTech sees you, Privateer.");
+    }
+    if (spec.ward) {
+      say("ward", "A perimeter. Prudent. Assets that survive the night depreciate slower.");
+    }
+    if (spec.emission?.kind === "light" && spec.category === "structure") {
+      say("lamp", "Lighting, beyond operational necessity. Noted without comment. Mostly.");
+    }
   }
 
   /** One emitter per emission kind. Rate and scale carry the intensity.
@@ -2821,6 +2920,7 @@ export class WorldScene extends Phaser.Scene {
       seed: this.seedText,
       stockpile: { ...this.stockpile },
       pantry: this.pantry,
+      fabTier: this.fabTier,
       harvested: [...this.harvestDeltas.values()],
       built: [
         ...this.vehicles.map((v) => ({
@@ -2877,6 +2977,11 @@ export class WorldScene extends Phaser.Scene {
     };
     this.pantry = snap.pantry ?? 0;
     this.onPantry?.(this.pantry);
+    // Worlds saved before tiers existed were played with everything
+    // unlocked; restoring them at tier 0 would lock buildings their players
+    // already own. They resume fully repaired.
+    this.fabTier = snap.fabTier ?? FAB_TIERS.length - 1;
+    this.onTier?.(this.fabTier);
     this.onStockpile?.(this.stockpile);
 
     for (const h of snap.harvested) {

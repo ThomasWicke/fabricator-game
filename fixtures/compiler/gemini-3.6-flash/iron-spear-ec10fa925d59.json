@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "name": "Iron Spear",
+    "intent": "For fighting off animals.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:07:47.246Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Iron Spear",
+    "size": {
+      "w": 40,
+      "h": 24
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "VibeTech Security Protocol 4B approves extended-range point defense against non-union indigenous fauna.",
+    "weapon": {
+      "damage": 18,
+      "reach": 110,
+      "cooldown": 0.65
+    }
+  },
+  "usage": {
+    "inputTokens": 1411,
+    "outputTokens": 112
+  }
+}

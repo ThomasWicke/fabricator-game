@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Car",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:11:00.126Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Standard Four-Wheeler",
+    "size": {
+      "w": 74,
+      "h": 42
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 180,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 0.9,
+        "swamp": 0.1,
+        "rock": 0.35,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "A classic design for a classic KPI-driven extraction."
+  },
+  "usage": {
+    "inputTokens": 1399,
+    "outputTokens": 175
+  }
+}

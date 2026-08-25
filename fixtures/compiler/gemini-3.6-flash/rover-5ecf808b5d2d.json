@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Rover",
+    "hasSketch": true,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:10:07.002Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Legged Rover",
+    "size": {
+      "w": 84,
+      "h": 68
+    },
+    "locomotion": {
+      "type": "legs",
+      "speed": 115,
+      "terrainModifiers": {
+        "grass": 0.65,
+        "sand": 0.55,
+        "swamp": 0.75,
+        "rock": 0.85,
+        "snow": 0.6,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Articulated quad-leg chassis designed to navigate high-relief geology where standard wheels fail corporate deadlines.",
+    "storage": {
+      "capacity": 16
+    }
+  },
+  "usage": {
+    "inputTokens": 2493,
+    "outputTokens": 115
+  }
+}

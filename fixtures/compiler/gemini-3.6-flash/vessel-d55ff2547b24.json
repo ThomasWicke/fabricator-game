@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Vessel",
+    "hasSketch": true,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:10:22.292Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Survey Vessel",
+    "size": {
+      "w": 88,
+      "h": 64
+    },
+    "locomotion": {
+      "type": "float",
+      "speed": 140,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0.1,
+        "swamp": 0.8,
+        "rock": 0,
+        "snow": 0,
+        "water": 0.95
+      }
+    },
+    "seats": 1,
+    "flavor": "A rudimentary wind-driven surface craft suitable for crossing aqueous hazard zones without damaging company bootwear.",
+    "storage": {
+      "capacity": 16
+    }
+  },
+  "usage": {
+    "inputTokens": 2494,
+    "outputTokens": 106
+  }
+}

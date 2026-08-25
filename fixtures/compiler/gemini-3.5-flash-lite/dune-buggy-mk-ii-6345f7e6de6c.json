@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "name": "Dune Buggy Mk II",
+    "intent": "The same buggy, just faster.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:12:06.027Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Dune Buggy Mk II",
+    "size": {
+      "w": 80,
+      "h": 45
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 310,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 1,
+        "swamp": 0.1,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Slightly more terminal velocity, exactly the same disregard for suspension limits."
+  },
+  "usage": {
+    "inputTokens": 1558,
+    "outputTokens": 175
+  }
+}

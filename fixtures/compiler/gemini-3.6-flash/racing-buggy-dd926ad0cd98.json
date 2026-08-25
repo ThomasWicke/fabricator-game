@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "name": "Racing Buggy",
+    "intent": "As fast as possible on firm ground.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:04:51.373Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Racing Buggy",
+    "size": {
+      "w": 76,
+      "h": 44
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 320,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 0.95,
+        "swamp": 0.05,
+        "rock": 0.35,
+        "snow": 0.15,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "VibeTech high-velocity chassis compiled. Speed metrics satisfy transit KPIs, provided you are driving toward resource deposits."
+  },
+  "usage": {
+    "inputTokens": 1415,
+    "outputTokens": 187
+  }
+}

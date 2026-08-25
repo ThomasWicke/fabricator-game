@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Mud Raft",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:05:09.714Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Mud Raft",
+    "size": {
+      "w": 76,
+      "h": 48
+    },
+    "locomotion": {
+      "type": "float",
+      "speed": 90,
+      "terrainModifiers": {
+        "grass": 0.1,
+        "sand": 0.2,
+        "swamp": 0.95,
+        "rock": 0,
+        "snow": 0.1,
+        "water": 0.85
+      }
+    },
+    "seats": 1,
+    "flavor": "A makeshift floatation frame optimized for shallow mire navigation. VibeTech marine standards do not technically classify mud as navigable water, yet here we are."
+  },
+  "usage": {
+    "inputTokens": 1401,
+    "outputTokens": 114
+  }
+}

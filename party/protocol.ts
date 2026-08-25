@@ -297,6 +297,9 @@ export type WorldSnapshot = {
   /** Banked food — eaten, never spent, so it lives beside the stockpile
    *  rather than in it. Absent in older saves. */
   pantry?: number;
+  /** Fabricator repair tier. Absent in pre-tier saves, which restore fully
+   *  repaired — those worlds were played with everything unlocked. */
+  fabTier?: number;
   /** Only nodes that have been touched; remaining 0 = harvested out. */
   harvested: { col: number; row: number; remaining: number }[];
   /** Manufactured objects, at their current position (vehicles get driven). */

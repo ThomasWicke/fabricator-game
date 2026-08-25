@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Watchtower",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:11:21.532Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Watchtower",
+    "size": {
+      "w": 64,
+      "h": 120
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "VibeTech security protocols remind Privateer that standing still does not fulfill extraction quotas, but seeing things coming before they eat you is a compliant secondary metric.",
+    "emission": {
+      "kind": "light",
+      "intensity": 0.8
+    },
+    "ward": {
+      "radius": 180
+    }
+  },
+  "usage": {
+    "inputTokens": 1400,
+    "outputTokens": 221
+  }
+}

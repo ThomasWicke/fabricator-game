@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "name": "Logging Truck",
+    "intent": "Drives around cutting down trees.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:11:31.022Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Logging Truck",
+    "size": {
+      "w": 140,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 180,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 0.8,
+        "swamp": 0.1,
+        "rock": 0.4,
+        "snow": 0.25,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "VibeTech logging assets ensure maximum yield per acre, Privateer. Do try to avoid crashing into the inventory.",
+    "harvest": {
+      "rate": 2.5,
+      "materials": [
+        "wood"
+      ]
+    },
+    "storage": {
+      "capacity": 30
+    }
+  },
+  "usage": {
+    "inputTokens": 1413,
+    "outputTokens": 236
+  }
+}

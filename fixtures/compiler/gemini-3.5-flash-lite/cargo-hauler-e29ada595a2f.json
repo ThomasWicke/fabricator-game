@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Cargo Hauler",
+    "intent": "Slow but big, for moving resources.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:11:13.815Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Cargo Hauler",
+    "size": {
+      "w": 140,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 60,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.8,
+        "swamp": 0.1,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "VibeTech logistical units remind Privateer that mass movement correlates directly with quarterly throughput KPIs.",
+    "storage": {
+      "capacity": 40
+    }
+  },
+  "usage": {
+    "inputTokens": 1415,
+    "outputTokens": 196
+  }
+}

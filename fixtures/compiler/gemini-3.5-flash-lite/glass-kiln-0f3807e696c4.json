@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "name": "Glass Kiln",
+    "intent": "Bakes stone into desert glass so nobody has to walk there.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:11:54.246Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Glass Kiln",
+    "size": {
+      "w": 96,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "VibeTech notes that delegation beats perambulation every time, Privateer. Excellent savings on boot leather.",
+    "emission": {
+      "kind": "smoke",
+      "intensity": 0.8
+    },
+    "production": {
+      "from": "stone",
+      "to": "glass",
+      "rate": 1.5
+    }
+  },
+  "usage": {
+    "inputTokens": 1420,
+    "outputTokens": 228
+  }
+}

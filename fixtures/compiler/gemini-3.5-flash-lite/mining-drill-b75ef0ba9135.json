@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "name": "Mining Drill",
+    "intent": "A handheld drill for extracting ore from rock.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:11:28.658Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Mining Drill",
+    "size": {
+      "w": 36,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 1
+      }
+    },
+    "seats": 0,
+    "flavor": "VibeTech reminds Privateer that manual subterranean excavation directly correlates with quarterly quota fulfillment.",
+    "harvest": {
+      "rate": 2.5,
+      "materials": [
+        "stone",
+        "basalt"
+      ]
+    }
+  },
+  "usage": {
+    "inputTokens": 1415,
+    "outputTokens": 213
+  }
+}

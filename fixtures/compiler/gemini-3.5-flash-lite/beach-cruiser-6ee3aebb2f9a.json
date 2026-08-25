@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Beach Cruiser",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:11:19.105Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Beach Cruiser",
+    "size": {
+      "w": 75,
+      "h": 45
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 180,
+      "terrainModifiers": {
+        "grass": 0.8,
+        "sand": 1,
+        "swamp": 0.1,
+        "rock": 0.4,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "VibeTech notes your leisure-adjacent priorities, Privateer, but acknowledges that looking relaxed while prospecting still meets quarterly utilization KPIs."
+  },
+  "usage": {
+    "inputTokens": 1400,
+    "outputTokens": 186
+  }
+}

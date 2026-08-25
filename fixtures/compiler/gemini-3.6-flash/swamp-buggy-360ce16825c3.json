@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "name": "Swamp Buggy",
+    "intent": "A vehicle for crossing swamps.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:04:06.181Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Swamp Buggy",
+    "size": {
+      "w": 84,
+      "h": 52
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 130,
+      "terrainModifiers": {
+        "grass": 0.75,
+        "sand": 0.75,
+        "swamp": 0.85,
+        "rock": 0.4,
+        "snow": 0.6,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Equipped with oversized low-pressure pneumatics, allowing optimal torque and minimal corporate liability in liquid mud."
+  },
+  "usage": {
+    "inputTokens": 1414,
+    "outputTokens": 108
+  }
+}

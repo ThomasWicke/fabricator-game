@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Pack Frame",
+    "intent": "A harness that lets you carry far more than your arms can.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:08:24.940Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Pack Frame",
+    "size": {
+      "w": 34,
+      "h": 38
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "Ergonomically engineered to transfer logistical strain directly to the Privateer's lumbar region for optimal shift yield.",
+    "storage": {
+      "capacity": 18
+    }
+  },
+  "usage": {
+    "inputTokens": 1419,
+    "outputTokens": 100
+  }
+}

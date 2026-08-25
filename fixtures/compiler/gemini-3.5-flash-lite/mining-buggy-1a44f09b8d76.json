@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "name": "Mining Buggy",
+    "intent": "Bolt a stone drill onto the buggy.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:12:08.106Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Mining Buggy",
+    "size": {
+      "w": 80,
+      "h": 45
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 220,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 1,
+        "swamp": 0.1,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Extracts minerals with high-speed enthusiasm, Privateer.",
+    "harvest": {
+      "rate": 1.5,
+      "materials": [
+        "stone",
+        "basalt"
+      ]
+    }
+  },
+  "usage": {
+    "inputTokens": 1556,
+    "outputTokens": 110
+  }
+}

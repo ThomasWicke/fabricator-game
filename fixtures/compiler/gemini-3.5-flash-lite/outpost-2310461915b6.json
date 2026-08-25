@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "name": "Outpost",
+    "hasSketch": true,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:12:10.574Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "VibeTech Perimeter Outpost",
+    "size": {
+      "w": 48,
+      "h": 120
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 1
+      }
+    },
+    "seats": 0,
+    "flavor": "A stout company-standard sentinel tower to remind the local fauna that you hold the lease.",
+    "emission": {
+      "kind": "light",
+      "intensity": 0.8
+    },
+    "storage": {
+      "capacity": 20
+    },
+    "ward": {
+      "radius": 140
+    }
+  },
+  "usage": {
+    "inputTokens": 2494,
+    "outputTokens": 241
+  }
+}

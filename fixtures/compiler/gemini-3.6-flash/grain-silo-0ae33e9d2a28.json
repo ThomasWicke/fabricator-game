@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Grain Silo",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:08:18.639Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Grain Silo",
+    "size": {
+      "w": 64,
+      "h": 96
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "A high-capacity vertical container. Storing food yields keeps biomass viable, though corporate prefers immediate export.",
+    "storage": {
+      "capacity": 36
+    }
+  },
+  "usage": {
+    "inputTokens": 1401,
+    "outputTokens": 99
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Steam Tractor",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:07:39.372Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Steam Tractor",
+    "size": {
+      "w": 88,
+      "h": 54
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 115,
+      "terrainModifiers": {
+        "grass": 0.8,
+        "sand": 0.7,
+        "swamp": 0.5,
+        "rock": 0.7,
+        "snow": 0.6,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "High-torque external combustion architecture. It lacks finesse, Privateer, but it moves heavy cargo without complaining to HR.",
+    "emission": {
+      "kind": "steam",
+      "intensity": 0.75
+    },
+    "storage": {
+      "capacity": 24
+    }
+  },
+  "usage": {
+    "inputTokens": 1400,
+    "outputTokens": 225
+  }
+}

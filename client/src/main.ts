@@ -52,13 +52,14 @@ function renderLanding() {
     <div class="title-screen" id="title-screen">
       <div class="title-inner">
         <div class="wordmark">
-          <span class="wm-small">UNIVERSAL</span>
-          <span class="wm-big">FABRICATOR</span>
+          <span class="wm-small">VIBETECH</span>
+          <span class="wm-big">PRIVATEER</span>
           <span class="wm-rule"></span>
         </div>
-        <p class="tagline">Sketch an impossible machine on your phone. The
-          Fabricator compiles it into something that actually works — then you
-          have to go out and afford it.</p>
+        <p class="tagline">You crashed on the planet you were hired to strip.
+          Sketch impossible machines on your phone; the company's Fabricator
+          compiles them into things that actually work — then decide who you
+          are building them for.</p>
         <div class="plates">
           ${phoneFirst ? joinCard + hostCard : hostCard + joinCard}
         </div>

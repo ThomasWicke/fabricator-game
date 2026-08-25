@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "name": "Steam Tractor",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:11:36.150Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "VibeTech Heavy Steam Tractor",
+    "size": {
+      "w": 120,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 85,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 0.85,
+        "swamp": 0.1,
+        "rock": 0.4,
+        "snow": 0.15,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "External combustion on an untamed world suggests a delightful commitment to both horsepower and atmospheric degradation, Privateer.",
+    "emission": {
+      "kind": "steam",
+      "intensity": 0.8
+    },
+    "harvest": {
+      "rate": 1.2,
+      "materials": [
+        "wood",
+        "stone"
+      ]
+    },
+    "storage": {
+      "capacity": 25
+    }
+  },
+  "usage": {
+    "inputTokens": 1400,
+    "outputTokens": 268
+  }
+}

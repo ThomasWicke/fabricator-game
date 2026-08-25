@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Greenhouse",
+    "intent": "Grows food under glass.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:08:32.151Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Greenhouse",
+    "size": {
+      "w": 88,
+      "h": 72
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "Controlled-environment ag-unit. Guarantees yield compliance regardless of local climate hostility.",
+    "nourish": {
+      "rate": 8
+    }
+  },
+  "usage": {
+    "inputTokens": 1412,
+    "outputTokens": 95
+  }
+}

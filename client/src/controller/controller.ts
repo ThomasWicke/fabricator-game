@@ -61,6 +61,12 @@ export function startController(code: string) {
     lastBelt = b;
   };
 
+  /** The machine's repair state, from the screen. Default: fully repaired,
+   *  so pre-tier rooms behave as before the feature existed. */
+  let fabTier = 3;
+  let fabNext: { name: string; cost: Record<string, number> } | null = null;
+  let applyFabTier: () => void = () => {};
+
   /** Standing at the Fabricator? Lives at controller scope because the world
    *  reports it while the lobby may still be up, before the pad view exists. */
   let atFabricator = false;
@@ -245,6 +251,7 @@ export function startController(code: string) {
         </div>
         <div class="fab-hint" id="fab-hint"></div>
         <div class="fabricating-note hidden" id="fabricating-note">FABRICATING…</div>
+        <button class="repair-strip hidden" id="repair-strip"></button>
         <div class="designs-overlay hidden" id="designs-overlay">
           <div class="designs-head">
             <h2>Design store</h2>
@@ -355,6 +362,9 @@ export function startController(code: string) {
       rime: "❄️",
     };
 
+    const tierAllowsCat = (cat: string) =>
+      cat === "tool" ? true : cat === "structure" ? fabTier >= 1 : fabTier >= 2;
+
     const costMarkup = (cost: Record<MaterialType, number>) =>
       MATERIALS.filter((m) => cost[m] > 0)
         .map((m) => {
@@ -409,8 +419,8 @@ export function startController(code: string) {
               </div>
               <div class="drow-actions">
                 <button data-build="${d.id}" ${
-                  affordable && atFabricator ? "" : "disabled"
-                }>${label}</button>
+                  affordable && atFabricator && tierAllowsCat(d.category) ? "" : "disabled"
+                }>${tierAllowsCat(d.category) ? label : "MACHINE DAMAGED"}</button>
                 <button class="ddiscard modify" data-modify="${d.id}" aria-label="Modify" ${
                   atFabricator ? "" : "disabled"
                 }>✎</button>
@@ -526,6 +536,27 @@ export function startController(code: string) {
       requestAnimationFrame(pad.fit);
     };
 
+    const repairStrip = document.getElementById("repair-strip") as HTMLButtonElement;
+    applyFabTier = () => {
+      if (!fabNext) {
+        repairStrip.classList.add("hidden");
+        return;
+      }
+      const bill = Object.entries(fabNext.cost)
+        .filter(([, n]) => n > 0)
+        .map(([m, n]) => `${n} ${m}`)
+        .join(" · ");
+      repairStrip.textContent = `⚠ REPAIR ${fabNext.name.toUpperCase()} — ${bill}`;
+      repairStrip.classList.toggle("hidden", !atFabricator);
+      repairStrip.disabled = !atFabricator;
+    };
+    applyFabTier();
+
+    repairStrip.addEventListener("click", () => {
+      conn.send({ scope: "ui", type: "repair" });
+      if ("vibrate" in navigator) navigator.vibrate(20);
+    });
+
     blueprintBtn.addEventListener("click", () => {
       if (blueprintBtn.disabled) return;
       clearModify();
@@ -631,6 +662,12 @@ export function startController(code: string) {
         } else if (msg.type === "design-removed") {
           designs.delete(String((msg as unknown as { designId: string }).designId));
           renderDesigns();
+        } else if (msg.type === "fab-tier") {
+          const m = msg as unknown as { tier: number; next: { name: string; cost: Record<string, number> } | null };
+          fabTier = m.tier;
+          fabNext = m.next;
+          applyFabTier();
+          renderDesigns();
         } else if (msg.type === "belt") {
           const b = msg as unknown as BeltMsg;
           if (b.slot === slot) applyBelt(b);
@@ -639,6 +676,7 @@ export function startController(code: string) {
           if (m.slot === slot && m.inRange !== atFabricator) {
             atFabricator = m.inRange;
             applyFabState();
+            applyFabTier();
             // A nudge on arrival: the phone can suddenly do something it
             // couldn't a moment ago, and you're looking at the TV, not at it.
             if (m.inRange && "vibrate" in navigator) navigator.vibrate([15, 35, 15]);

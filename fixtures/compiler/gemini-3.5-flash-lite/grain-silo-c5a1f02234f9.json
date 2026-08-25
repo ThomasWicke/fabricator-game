@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Grain Silo",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:11:43.226Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Grain Silo",
+    "size": {
+      "w": 80,
+      "h": 120
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "A towering monument to caloric surplus, because starving while hitting KPIs is a filing error VibeTech prefers to avoid.",
+    "storage": {
+      "capacity": 40
+    }
+  },
+  "usage": {
+    "inputTokens": 1401,
+    "outputTokens": 187
+  }
+}

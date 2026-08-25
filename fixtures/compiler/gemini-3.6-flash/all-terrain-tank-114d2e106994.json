@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "name": "All-Terrain Tank",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:06:14.202Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "All-Terrain Tank",
+    "size": {
+      "w": 110,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 130,
+      "terrainModifiers": {
+        "grass": 0.8,
+        "sand": 0.8,
+        "swamp": 0.55,
+        "rock": 0.7,
+        "snow": 0.7,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Heavy continuous treads and high-yield ballistics ensure corporate land claims remain completely uncontested.",
+    "emission": {
+      "kind": "smoke",
+      "intensity": 0.4
+    },
+    "weapon": {
+      "damage": 32,
+      "reach": 140,
+      "cooldown": 1.6
+    }
+  },
+  "usage": {
+    "inputTokens": 1402,
+    "outputTokens": 243
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Lantern",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:07:32.088Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Lantern",
+    "size": {
+      "w": 32,
+      "h": 36
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "Standard-issue portable illumination asset. Dark sectors do not generate shareholder yield, Privateer.",
+    "emission": {
+      "kind": "light",
+      "intensity": 0.85
+    }
+  },
+  "usage": {
+    "inputTokens": 1399,
+    "outputTokens": 189
+  }
+}

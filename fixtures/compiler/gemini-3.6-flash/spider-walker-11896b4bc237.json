@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Spider Walker",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:05:19.418Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Spider Walker",
+    "size": {
+      "w": 80,
+      "h": 72
+    },
+    "locomotion": {
+      "type": "legs",
+      "speed": 140,
+      "terrainModifiers": {
+        "grass": 0.85,
+        "sand": 0.8,
+        "swamp": 0.75,
+        "rock": 0.9,
+        "snow": 0.7,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Octo-articulated chassis delivers superior stability across high-hazard sub-biomes, perfectly aligned with VibeTech terrain-conquest targets."
+  },
+  "usage": {
+    "inputTokens": 1400,
+    "outputTokens": 114
+  }
+}

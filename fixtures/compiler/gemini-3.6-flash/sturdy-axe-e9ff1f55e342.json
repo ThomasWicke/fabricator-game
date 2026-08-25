@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Sturdy Axe",
+    "intent": "For chopping trees.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:06:35.514Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Sturdy Axe",
+    "size": {
+      "w": 32,
+      "h": 32
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "The VibeTech Silviculture Tool™ efficiently converts indigenous flora into actionable lumber assets.",
+    "harvest": {
+      "rate": 1.6,
+      "materials": [
+        "wood"
+      ]
+    }
+  },
+  "usage": {
+    "inputTokens": 1411,
+    "outputTokens": 102
+  }
+}

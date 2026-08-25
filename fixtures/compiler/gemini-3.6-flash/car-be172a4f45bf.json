@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Car",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:03:59.211Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Car",
+    "size": {
+      "w": 80,
+      "h": 45
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 200,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 0.8,
+        "swamp": 0.1,
+        "rock": 0.35,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 2,
+    "flavor": "Standard personnel transport unit. Operates with acceptable efficiency on flat terrain, though off-road performance loss remains non-refundable.",
+    "storage": {
+      "capacity": 12
+    }
+  },
+  "usage": {
+    "inputTokens": 1399,
+    "outputTokens": 115
+  }
+}

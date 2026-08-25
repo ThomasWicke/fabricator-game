@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "name": "All-Terrain Tank",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:11:23.897Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "All-Terrain Tank",
+    "size": {
+      "w": 140,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 160,
+      "terrainModifiers": {
+        "grass": 0.7,
+        "sand": 0.7,
+        "swamp": 0.5,
+        "rock": 0.7,
+        "snow": 0.7,
+        "water": 0
+      }
+    },
+    "seats": 2,
+    "flavor": "VibeTech heavy treads ensure maximum extraction compliance, provided you do not mistake a lake for a paved shortcut, Privateer.",
+    "emission": {
+      "kind": "smoke",
+      "intensity": 0.6
+    },
+    "harvest": {
+      "rate": 2,
+      "materials": [
+        "stone",
+        "basalt"
+      ]
+    },
+    "weapon": {
+      "damage": 30,
+      "reach": 90,
+      "cooldown": 1.2
+    }
+  },
+  "usage": {
+    "inputTokens": 1402,
+    "outputTokens": 289
+  }
+}

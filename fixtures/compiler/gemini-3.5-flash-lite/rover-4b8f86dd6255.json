@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Rover",
+    "hasSketch": true,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T19:12:01.321Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Quad-Pedal All-Terrain Rover",
+    "size": {
+      "w": 90,
+      "h": 60
+    },
+    "locomotion": {
+      "type": "legs",
+      "speed": 85,
+      "terrainModifiers": {
+        "grass": 0.7,
+        "sand": 0.6,
+        "swamp": 0.65,
+        "rock": 0.8,
+        "snow": 0.6,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "VibeTech notes that biological-mimicry locomotion is inefficient compared to treads, but concedes its superior purchase on jagged basalt formations."
+  },
+  "usage": {
+    "inputTokens": 2493,
+    "outputTokens": 192
+  }
+}

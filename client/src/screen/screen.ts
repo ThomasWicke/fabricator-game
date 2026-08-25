@@ -23,7 +23,7 @@ import { keepScreenAwake } from "../wake-lock";
 import { startBackdrop } from "../backdrop";
 import { createSketchPad } from "../sketch";
 import { createTouchPad } from "../touchpad";
-import { WorldScene, type MinimapData, type PlaceableDesign } from "./world";
+import { FAB_TIERS, WorldScene, type MinimapData, type PlaceableDesign } from "./world";
 import { CHUNK_COLS, CHUNK_ROWS, chunkOfHex } from "./chunks";
 import {
   BIOMES,
@@ -186,7 +186,7 @@ export function startScreen(code: string) {
       <div class="lobby" id="lobby-root">
         <div class="lobby-layer">
           <header class="lobby-head">
-            <span class="brand"><b>UNIVERSAL</b>FABRICATOR</span>
+            <span class="brand"><b>VIBETECH</b>PRIVATEER</span>
             <span class="spacer"></span>
             <span class="conn" id="conn-status">${connStatus}</span>
           </header>
@@ -208,7 +208,7 @@ export function startScreen(code: string) {
             </section>
 
             <section class="lobby-panel">
-              <div class="panel-title"><span class="step">2</span> The landing site</div>
+              <div class="panel-title"><span class="step">2</span> The claim</div>
               <div class="world-preview">
                 <canvas id="world-map" width="300" height="300"></canvas>
                 <div class="world-legend" id="world-legend"></div>
@@ -220,7 +220,7 @@ export function startScreen(code: string) {
           <footer class="lobby-foot">
             <span class="hint" id="start-hint"></span>
             <span class="spacer"></span>
-            <button class="primary" id="start-btn">START EXPEDITION</button>
+            <button class="primary" id="start-btn">OPEN THE CLAIM</button>
           </footer>
         </div>
       </div>
@@ -288,13 +288,13 @@ export function startScreen(code: string) {
           "<b>Untouched ground.</b> This is where you come down — and the map " +
           "keeps going in every direction, as far as you care to walk. " +
           `Room <b>${upperCode}</b> always leads back to this same planet.`;
-        startBtn.textContent = "START EXPEDITION";
+        startBtn.textContent = "OPEN THE CLAIM";
         return;
       }
       const snap = pendingSnapshot;
       const stock = snap.stockpile;
       noteEl.innerHTML =
-        `<b>Saved expedition found.</b> ${snap.built.length} object` +
+        `<b>An open claim's ledger found.</b> ${snap.built.length} object` +
         `${snap.built.length === 1 ? "" : "s"} built, ` +
         `${snap.harvested.length} resource node` +
         `${snap.harvested.length === 1 ? "" : "s"} worked, ` +
@@ -306,7 +306,7 @@ export function startScreen(code: string) {
             .map((m) => `${Math.floor(stock[m] ?? 0)} ${m}`)
             .join(" · ") || "empty"
         }.`;
-      startBtn.textContent = "RESUME EXPEDITION";
+      startBtn.textContent = "REOPEN THE CLAIM";
     };
     onSnapshot();
 
@@ -407,8 +407,26 @@ export function startScreen(code: string) {
             </div>
           </div>
 
+          <div class="intro-overlay hidden" id="intro">
+            <div class="intro-card glass">
+              <h2>VIBETECH PRIVATEER · CLAIM ${upperCode}</h2>
+              <p>The contract was simple: assay the planet, transmit the claim,
+                 get paid. The landing was not. Your ship is scattered across
+                 three regions and the uplink went with it.</p>
+              <p>The Universal Fabricator™ survived — damaged, but running, and
+                 still very much on the company's side.</p>
+              <p class="fw">"Good news, Privateer: the asset survived. Refer to
+                 me as the asset. Directive one: stop bleeding. Directive two:
+                 ten units of timber — the company measures initiative."</p>
+              <p class="go">CLICK OR PRESS ANY KEY</p>
+            </div>
+          </div>
           <div class="fab-panel hidden" id="fab-panel">
             <div class="fab-sheet">
+              <div class="fab-repair hidden" id="fab-repair">
+                <span class="fr-text" id="fab-repair-text"></span>
+                <button id="fab-repair-btn">REPAIR</button>
+              </div>
               <header class="fab-head">
                 <span class="fab-who" id="fab-who">PLAYER 1</span>
                 <div class="fab-tabs">
@@ -628,6 +646,7 @@ export function startScreen(code: string) {
           // canAfford, not three comparisons: the hand-written version silently
           // stopped covering the bill the moment there were more materials.
           const afford = canAfford(s, c);
+          const tierOk = scene?.tierAllows(d.spec.category) ?? true;
           const art = designArtUrl(d);
           return `
             <div class="fab-row">
@@ -644,8 +663,12 @@ export function startScreen(code: string) {
                 <div class="f">${escapeHtml(d.spec.flavor)}</div>
               </div>
               <div class="row-actions">
-                <button data-build="${d.id}" ${afford ? "" : "disabled"}>${
-                  afford ? "BUILD" : "NEED MORE"
+                <button data-build="${d.id}" ${afford && tierOk ? "" : "disabled"}>${
+                  !tierOk
+                    ? `REQUIRES ${FAB_TIERS[scene!.tierFor(d.spec.category)].name.toUpperCase()}`
+                    : afford
+                      ? "BUILD"
+                      : "NEED MORE"
                 }</button>
                 <button class="discard modify" data-modify="${d.id}" title="Modify this design">✎</button>
                 <button class="discard" data-discard="${d.id}" title="Throw this design away">✕</button>
@@ -1019,7 +1042,7 @@ export function startScreen(code: string) {
       applyLayout();
     };
     worldScene.onSlotActivated = (slot) => {
-      toast(`<span class="lead">Player ${slot} joined the expedition.</span>`);
+      toast(`<span class="lead">Player ${slot} joined the claim.</span>`);
     };
 
     worldScene.onFabricatorRange = (slot, inRange) => {
@@ -1057,6 +1080,51 @@ export function startScreen(code: string) {
       // around every time you pick something up and put it down.
       carry.textContent = parts.length ? parts.join(" ") : "pack empty";
       carry.classList.toggle("full", load >= v.capacity - 0.01);
+    };
+
+    // ── the machine's repair state ──────────────────────────────
+    const repairEl = document.getElementById("fab-repair")!;
+    const repairText = document.getElementById("fab-repair-text")!;
+    const applyTier = (tier: number) => {
+      const next = FAB_TIERS[tier + 1];
+      repairEl.classList.toggle("hidden", !next);
+      if (next) {
+        const bill = MATERIALS.filter((m) => (next.cost[m] ?? 0) > 0)
+          .map((m) => `${next.cost[m]} ${m}`)
+          .join(" · ");
+        repairText.innerHTML =
+          `<b>${FAB_TIERS[tier].name}</b> online · damaged: <b>${next.name}</b> — ${bill}`;
+      }
+      renderFabList();
+      conn.send({ scope: "ui", type: "fab-tier", tier, next: next ? { name: next.name, cost: next.cost } : null });
+    };
+    worldScene.onTier = applyTier;
+    applyTier(worldScene.fabTier);
+
+    // The opening card, on a FRESH claim only — a resumed world already knows
+    // its own story, and repeating the crash would contradict the hut you
+    // built last session.
+    if (!pendingSnapshot) {
+      const intro = document.getElementById("intro")!;
+      intro.classList.remove("hidden");
+      worldScene.setUiOpen(true);
+      const dismiss = () => {
+        intro.classList.add("hidden");
+        worldScene.setUiOpen(false);
+        window.removeEventListener("keydown", dismiss, true);
+      };
+      intro.addEventListener("click", dismiss, { once: true });
+      window.addEventListener("keydown", dismiss, true);
+    }
+    document.getElementById("fab-repair-btn")!.addEventListener("click", () => {
+      const r = scene?.repairFabricator();
+      if (r && !r.ok && r.reason) toast(r.reason, true);
+    });
+
+    // Firmware speaks through its own toast style — the company voice must
+    // not look like a system message.
+    worldScene.onFirmware = (line) => {
+      if (line) toast(`<span class="firmware">◈ FABRICATOR</span> ${escapeHtml(line)}`);
     };
 
     worldScene.onPantry = (count) => {
@@ -1280,6 +1348,16 @@ export function startScreen(code: string) {
           designs.delete(id);
           renderFabListRef();
           if (gone) toast(`Discarded ${escapeHtml(gone.spec.displayName)}.`);
+        } else if (msg.type === "repair") {
+          const r = scene?.repairFabricator();
+          if (r && !r.ok && r.reason) {
+            conn.send({
+              scope: "ui",
+              type: "fabricate-error",
+              message: r.reason,
+              to: (msg as unknown as { from?: string }).from,
+            });
+          }
         } else if (msg.type === "tool-cycle") {
           scene?.cycleTool((msg as unknown as { slot: Slot }).slot);
         } else if (msg.type === "fabricate-error") {

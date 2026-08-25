@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Rover",
+    "hasSketch": true,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:09:45.215Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Rover",
+    "size": {
+      "w": 80,
+      "h": 50
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 140,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 0.85,
+        "swamp": 0.1,
+        "rock": 0.35,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Basic four-wheeled utility unit fabricated to baseline standards. Optimizes payload transit across dry ground.",
+    "storage": {
+      "capacity": 20
+    }
+  },
+  "usage": {
+    "inputTokens": 2493,
+    "outputTokens": 112
+  }
+}

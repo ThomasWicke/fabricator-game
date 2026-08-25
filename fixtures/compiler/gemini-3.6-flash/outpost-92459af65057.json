@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Outpost",
+    "hasSketch": true,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T19:10:57.887Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Outpost",
+    "size": {
+      "w": 40,
+      "h": 120
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "A high-visibility boundary spire intended to assert territorial claim and deter non-compliant wildlife.",
+    "emission": {
+      "kind": "light",
+      "intensity": 0.85
+    },
+    "ward": {
+      "radius": 180
+    }
+  },
+  "usage": {
+    "inputTokens": 2494,
+    "outputTokens": 110
+  }
+}

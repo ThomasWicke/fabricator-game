@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#0c1016" />
-    <title>Fabricator</title>
+    <title>VibeTech Privateer</title>
     <style>
       :root {
         /* Deliberately single-theme: this is an instrument panel on an alien
@@ -2075,6 +2075,108 @@
          the thing it hides, so a new control needs its own. */
       .fab-btn.hidden {
         display: none;
+      }
+      /* The machine's damage banner — amber, because it is a status the
+         player fixes, not an error the game apologises for. */
+      .fab-repair {
+        display: flex;
+        align-items: center;
+        gap: 0.8em;
+        padding: 0.5em 0.9em;
+        background: rgba(227, 178, 90, 0.12);
+        border-bottom: 1px solid rgba(227, 178, 90, 0.35);
+        font-family: var(--mono);
+        font-size: 0.62em;
+        letter-spacing: 0.04em;
+        color: #e9c98a;
+      }
+      .fab-repair.hidden {
+        display: none;
+      }
+      .fab-repair .fr-text b {
+        color: #ffe1a6;
+      }
+      .fab-repair button {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        padding: 0.45em 1em;
+        border-radius: 8px;
+        border: 1px solid rgba(227, 178, 90, 0.6);
+        background: rgba(227, 178, 90, 0.18);
+        color: #ffe1a6;
+        cursor: pointer;
+      }
+      .repair-strip {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 5.2em;
+        z-index: 8;
+        font-family: var(--mono);
+        font-size: 0.6em;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        padding: 0.7em 1.2em;
+        border-radius: 999px;
+        border: 1px solid rgba(227, 178, 90, 0.6);
+        background: rgba(28, 24, 12, 0.92);
+        color: #ffe1a6;
+      }
+      .repair-strip.hidden {
+        display: none;
+      }
+      /* The firmware's voice inside a toast. */
+      .toast .firmware {
+        color: #9ec7ff;
+        font-family: var(--mono);
+        font-size: 0.85em;
+        letter-spacing: 0.08em;
+        margin-right: 0.4em;
+      }
+      /* The claim-start card: three sentences over a dimmed world. */
+      .intro-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(4, 8, 16, 0.78);
+        cursor: pointer;
+      }
+      .intro-overlay.hidden {
+        display: none;
+      }
+      .intro-card {
+        max-width: 34em;
+        padding: 2em 2.4em;
+        text-align: left;
+        line-height: 1.65;
+      }
+      .intro-card h2 {
+        font-family: var(--mono);
+        font-size: 0.8em;
+        letter-spacing: 0.24em;
+        color: #e9c98a;
+        margin: 0 0 1em;
+      }
+      .intro-card p {
+        margin: 0 0 0.9em;
+        color: #dfe8f4;
+        font-size: 0.95em;
+      }
+      .intro-card .fw {
+        color: #9ec7ff;
+        font-style: italic;
+      }
+      .intro-card .go {
+        font-family: var(--mono);
+        font-size: 0.62em;
+        letter-spacing: 0.1em;
+        color: #93a1b4;
+        margin-top: 1.4em;
       }
       /* The cheat console: bottom-left, out of the HUD's way, styled like the
          debug tool it is rather than like part of the game. */
