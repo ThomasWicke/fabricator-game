@@ -321,7 +321,9 @@ export function startController(code: string) {
       // absent rather than present and inert.
       swapBtn.classList.toggle("hidden", b.count < 1);
       const label = swapBtn.querySelector(".txt")!;
-      label.textContent = b.held ?? "HANDS";
+      // A design name can be 32 chars; the button is a chip. Enough to
+      // recognise, not enough to reflow the whole top row.
+      label.textContent = b.held ? (b.held.length > 12 ? `${b.held.slice(0, 11)}…` : b.held) : "HANDS";
     };
     applyBelt(lastBelt);
 
@@ -409,7 +411,7 @@ export function startController(code: string) {
                 <button data-build="${d.id}" ${
                   affordable && atFabricator ? "" : "disabled"
                 }>${label}</button>
-                <button class="ddiscard" data-modify="${d.id}" aria-label="Modify" ${
+                <button class="ddiscard modify" data-modify="${d.id}" aria-label="Modify" ${
                   atFabricator ? "" : "disabled"
                 }>✎</button>
                 <button class="ddiscard" data-discard="${d.id}" aria-label="Discard">✕</button>

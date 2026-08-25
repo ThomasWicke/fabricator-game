@@ -2102,6 +2102,13 @@
         color: #ffb4b4;
         background: rgba(255, 120, 120, 0.14);
       }
+      /* Modify shares the quiet ghost-button look but is NOT destructive —
+         red on hover would promise the wrong thing. */
+      .modify:hover,
+      .modify:focus-visible {
+        color: #9ec7ff;
+        background: rgba(108, 158, 248, 0.16);
+      }
       /* An error wears the note's own clothes, in red: same position, same
          weight — the player is already looking there. */
       .fabricating-note.err {

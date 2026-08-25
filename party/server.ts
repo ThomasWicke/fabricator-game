@@ -117,9 +117,15 @@ export class FabricatorServer extends Server<Env> {
       case "design-delete": {
         // From a phone this is a request; the screen is the only one who can
         // see whether the design has been built, so it decides and sends its
-        // own. From a screen it is the decision.
+        // own. From a screen it is the decision. The requester is stamped on
+        // so a refusal can be told to the one phone that asked — it used to
+        // land as a toast on the TV while the phone's tap did silently
+        // nothing.
         if (!fromScreen) {
-          this.sendToScreens(message);
+          const playerId = this.connToPlayer.get(connection.id);
+          this.sendToScreens(
+            playerId ? JSON.stringify({ ...msg, from: playerId }) : message,
+          );
           break;
         }
         void this.removeDesign((msg as unknown as DesignDeleteMsg).designId);

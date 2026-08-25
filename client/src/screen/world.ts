@@ -337,6 +337,8 @@ type PlayerEntity = {
    *  property of the person — one, forever — which stopped working the moment
    *  four different ores each needed their own harvester. */
   belt: CarriedTool[];
+  /** How long A has been held on a liftable structure, for the pickup. */
+  aHoldMs: number;
   /** Index into `belt`, or -1 for bare hands. Hands are a real choice: they
    *  gather wood, stone and food, which a single-ore drill does not. */
   equipped: number;
@@ -452,6 +454,11 @@ type CarriedStructure = {
   /** Where it would go, recomputed each frame. */
   hex: { col: number; row: number };
   valid: boolean;
+  /** A structure PICKED BACK UP rather than freshly fabricated: already paid
+   *  for, so placing it charges nothing — and B returns it whence it came
+   *  instead of vanishing a building somebody built. */
+  paid?: boolean;
+  originHex?: { col: number; row: number };
 };
 
 type VehicleEntity = {
@@ -984,6 +991,7 @@ export class WorldScene extends Phaser.Scene {
       label,
       belt: [],
       equipped: -1,
+      aHoldMs: 0,
       net: idleInput(),
       prevA: false,
       prevB: false,
@@ -1337,6 +1345,107 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
+  /** The nearest of this player's placed structures within lifting reach. */
+  private structureInReach(p: PlayerEntity): VehicleEntity | null {
+    let best: VehicleEntity | null = null;
+    let bestD = Infinity;
+    for (const v of this.vehicles) {
+      if (v.spec.category === "vehicle") continue;
+      const reach = Math.max(v.spec.size.w, v.spec.size.h) / 2 + 40;
+      const d = Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, v.container.x, v.container.y);
+      if (d <= reach && d < bestD) {
+        best = v;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Lift a placed structure back onto a shoulder.
+   *
+   * Before this existed a structure was PERMANENT: one misplaced hut sat
+   * there forever, and — worse, once converters shipped — a kiln chewing the
+   * team's stone had no off switch of any kind. Held A near it is the verb.
+   */
+  private pickupStructure(p: PlayerEntity, v: VehicleEntity) {
+    const hex = worldToHex(v.container.x, v.container.y);
+    this.occupied.delete(`${hex.col},${hex.row}`);
+    v.trail?.em.destroy();
+    v.glow?.destroy();
+    v.container.destroy(); // takes body image and label with it
+    this.vehicles.splice(this.vehicles.indexOf(v), 1);
+
+    // The same carried ghost as a fresh fabrication, minus the texture wait —
+    // the body was on screen a frame ago, so its texture is loaded.
+    const key = `fab-body-${v.designId}`;
+    const { w, h } = v.spec.size;
+    const ghost = this.add
+      .image(p.sprite.x, p.sprite.y, key)
+      .setDisplaySize(w, h)
+      .setAlpha(0.55)
+      .setDepth(1e6 - 1);
+    const outline = this.add
+      .polygon(p.sprite.x, p.sprite.y, HEX_POINTS.flat(), 0x7fe08a, 0.16)
+      .setOrigin(0, 0)
+      .setDepth(1e6 - 3);
+    outline.setStrokeStyle(2, 0x7fe08a, 0.95);
+    const prompt = this.add
+      .text(p.sprite.x, p.sprite.y + 26, "A place · B put it back", {
+        fontFamily: "ui-monospace, Menlo, monospace",
+        fontSize: "10px",
+        fontStyle: "bold",
+        color: "#dfe8f4",
+        backgroundColor: "rgba(8,14,26,0.6)",
+        padding: { x: 5, y: 2 },
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(1e6);
+    p.carrying = {
+      design: { id: v.designId, spec: v.spec },
+      ghost,
+      outline,
+      prompt,
+      hex: { col: 0, row: 0 },
+      valid: false,
+      paid: true,
+      originHex: hex,
+    };
+    this.floatText(p.sprite.x, p.sprite.y - 44, `picked up ${v.spec.displayName}`, "#8fc1ff");
+    this.markDirty();
+  }
+
+  /**
+   * Put a paid carried structure back into the world without the player's
+   * say-so — death, mostly. Its old spot first; if the other player claimed
+   * that in the meantime, the nearest placeable hex around it. Rings out to
+   * radius 3 cover ~37 hexes; a world where none of them can hold a hut does
+   * not occur outside deliberate sabotage, and even then the outermost
+   * fallback is the origin itself, double-occupied but not deleted.
+   */
+  private returnCarried(p: PlayerEntity) {
+    const c = p.carrying;
+    if (!c?.paid || !c.originHex) return;
+    let at = c.originHex;
+    if (!this.canPlaceAt(at.col, at.row)) {
+      outer: for (let radius = 1; radius <= 3; radius++) {
+        for (let dr = -radius; dr <= radius; dr++) {
+          for (let dc = -radius; dc <= radius; dc++) {
+            if (Math.max(Math.abs(dr), Math.abs(dc)) !== radius) continue;
+            const col = c.originHex.col + dc;
+            const row = c.originHex.row + dr;
+            if (this.canPlaceAt(col, row)) {
+              at = { col, row };
+              break outer;
+            }
+          }
+        }
+      }
+    }
+    const centre = hexToWorld(at.col, at.row);
+    this.placeDesign(c.design, p.slot, centre.x, centre.y + this.dropAt(at.col, at.row));
+  }
+
   /** Can a structure stand on this hex? */
   private canPlaceAt(col: number, row: number): boolean {
     if (isLiquid(this.biomeAtHex(col, row))) return false;
@@ -1392,15 +1501,18 @@ export class WorldScene extends Phaser.Scene {
     }
     const cost = c.design.spec.cost;
     // Re-checked at placement, not at fabrication: the other player may have
-    // spent the pile while this was being carried across the map.
-    if (!canAfford(this.stockpile, cost)) {
+    // spent the pile while this was being carried across the map. A structure
+    // merely being MOVED was paid for when it was first placed.
+    if (!c.paid && !canAfford(this.stockpile, cost)) {
       this.floatText(p.sprite.x, p.sprite.y - 44, `need ${formatCost(cost)}`, "#ff9f9f");
       return;
     }
     const centre = hexToWorld(c.hex.col, c.hex.row);
-    this.charge(cost);
+    if (!c.paid) {
+      this.charge(cost);
+      this.onDesignBuilt?.(c.design.id);
+    }
     this.placeDesign(c.design, p.slot, centre.x, centre.y + this.dropAt(c.hex.col, c.hex.row));
-    this.onDesignBuilt?.(c.design.id);
     this.dropCarry(p);
   }
 
@@ -1474,12 +1586,36 @@ export class WorldScene extends Phaser.Scene {
       if (v.designId === designId) return { where: "it is standing in the world" };
     }
     for (const p of this.players.values()) {
-      if (p.belt.some((t) => t.designId === designId)) return { where: "it is on a belt" };
       if (p.carrying?.design.id === designId) {
         return { where: "someone is carrying it" };
       }
     }
+    // A tool on a belt does NOT block a discard — it used to, and since no
+    // verb removed a tool from a belt, a design that reached one could never
+    // be discarded at all. Discarding IS the belt-removal verb now: the
+    // caller strips it from belts first via removeFromBelts.
     return null;
+  }
+
+  /** Take a design off every belt — the discard flow's first step. */
+  removeFromBelts(designId: string) {
+    for (const p of this.players.values()) {
+      const at = p.belt.findIndex((t) => t.designId === designId);
+      if (at < 0) continue;
+      const wasHeld = p.equipped === at;
+      p.belt.splice(at, 1);
+      // The index is a position, and positions shifted.
+      if (p.equipped > at) p.equipped -= 1;
+      else if (wasHeld) p.equipped = -1;
+      this.equip(p, wasHeld ? -1 : p.equipped);
+    }
+  }
+
+  /** Re-announce every belt — a phone that joins mid-game missed the
+   *  change-driven pushes and would otherwise show no TOOL button until the
+   *  next swap. */
+  pushAllBelts() {
+    for (const p of this.players.values()) this.pushBelt(p);
   }
 
   /** Next thing on the belt, wrapping through bare hands. One control does
@@ -2294,6 +2430,10 @@ export class WorldScene extends Phaser.Scene {
    */
   private killPlayer(p: PlayerEntity) {
     if (p.driving) this.exitVehicle(p);
+    // Dying while MOVING a building must not delete the building — dropCarry
+    // only destroys the ghost, which is fine for an unpaid fabrication (the
+    // stockpile was never charged) and catastrophic for a paid one.
+    if (p.carrying?.paid) this.returnCarried(p);
     if (p.carrying) this.dropCarry(p);
 
     if (packLoad(p.pack) > 0) this.dropPack(p);
@@ -2377,11 +2517,28 @@ export class WorldScene extends Phaser.Scene {
       seed: this.seedText,
       stockpile: { ...this.stockpile },
       harvested: [...this.harvestDeltas.values()],
-      built: this.vehicles.map((v) => ({
-        designId: v.designId,
-        x: Math.round(v.container.x),
-        y: Math.round(v.container.y),
-      })),
+      built: [
+        ...this.vehicles.map((v) => ({
+          designId: v.designId,
+          x: Math.round(v.container.x),
+          y: Math.round(v.container.y),
+        })),
+        // A picked-up structure is mid-MOVE, not gone: if this save is the
+        // one that gets restored (a reload mid-carry), the building comes
+        // back where it stood rather than ceasing to exist.
+        ...[...this.players.values()].flatMap((p) => {
+          const c = p.carrying;
+          if (!c?.paid || !c.originHex) return [];
+          const centre = hexToWorld(c.originHex.col, c.originHex.row);
+          return [
+            {
+              designId: c.design.id,
+              x: Math.round(centre.x),
+              y: Math.round(centre.y + this.dropAt(c.originHex.col, c.originHex.row)),
+            },
+          ];
+        }),
+      ],
       tools: [...this.players.values()].flatMap((p) =>
         p.belt.map((t) => ({ slot: p.slot, designId: t.designId })),
       ),
@@ -2430,17 +2587,31 @@ export class WorldScene extends Phaser.Scene {
       const design = resolve(b.designId);
       if (design) this.placeDesign(design, 1, b.x, b.y);
     }
+    // Belts restore SYNCHRONOUSLY, in saved order. Routing tools through
+    // placeDesign resolved each through an async texture load, so the belt
+    // was still empty when the equipped index was applied — the in-hand tool
+    // was lost on every load — and cached textures completing before
+    // uncached ones scrambled the order the index pointed into. The body key
+    // is deterministic, so the entries can be pushed directly; only the one
+    // tool actually going into a hand needs its texture ready first.
     for (const t of snap.tools) {
       const design = resolve(t.designId);
-      if (design) this.placeDesign(design, t.slot);
+      const p = this.players.get(t.slot);
+      if (!design || !p || p.belt.length >= BELT_MAX) continue;
+      p.belt.push({ designId: design.id, spec: design.spec, bodyKey: `fab-body-${design.id}` });
     }
-    // Restoring a belt equips each tool as it lands, so whatever was actually
-    // in hand has to be put back afterwards. Without the record — an older
-    // save — the last one restored stays in hand, which is what that save
-    // meant when it only ever held one.
     for (const e of snap.equipped ?? []) {
       const p = this.players.get(e.slot);
-      if (p) this.equip(p, e.index);
+      if (!p) continue;
+      const held = e.index >= 0 ? p.belt[e.index] : null;
+      if (!held) {
+        this.pushBelt(p);
+        continue;
+      }
+      const design = resolve(held.designId);
+      if (design) {
+        this.withBodyTexture(design, () => this.equip(p, e.index));
+      }
     }
 
     for (const v of snap.vitals ?? []) {
@@ -2617,8 +2788,23 @@ export class WorldScene extends Phaser.Scene {
         this.updateCarry(p);
         if (aEdge) this.placeCarried(p);
         else if (bEdge) {
-          this.floatText(p.sprite.x, p.sprite.y - 44, "put back", "#8fc1ff");
-          this.dropCarry(p);
+          const c = p.carrying;
+          if (c.paid && c.originHex) {
+            // Cancelling a MOVE must not vanish a building someone paid for —
+            // it goes back exactly where it stood. The hex was freed by the
+            // pickup, so this can only fail if the other player claimed it in
+            // the meantime; then the carry simply continues.
+            if (this.canPlaceAt(c.originHex.col, c.originHex.row)) {
+              this.returnCarried(p);
+              this.floatText(p.sprite.x, p.sprite.y - 44, "put back where it was", "#8fc1ff");
+              this.dropCarry(p);
+            } else {
+              this.floatText(p.sprite.x, p.sprite.y - 44, "its old spot is taken", "#ff9f9f");
+            }
+          } else {
+            this.floatText(p.sprite.x, p.sprite.y - 44, "put back", "#8fc1ff");
+            this.dropCarry(p);
+          }
         }
         p.sprite.setDepth(p.sprite.y);
         p.label.setPosition(p.sprite.x, p.sprite.y - p.sprite.displayHeight + 6);
@@ -2666,6 +2852,30 @@ export class WorldScene extends Phaser.Scene {
           if (vehicle) this.enterVehicle(p, vehicle);
           else this.ping(p);
         }
+      }
+
+      // HELD A near a placed structure lifts it back onto the shoulder. A
+      // hold, not an edge, because the edge is already three other verbs —
+      // and long enough that resting a thumb can't uproot a building.
+      const liftable =
+        !p.carrying && !node && input.buttons.a ? this.structureInReach(p) : null;
+      if (liftable) {
+        const before = p.aHoldMs;
+        p.aHoldMs += dtMs;
+        if (before < 300 && p.aHoldMs >= 300) {
+          this.floatText(
+            liftable.container.x,
+            liftable.container.y - 46,
+            "keep holding to pick up…",
+            "#8fc1ff",
+          );
+        }
+        if (p.aHoldMs >= 1100) {
+          p.aHoldMs = 0;
+          this.pickupStructure(p, liftable);
+        }
+      } else {
+        p.aHoldMs = 0;
       }
 
       p.sprite.setDepth(p.sprite.y);

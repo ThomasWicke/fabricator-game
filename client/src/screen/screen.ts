@@ -121,15 +121,24 @@ export function startScreen(code: string) {
   // forever. 90s covers a slow compile plus slow art with room to spare;
   // each progress message re-arms it, so only genuine silence trips it.
   // Outer scope, because the socket handler that arms it outlives any view.
+  // One timer, but a COUNT of outstanding fabrications: with two players
+  // fabricating at once, the first design landing must not disarm the
+  // watchdog that the second one is still relying on.
   let fabTimeout: ReturnType<typeof setTimeout> | null = null;
+  let fabOutstanding = 0;
   const disarmFabTimeout = () => {
-    if (fabTimeout) clearTimeout(fabTimeout);
-    fabTimeout = null;
+    fabOutstanding = Math.max(0, fabOutstanding - 1);
+    if (fabOutstanding === 0 && fabTimeout) {
+      clearTimeout(fabTimeout);
+      fabTimeout = null;
+    }
   };
-  const armFabTimeout = () => {
-    disarmFabTimeout();
+  const armFabTimeout = (fresh = true) => {
+    if (fresh) fabOutstanding++;
+    if (fabTimeout) clearTimeout(fabTimeout);
     fabTimeout = setTimeout(() => {
       fabTimeout = null;
+      fabOutstanding = 0;
       scene?.clearFabricating();
       toast("The Fabricator has gone quiet — that design isn't coming. Try again.", true);
     }, 90_000);
@@ -145,7 +154,7 @@ export function startScreen(code: string) {
   let onSnapshot: () => void = () => {};
   /** Set once the game view exists. The socket is listening long before that,
    *  so both are no-ops until there is something to act on. */
-  let requestDiscardRef: (id: string) => void = () => {};
+  let requestDiscardRef: (id: string, requester?: string) => void = () => {};
   let renderFabListRef: () => void = () => {};
   /** Set by startGame; restores a saved world once both it and the scene
    *  are in hand. A no-op while the lobby is up. */
@@ -622,7 +631,7 @@ export function startScreen(code: string) {
                 <button data-build="${d.id}" ${afford ? "" : "disabled"}>${
                   afford ? "BUILD" : "NEED MORE"
                 }</button>
-                <button class="discard" data-modify="${d.id}" title="Modify this design">✎</button>
+                <button class="discard modify" data-modify="${d.id}" title="Modify this design">✎</button>
                 <button class="discard" data-discard="${d.id}" title="Throw this design away">✕</button>
               </div>
             </div>`;
@@ -665,7 +674,7 @@ export function startScreen(code: string) {
       fabName.select();
     };
 
-    const requestDiscard = (designId: string) => {
+    const requestDiscard = (designId: string, requester?: string) => {
       const d = designs.get(designId);
       if (!d) return;
       const inUse = scene?.usesDesign(designId);
@@ -675,8 +684,23 @@ export function startScreen(code: string) {
             `${inUse.where}. Get rid of that first.`,
           true,
         );
+        if (requester) {
+          // The refusal has to reach the phone whose tap it answers. The
+          // fabricate-error channel already renders as the phone's red note
+          // and already routes by `to` — no new message type needed.
+          conn.send({
+            scope: "ui",
+            type: "fabricate-error",
+            message: `${d.spec.displayName} is still in use — ${inUse.where}.`,
+            to: requester,
+          });
+        }
         return;
       }
+      // A tool on a belt is unequipped as part of the discard — refusing here
+      // used to combine with "no way to remove a belt tool" into a design
+      // that could never be discarded at all.
+      scene?.removeFromBelts(designId);
       conn.send({ scope: "ui", type: "design-delete", designId });
     };
 
@@ -1100,7 +1124,7 @@ export function startScreen(code: string) {
           scene?.setFabricatingStage(
             `DRAWING: ${String((msg as unknown as { name: string }).name)}…`,
           );
-          armFabTimeout();
+          armFabTimeout(false);
         } else if (msg.type === "design-catalog") {
           for (const d of (msg as unknown as DesignCatalogMsg).designs as Design[]) {
             designs.set(d.id, d);
@@ -1181,7 +1205,8 @@ export function startScreen(code: string) {
           }
         } else if (msg.type === "design-delete") {
           // A phone asked. The screen is the one that can answer.
-          requestDiscardRef(String((msg as unknown as { designId: string }).designId));
+          const m = msg as unknown as { designId: string; from?: string };
+          requestDiscardRef(String(m.designId), m.from);
         } else if (msg.type === "design-removed") {
           const id = String((msg as unknown as { designId: string }).designId);
           const gone = designs.get(id);
@@ -1205,6 +1230,9 @@ export function startScreen(code: string) {
           syncPhase();
         } else if (msg.type === "roster") {
           roster = msg.players;
+          // A phone that just joined missed every change-driven belt push and
+          // would show no TOOL button until the next swap.
+          scene?.pushAllBelts();
           slotByPlayerId.clear();
           for (const p of roster) {
             if (p.slot) slotByPlayerId.set(p.playerId, p.slot);
