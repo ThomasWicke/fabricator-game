@@ -83,10 +83,14 @@ import {
   findSpawn,
   inClearing,
   isLiquid,
+  regionAt,
+  regionName,
+  sameRegion,
   scatterAt,
   terrainOf,
   tileAt,
   worldSeed,
+  type Region,
 } from "./worldgen";
 
 /** On-foot terrain penalties. Water and lava aren't slow, they're closed —
@@ -320,6 +324,9 @@ type PlayerEntity = {
   /** Standing at the Fabricator. Tracked so the change can be pushed to the
    *  phone exactly once, on the edge. */
   atFabricator: boolean;
+  /** Which named region they were last in, so crossing out of it can be
+   *  announced once rather than every frame. */
+  region: Region | null;
   /** A fabricated structure being carried to wherever it should stand.
    *  Nothing is charged until it is put down, so walking away costs nothing. */
   carrying: CarriedStructure | null;
@@ -476,6 +483,8 @@ export type MinimapData = {
   players: { slot: Slot; col: number; row: number; color: number }[];
   built: { col: number; row: number }[];
   biome: BiomeType;
+  /** The named region the first active player is standing in. */
+  region: string;
 };
 
 export class WorldScene extends Phaser.Scene {
@@ -940,6 +949,7 @@ export class WorldScene extends Phaser.Scene {
       tool: null,
       nextHarvestAt: 0,
       atFabricator: false,
+      region: null,
       carrying: null,
       pack: emptyPack(),
       health: HEALTH_MAX,
@@ -2507,6 +2517,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.updateStacks(dtMs);
+    this.trackRegions();
     this.runStructureServices(dtMs);
     this.runEnemies(now, dtMs, night);
     this.runStructureEmissions();
@@ -2566,6 +2577,35 @@ export class WorldScene extends Phaser.Scene {
    *  verified here — where the simulation actually lives. */
   isAtFabricator(slot: Slot): boolean {
     return this.players.get(slot)?.atFabricator ?? false;
+  }
+
+  /**
+   * Announce when someone walks into new country.
+   *
+   * The name is computed, never stored — the same ground is the Ashen Reach
+   * on both screens and in every future session because both machines derive
+   * it from the seed rather than agreeing on it.
+   */
+  private trackRegions() {
+    for (const p of this.players.values()) {
+      if (!this.activeSlots.has(p.slot)) continue;
+      const h = worldToHex(p.sprite.x, p.sprite.y);
+      const region = regionAt(h.col, h.row, this.seed);
+      if (p.region && sameRegion(p.region, region)) continue;
+      const first = p.region === null;
+      p.region = region;
+      if (!first) {
+        this.floatText(p.sprite.x, p.sprite.y - 52, regionName(region, this.seed), "#dfe8f4");
+      }
+    }
+  }
+
+  /** Where a player is, in words. */
+  regionNameFor(slot: Slot): string {
+    const p = this.players.get(slot);
+    if (!p) return "";
+    const h = worldToHex(p.sprite.x, p.sprite.y);
+    return regionName(regionAt(h.col, h.row, this.seed), this.seed);
   }
 
   /** Can a walker stand here? */
@@ -2981,6 +3021,7 @@ export class WorldScene extends Phaser.Scene {
       biome: first
         ? this.biomeAtPoint(first.sprite.x, first.sprite.y)
         : "grass",
+      region: first ? this.regionNameFor(first.slot) : "",
     };
   }
 

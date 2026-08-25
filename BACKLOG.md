@@ -36,8 +36,17 @@ code, using every biome in the Kenney hexagon pack.
 - [x] **W7 · Biome-appropriate props.** Cactus in the desert, autumn trees in the
       woodland, snow rocks in the tundra, mossy boulders in the wet, hills as
       relief — instead of one pine and one boulder everywhere.
-- [ ] **W8 · Landmarks.** Rare hand-authored set pieces (ruins, groves, bog
+- [x] **W8 · Landmarks.** Rare hand-authored set pieces (ruins, groves, bog
       hollows) placed deterministically, so exploring has destinations.
+- [x] **W9 · Named regions.** "Snowfield · 180 hexes out" becomes "the Ashen
+      Reach", so two players can arrange to meet somewhere. Must be a pure
+      function of (hex, seed) like the rest of the world — the same ground
+      carries the same name in every session and on both screens, with no
+      stored state and nothing to sync. Anything that needs a server round
+      trip to agree on a name is the wrong design.
+- [x] **W10 · Rivers.** Water only arrives as sea. A river running down the
+      elevation gradient would give the map structure and make `float` worth
+      building before you reach a coast.
 
 ## Presentation
 
@@ -130,6 +139,25 @@ likely way somebody tries it for the first time.
       fabricated fire, food as an inventory item.
 - [x] **S7 · Death and respawn.** Stress-free: you wake up at the Fabricator, your
       carried inventory stays where you fell. The shared stockpile is never lost.
+
+## Reasons to go somewhere
+
+- [ ] **S9 · A material per hostile biome.** Bogiron gates the bog and gates it
+      well. Nothing gates the snow, the bare rock or the desert, so the map's
+      edges are scenery. One material each, wanted by something worth building.
+- [ ] **S10 · Co-op verbs.** Actions with no single-player equivalent: carrying
+      a structure between two people for less than it costs alone, or one
+      driving while the other works from the passenger seat. Right now two
+      players are just one player twice.
+
+## Housekeeping
+
+- [ ] **H1 · Eval the new primitives.** `scripts/eval-compiler.ts` predates
+      weapon/storage/nourish/ward. Canned blueprints asserting that a spear
+      compiles to a weapon and a silo to storage would catch prompt
+      regressions — costs real API calls to run, so it stays opt-in.
+- [ ] **H2 · Design deletion.** The store only ever grows, capped at 500. There
+      is no way to throw out a failed experiment.
 
 ## Enemies — stress-free by design
 

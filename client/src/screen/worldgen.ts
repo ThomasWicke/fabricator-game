@@ -142,6 +142,35 @@ const F_CONTINENT = 1 / 62;
 const F_RELIEF = 1 / 17;
 const F_TEMP = 1 / 95;
 const F_MOISTURE = 1 / 34;
+const F_RIVER = 1 / 40;
+
+/**
+ * Rivers, without flow.
+ *
+ * A real river is found by pouring water downhill and seeing where it goes,
+ * which is a stateful simulation over the whole map — exactly the thing this
+ * world cannot have. So instead: a river is where a noise field crosses its
+ * own midline. That gives long winding ribbons that close on themselves and
+ * branch, which is what a river network looks like from above, and it stays a
+ * pure function of the hex.
+ *
+ * It is gated on elevation so water runs in valleys rather than over peaks,
+ * and it widens as the land falls — a stream in the hills, a river near the
+ * coast.
+ */
+function riverAt(gx: number, gy: number, seed: number, elev: number): "water" | "bank" | null {
+  // Above the treeline there is nothing to carry; below sea level it is sea.
+  if (elev < 0.42 || elev > 0.7) return null;
+  const r = Math.abs(fbm(gx * F_RIVER, gy * F_RIVER, seed + 9127, 3) - 0.5);
+  // Falling land, wider water: 1 at the coast, 0 at the headwaters.
+  const fall = Math.max(0, Math.min(1, (0.7 - elev) / 0.24));
+  // The floor matters: below about this the water band is narrower than a
+  // hex, and the upper reaches come out as bare tan banks with nothing
+  // running between them — a towpath with no canal.
+  const water = 0.007 + fall * 0.011;
+  if (r < water) return "water";
+  return r < water + 0.009 ? "bank" : null;
+}
 
 export type WorldSample = {
   biome: BiomeType;
@@ -169,16 +198,30 @@ export function sample(col: number, row: number, seed: number): WorldSample {
   const temperature = fbm(gx * F_TEMP, gy * F_TEMP, seed + 3313, 3);
   const moisture = fbm(gx * F_MOISTURE, gy * F_MOISTURE, seed + 5591, 4);
 
-  const biome = classify(elevation, temperature, moisture);
+  const biome = classify(elevation, temperature, moisture, gx, gy, seed);
   return { biome, terrain: terrainOf(biome), elevation, temperature, moisture };
 }
 
 // Thresholds are tuned against measured coverage, not guessed: fbm clusters
 // hard around 0.5, so a band that reads as "a bit cold" on paper turns a
 // quarter of the planet into tundra. scripts/test-worldgen.ts prints the mix.
-function classify(elev: number, temp: number, moist: number): BiomeType {
+function classify(
+  elev: number,
+  temp: number,
+  moist: number,
+  gx: number,
+  gy: number,
+  seed: number,
+): BiomeType {
   if (elev < 0.418) return "water";
   if (elev < 0.446) return "sand"; // beach
+
+  // Rivers cut through whatever biome they run past, and carry their own
+  // banks — a strip of sand either side, which is what makes them read as a
+  // watercourse rather than a blue stripe painted across a field.
+  const river = riverAt(gx, gy, seed, elev);
+  if (river === "water") return "water";
+  if (river === "bank") return "sand";
 
   // High ground overrides climate — you get the mountain, not the biome.
   if (elev > 0.635) {
@@ -238,6 +281,9 @@ export function tileAt(col: number, row: number, seed: number): TileInfo {
     elevation,
     fbm(gx * F_TEMP, gy * F_TEMP, seed + 3313, 3),
     fbm(gx * F_MOISTURE, gy * F_MOISTURE, seed + 5591, 4),
+    gx,
+    gy,
+    seed,
   );
   return { biome, drop: reliefFor(elevation) + (BIOME_SINK[biome] ?? 0) };
 }
@@ -251,11 +297,100 @@ export function biomeAt(col: number, row: number, seed: number): BiomeType {
     base * 0.76 + relief * 0.24,
     fbm(gx * F_TEMP, gy * F_TEMP, seed + 3313, 3),
     fbm(gx * F_MOISTURE, gy * F_MOISTURE, seed + 5591, 4),
+    gx,
+    gy,
+    seed,
   );
 }
 
 export function terrainAtHex(col: number, row: number, seed: number): TerrainType {
   return terrainOf(biomeAt(col, row, seed));
+}
+
+// ── regions ─────────────────────────────────────────────────────────────────
+//
+// Ground you can name, so two players can arrange to meet at one.
+//
+// A region is a Voronoi cell over a jittered lattice: for a hex, the nearest
+// of the nine candidate centres around it wins. That is a pure function of
+// (hex, seed) — no stored map, no allocation of names at world creation, and
+// nothing to synchronise. Both screens name the same ground the same way
+// because they compute it, not because they agreed on it. The same seed a
+// year from now still calls it the Ashen Reach.
+
+/** Hexes across, roughly. Big enough that walking out of one is an event. */
+const REGION_SIZE = 30;
+
+export type Region = { rx: number; ry: number };
+
+/** Jittered centre of a lattice cell, in geo space. */
+function regionCentre(ix: number, iy: number, seed: number): { x: number; y: number } {
+  const jx = hash2(ix, iy, seed ^ 0x2545f491);
+  const jy = hash2(ix, iy, seed ^ 0x9e3779b1);
+  return { x: (ix + 0.15 + jx * 0.7) * REGION_SIZE, y: (iy + 0.15 + jy * 0.7) * REGION_SIZE };
+}
+
+/** Which region a hex belongs to. */
+export function regionAt(col: number, row: number, seed: number): Region {
+  const { gx, gy } = geo(col, row);
+  const cx = Math.floor(gx / REGION_SIZE);
+  const cy = Math.floor(gy / REGION_SIZE);
+  let best = Infinity;
+  let rx = cx;
+  let ry = cy;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const c = regionCentre(cx + dx, cy + dy, seed);
+      const d = (c.x - gx) ** 2 + (c.y - gy) ** 2;
+      if (d < best) {
+        best = d;
+        rx = cx + dx;
+        ry = cy + dy;
+      }
+    }
+  }
+  return { rx, ry };
+}
+
+export const sameRegion = (a: Region, b: Region): boolean => a.rx === b.rx && a.ry === b.ry;
+
+const REGION_ADJ = [
+  "Ashen", "Pale", "Bitter", "Quiet", "Sunken", "Broken", "Long", "Cold",
+  "Amber", "Iron", "Salt", "Grey", "Far", "Old", "Still", "Hollow",
+  "Rust", "Low", "Wide", "Hushed", "Weeping", "Glass", "Ember", "Thin",
+];
+
+/** Nouns by movement class, so a name fits the ground it is stuck to. */
+const REGION_NOUN: Record<TerrainType, string[]> = {
+  grass: ["Reach", "Meadows", "Weald", "Downs", "Green"],
+  sand: ["Waste", "Dunes", "Flats", "Sands", "Pan"],
+  swamp: ["Mire", "Fen", "Marsh", "Bog", "Sump"],
+  rock: ["Scarp", "Crags", "Spine", "Bluffs", "Teeth"],
+  snow: ["Drifts", "Barrens", "Whites", "Silence", "Shelf"],
+  water: ["Shallows", "Straits", "Sound", "Narrows", "Deep"],
+};
+
+/**
+ * What this region is called.
+ *
+ * The noun comes from the ground at the region's own centre rather than from
+ * wherever the player happens to be standing — one region, one name, however
+ * varied the terrain inside it.
+ */
+export function regionName(region: Region, seed: number): string {
+  const c = regionCentre(region.rx, region.ry, seed);
+  // Back out of geo space to a hex to ask what the ground is there.
+  const row = Math.round(c.y / ROW_SQUASH);
+  const col = Math.round(c.x - (row % 2 !== 0 ? 0.5 : 0));
+  const terrain = terrainOf(biomeAt(col, row, seed));
+
+  const h = hash2(region.rx, region.ry, seed ^ 0x27d4eb2f);
+  const h2v = hash2(region.ry, region.rx, seed ^ 0x165667b1);
+  const adj = REGION_ADJ[Math.floor(h * REGION_ADJ.length) % REGION_ADJ.length];
+  const nouns = REGION_NOUN[terrain];
+  const noun = nouns[Math.floor(h2v * nouns.length) % nouns.length];
+  // "the" on about half of them, which stops a long list reading as a form.
+  return h2v < 0.5 ? `the ${adj} ${noun}` : `${adj} ${noun}`;
 }
 
 // ── scatter: resource nodes ─────────────────────────────────────────────────
@@ -341,6 +476,84 @@ const SCATTER: Record<BiomeType, ScatterRule[]> = {
   lava: [],
 };
 
+// ── landmarks ───────────────────────────────────────────────────────────────
+//
+// Somewhere to be going. A landmark is a small cluster of nodes arranged on
+// purpose rather than scattered — a ring of stones, a thick grove, a pit of
+// bogiron — placed on a coarse lattice so finding out whether a hex belongs
+// to one costs nine hashes instead of a neighbourhood scan.
+
+export type LandmarkKind = "stones" | "grove" | "pit";
+
+/** Lattice pitch, in hexes. */
+const LANDMARK_CELL = 30;
+/** Fraction of cells that hold one. */
+const LANDMARK_CHANCE = 0.4;
+/** How far the set piece reaches from its middle. */
+const LANDMARK_RADIUS = 2.6;
+
+export type Landmark = { kind: LandmarkKind; col: number; row: number };
+
+function landmarkInCell(ix: number, iy: number, seed: number): Landmark | null {
+  if (hash2(ix, iy, seed ^ 0x7f4a7c15) > LANDMARK_CHANCE) return null;
+  const jx = hash2(ix, iy, seed ^ 0x1b873593);
+  const jy = hash2(iy, ix, seed ^ 0xcc9e2d51);
+  const col = Math.round((ix + 0.2 + jx * 0.6) * LANDMARK_CELL);
+  const row = Math.round((iy + 0.2 + jy * 0.6) * LANDMARK_CELL);
+
+  // The ground decides what stands on it: no groves on bare rock, no bogiron
+  // pits outside the bog.
+  const biome = biomeAt(col, row, seed);
+  if (biome === "water" || biome === "lava") return null;
+  const kind: LandmarkKind =
+    biome === "magic" ? "pit" : biome === "grass" || biome === "autumn" ? "grove" : "stones";
+  return { kind, col, row };
+}
+
+/** The landmark this hex belongs to, if any, with how far out it is. */
+export function landmarkAt(
+  col: number,
+  row: number,
+  seed: number,
+): { mark: Landmark; dist: number } | null {
+  const cx = Math.floor(col / LANDMARK_CELL);
+  const cy = Math.floor(row / LANDMARK_CELL);
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const mark = landmarkInCell(cx + dx, cy + dy, seed);
+      if (!mark) continue;
+      const d = Math.hypot(col - mark.col, (row - mark.row) * ROW_SQUASH);
+      if (d <= LANDMARK_RADIUS) return { mark, dist: d };
+    }
+  }
+  return null;
+}
+
+/** What a landmark puts on a given hex of itself, if anything. */
+function landmarkScatter(
+  kind: LandmarkKind,
+  dist: number,
+  variant: number,
+): ScatterEntry | null {
+  switch (kind) {
+    case "stones":
+      // A ring, not a heap: the middle is left clear so it reads as built.
+      if (dist < 1.4 || dist > LANDMARK_RADIUS) return null;
+      return boulder(pick(variant, ["rockStone", "rockStone_moss1", "rockStone_moss2"]), 7);
+    case "grove":
+      // Dense at the middle, thinning out — a wood, not a hedge.
+      if (variant > 1 - dist / (LANDMARK_RADIUS + 1)) return null;
+      return pine(pick(variant, ["treeGreen_low", "treeGreen_mid", "treeGreen_high"]), 8);
+    case "pit":
+      if (dist > LANDMARK_RADIUS - 0.6) return null;
+      return {
+        ...boulder(pick(variant, ["rockStone", "rockStone_moss3"]), 5),
+        kind: "bogiron",
+        tint: 0xd9813f,
+      };
+  }
+}
+
 /** Resource node at this hex, or null. Deterministic and independent of every
  *  other hex, so a chunk can be built (and rebuilt) in isolation. */
 export function scatterAt(
@@ -349,6 +562,19 @@ export function scatterAt(
   seed: number,
   biome: BiomeType,
 ): ScatterEntry | null {
+  if (biome === "water" || biome === "lava") return null;
+
+  // A landmark overrides the ordinary scatter for its own hexes: whatever the
+  // ground would have grown, this is a place, and it looks arranged.
+  const here = landmarkAt(col, row, seed);
+  if (here) {
+    return landmarkScatter(
+      here.mark.kind,
+      here.dist,
+      hash2(col, row, seed ^ 0x632be59b),
+    );
+  }
+
   const rules = SCATTER[biome];
   if (!rules.length) return null;
   const roll = hash2(col, row, seed ^ 0x9e3779b9);

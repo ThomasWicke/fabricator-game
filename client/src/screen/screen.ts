@@ -1071,9 +1071,10 @@ function describeWhere(d: MinimapData): string {
   const dist = Math.round(
     Math.hypot(p.col - d.spawn.col, (p.row - d.spawn.row) * 0.738),
   );
-  return dist < 6
-    ? `${BIOMES[d.biome].label} · at the Fabricator`
-    : `${BIOMES[d.biome].label} · ${dist} hexes out`;
+  // The place first, because that is the part you can say out loud to
+  // somebody else. The ground and the distance are the detail.
+  const where = d.region || BIOMES[d.biome].label;
+  return dist < 6 ? `${where} · at the Fabricator` : `${where} · ${dist} hexes out`;
 }
 
 function escapeHtml(s: string): string {
