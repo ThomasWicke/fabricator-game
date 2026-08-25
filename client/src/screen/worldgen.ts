@@ -697,6 +697,31 @@ export const SCATTER_KEYS = [
   ),
 ];
 
+/**
+ * Every texture a LANDMARK can put down.
+ *
+ * Enumerated separately because landmarks do not go through SCATTER — they
+ * replace it — so a texture only a landmark uses was never preloaded. That is
+ * not hypothetical: the grove is the one thing that asks for treeGreen, and
+ * every grove in the world rendered as a grid of Phaser's missing-texture
+ * squares until this existed.
+ */
+export const LANDMARK_KEYS = [
+  ...new Set(
+    (["stones", "grove", "pit"] as LandmarkKind[]).flatMap((kind) =>
+      (Object.keys(SEAMS) as ExoticNode[]).flatMap((ore) =>
+        // Across the whole radius and every variant: the rules vary what they
+        // place with distance from the middle, so one sample would miss some.
+        [0, 0.5, 1, 1.5, 2, 2.5].flatMap((dist) =>
+          [0, 0.34, 0.67, 0.99].map(
+            (v) => landmarkScatter({ kind, ore, col: 0, row: 0 }, dist, v)?.texture,
+          ),
+        ),
+      ),
+    ),
+  ),
+].filter((k): k is string => !!k);
+
 const DECOR_CHANCE = 0.14;
 
 /** Flat prop for this hex, or null. Water and lava get their wave trim at a

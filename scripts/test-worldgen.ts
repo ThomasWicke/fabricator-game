@@ -4,8 +4,14 @@
 //
 // Run: npx tsx scripts/test-worldgen.ts
 
+import { readdirSync } from "node:fs";
+
 import {
   BIOMES,
+  BIOME_TILE_KEYS,
+  DECOR_KEYS,
+  LANDMARK_KEYS,
+  SCATTER_KEYS,
   type BiomeType,
   biomeAt,
   decorAt,
@@ -307,6 +313,47 @@ console.log("\n── seams ─────────────────�
     );
     check(`${b} holds at most one seam`, owners.length <= 1, owners.join("+"));
   }
+}
+
+console.log("\n── every texture the world asks for ────────────────────────");
+
+{
+  // Walk real ground and collect what it actually puts down, rather than
+  // re-deriving it from the same tables the game uses — landmarks bypass the
+  // scatter table, which is exactly how every grove in the world came to be
+  // rendered as a grid of Phaser's missing-texture squares.
+  const asked = new Set<string>();
+  for (const seedStr of SEEDS) {
+    const seed = worldSeed(seedStr);
+    for (let row = -90; row <= 90; row++) {
+      for (let col = -90; col <= 90; col++) {
+        const b = biomeAt(col, row, seed);
+        const sc = scatterAt(col, row, seed, b);
+        if (sc) asked.add(sc.texture);
+        const de = decorAt(col, row, seed, b);
+        if (de) asked.add(de);
+      }
+    }
+  }
+  const preloaded = new Set([...BIOME_TILE_KEYS, ...DECOR_KEYS, ...SCATTER_KEYS, ...LANDMARK_KEYS]);
+  const missing = [...asked].filter((k) => !preloaded.has(k));
+  console.log(`  ${asked.size} distinct textures placed · ${preloaded.size} preloaded`);
+  check(
+    "everything the world places is also preloaded",
+    missing.length === 0,
+    missing.length ? missing.join(", ") : "",
+  );
+
+  // And against the filesystem, not just another list — a key can be in both
+  // tables and still name a file that does not exist.
+  const dir = new URL("../client/public/assets/hex/", import.meta.url);
+  const onDisk = new Set(readdirSync(dir).map((f) => f.replace(/\.png$/, "")));
+  const absent = [...preloaded].filter((k) => !onDisk.has(k));
+  check(
+    "every preloaded key names a file that exists",
+    absent.length === 0,
+    absent.length ? absent.join(", ") : `${onDisk.size} files`,
+  );
 }
 
 console.log("\n── scatter density ─────────────────────────────────────────");

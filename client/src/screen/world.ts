@@ -79,6 +79,7 @@ import {
   BIOMES,
   BIOME_TILE_KEYS,
   DECOR_KEYS,
+  LANDMARK_KEYS,
   SCATTER_KEYS,
   type BiomeType,
   biomeAt,
@@ -612,7 +613,12 @@ export class WorldScene extends Phaser.Scene {
 
   preload() {
     this.load.setPath("/assets/hex");
-    for (const key of new Set([...BIOME_TILE_KEYS, ...DECOR_KEYS, ...SCATTER_KEYS])) {
+    for (const key of new Set([
+      ...BIOME_TILE_KEYS,
+      ...DECOR_KEYS,
+      ...SCATTER_KEYS,
+      ...LANDMARK_KEYS,
+    ])) {
       this.load.image(key, `${key}.png`);
     }
     this.load.setPath("/assets/enemies");
