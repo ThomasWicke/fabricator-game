@@ -192,6 +192,38 @@ export function makeForageTexture(scene: Phaser.Scene): void {
   canvas.refresh();
 }
 
+/** A burrow: the thing enemies come out of, and the thing they run back to.
+ *  Deliberately dark and low — you should spot it before it spots you. */
+export function makeNestTexture(scene: Phaser.Scene): void {
+  if (scene.textures.exists("nest")) return;
+  const w = 46;
+  const h = 30;
+  const canvas = scene.textures.createCanvas("nest", w, h)!;
+  const ctx = canvas.context;
+  // mound
+  ctx.fillStyle = "#3a3128";
+  ctx.beginPath();
+  ctx.ellipse(w / 2, h - 8, 21, 11, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#4a3f33";
+  ctx.beginPath();
+  ctx.ellipse(w / 2, h - 11, 18, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // the hole
+  ctx.fillStyle = "#140f0c";
+  ctx.beginPath();
+  ctx.ellipse(w / 2, h - 10, 9, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // a few scattered bits around the entrance
+  ctx.fillStyle = "#2b241d";
+  for (const [x, y] of [[9, 22], [36, 21], [14, 9], [33, 11]] as [number, number][]) {
+    ctx.beginPath();
+    ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  canvas.refresh();
+}
+
 /** A dropped pack — where somebody's load stayed when they didn't. */
 export function makePackTexture(scene: Phaser.Scene): void {
   if (scene.textures.exists("pack")) return;

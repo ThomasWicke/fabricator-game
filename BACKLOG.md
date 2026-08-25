@@ -127,12 +127,12 @@ likely way somebody tries it for the first time.
 
 ## Enemies — stress-free by design
 
-- [ ] **E1 · Dwellings.** Enemies belong to a nest placed deterministically in
+- [x] **E1 · Dwellings.** Enemies belong to a nest placed deterministically in
       hostile biomes, and spawn from it.
-- [ ] **E2 · Chase AI with a leash.** Always slower than a running player. Aggro
+- [x] **E2 · Chase AI with a leash.** Always slower than a running player. Aggro
       drops after a threshold of time out of reach, or distance from the nest.
-- [ ] **E3 · Combat.** Contact damage both ways, knockback, hit flashes.
-- [ ] **E4 · Enemy art.** Kenney enemy pack, mapped to biomes (slimes in the bog,
+- [x] **E3 · Combat.** Contact damage both ways, knockback, hit flashes.
+- [x] **E4 · Enemy art.** Kenney enemy pack, mapped to biomes (slimes in the bog,
       spiders in the woods, snakes in the desert).
 
 ---

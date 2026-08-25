@@ -48,10 +48,27 @@ import {
 } from "./chunks";
 import {
   makeForageTexture,
+  makeNestTexture,
   makePackTexture,
   makePadTexture,
   makeParticleTextures,
+  mulberry32,
 } from "./textures";
+import {
+  AGGRO_NIGHT_BONUS,
+  AGGRO_RANGE,
+  ENEMY_KEYS,
+  HUNGRY_SPEED,
+  LEASH_RANGE,
+  LOSE_RANGE,
+  LOSE_TIME,
+  SPECIES,
+  SPRINT_MULT,
+  WALK_SPEED,
+  nestAt,
+  type Species,
+  type SpeciesId,
+} from "./enemies";
 import {
   BIOMES,
   BIOME_TILE_KEYS,
@@ -67,8 +84,6 @@ import {
   worldSeed,
 } from "./worldgen";
 
-const WALK_SPEED = 220;
-const SPRINT_MULT = 1.65;
 /** On-foot terrain penalties. Water and lava aren't slow, they're closed —
  *  crossing them is what a fabricated hull is for. */
 const WALK_MODS: Record<TerrainType, number> = {
@@ -141,6 +156,27 @@ const DUST_TINT: Record<TerrainType, number> = {
   water: 0x2d5c86,
 };
 
+// ── wildlife ──────────────────────────────────────────────────────────────
+//
+// Threat you can always walk away from — or rather, run away from. The whole
+// balance lives in three numbers: enemies are faster than a walk and slower
+// than a sprint, they give up once you have been clear for a moment, and they
+// never chase further than a screen from home.
+
+/** How close a bite lands, and how often. */
+const BITE_RANGE = 34;
+const BITE_COOLDOWN = 1100;
+const BITE_KNOCKBACK = 210;
+/** Bare hands: enough to see something off, not enough to make you a hunter. */
+const SHOVE_RANGE = 62;
+const SHOVE_COOLDOWN = 420;
+const SHOVE_KNOCKBACK = 300;
+/** A nest keeps its brood topped up on this cadence. */
+const NEST_RESPAWN_MS = 22_000;
+/** Idle wandering: how far from the nest, and how often they pick a new spot. */
+const WANDER_RANGE = 90;
+const WANDER_EVERY = 2600;
+
 // ── survival ──────────────────────────────────────────────────────────────
 //
 // Deliberately unhurried. Hunger is a reason to keep an eye on the land, not
@@ -157,7 +193,6 @@ const HUNGER_WALK = 1.35;
 const HUNGER_SPRINT = 2.1;
 /** Below this you are hungry: slower, and the HUD says so. */
 const HUNGER_LOW = 25;
-const HUNGRY_SPEED = 0.72;
 /** Empty. Health goes now, slowly enough to walk somewhere about it. */
 const STARVE_DAMAGE = 1.6;
 /** Health regained per second while well fed. */
@@ -268,6 +303,41 @@ type PlayerEntity = {
   hunger: number;
   /** Fractional progress toward the next whole unit deposited. */
   depositCarry: number;
+  /** Rate limit on bare-handed shoves. */
+  nextShoveAt: number;
+};
+
+/** One animal. Nests own them; chunks own the nests. */
+type Enemy = {
+  species: SpeciesId;
+  def: Species;
+  sprite: Phaser.Physics.Arcade.Sprite;
+  home: { x: number; y: number };
+  health: number;
+  /** Who it is after, if anyone. */
+  target: Slot | null;
+  /** Seconds the target has been beyond LOSE_RANGE. */
+  lostFor: number;
+  nextBiteAt: number;
+  nextWanderAt: number;
+  wander: { x: number; y: number };
+  /** Set while the hit flash is showing, so it isn't restarted every frame. */
+  flashUntil: number;
+  /** Killed, but still fading out. The sprite stays alive for most of a
+   *  second while it fades, and without this flag it is still a valid target
+   *  the whole time — so it can be killed again, and again, each one paying
+   *  out another piece of food. */
+  dying: boolean;
+};
+
+/** A burrow. Deterministic from the hex; streams in and out with its chunk. */
+type Nest = {
+  species: SpeciesId;
+  x: number;
+  y: number;
+  sprite: Phaser.GameObjects.Image;
+  brood: Enemy[];
+  nextSpawnAt: number;
 };
 
 /** A pack left where somebody fell. Walk back and press A to take it. */
@@ -381,6 +451,7 @@ export class WorldScene extends Phaser.Scene {
   private darkness: Phaser.GameObjects.Rectangle[] = [];
   private spawnCount = 0;
   private field!: ChunkField;
+  private rng!: () => number;
   /**
    * Who is actually playing. The world always holds two characters, but a
    * slot only wakes up when someone arrives for it — a phone taking the seat,
@@ -403,6 +474,9 @@ export class WorldScene extends Phaser.Scene {
   private occupied = new Set<string>();
   /** Packs dropped where players fell, waiting to be collected. */
   private drops: DroppedPack[] = [];
+  /** Nests by chunk, so wildlife streams in and out with the ground it
+   *  lives on rather than simulating a whole planet's worth. */
+  private nestsByChunk = new Map<ChunkKey, Nest[]>();
   private nodesByChunk = new Map<ChunkKey, ResourceNode[]>();
   /** Nodes whose remaining count differs from the deterministic baseline —
    *  the only node state a save needs to carry. Survives chunk unload, which
@@ -456,6 +530,8 @@ export class WorldScene extends Phaser.Scene {
     for (const key of new Set([...BIOME_TILE_KEYS, ...DECOR_KEYS, ...SCATTER_KEYS])) {
       this.load.image(key, `${key}.png`);
     }
+    this.load.setPath("/assets/enemies");
+    for (const key of ENEMY_KEYS) this.load.image(key, `${key}.png`);
     this.load.setPath("/assets/aliens");
     for (const skin of Object.values(ALIEN_SKINS)) {
       for (const f of ALIEN_FRAMES) this.load.image(`${skin}_${f}`, `${skin}_${f}.png`);
@@ -471,8 +547,12 @@ export class WorldScene extends Phaser.Scene {
     makeParticleTextures(this);
     makeForageTexture(this);
     makePackTexture(this);
+    makeNestTexture(this);
 
     this.obstacles = this.physics.add.staticGroup();
+    // Wildlife wanders and spawns with jitter; seeded so replaying the same
+    // world behaves the same way rather than differing run to run.
+    this.rng = mulberry32(`${this.seedText}|wildlife`);
 
     // ── the landing site ────────────────────────────────────────
     // Nothing is carved or cleared: findSpawn walks the field until it finds
@@ -484,8 +564,14 @@ export class WorldScene extends Phaser.Scene {
 
     // ── terrain streaming ───────────────────────────────────────
     this.field = new ChunkField(this, this.seed, {
-      onLoad: (cx, cy) => this.loadChunkNodes(cx, cy),
-      onUnload: (cx, cy) => this.unloadChunkNodes(cx, cy),
+      onLoad: (cx, cy) => {
+        this.loadChunkNodes(cx, cy);
+        this.loadChunkNests(cx, cy);
+      },
+      onUnload: (cx, cy) => {
+        this.unloadChunkNodes(cx, cy);
+        this.unloadChunkNests(cx, cy);
+      },
     });
 
     this.add.image(this.pad.x, this.pad.y, "pad").setDepth(this.pad.y);
@@ -791,6 +877,7 @@ export class WorldScene extends Phaser.Scene {
       health: HEALTH_MAX,
       hunger: HUNGER_MAX,
       depositCarry: 0,
+      nextShoveAt: 0,
     };
     this.players.set(slot, entity);
     return entity;
@@ -1470,6 +1557,274 @@ export class WorldScene extends Phaser.Scene {
     return true;
   }
 
+  // ── wildlife ──────────────────────────────────────────────────
+
+  /** Nests for a chunk, from the same deterministic field as everything else. */
+  private loadChunkNests(cx: number, cy: number): void {
+    const key = chunkKey(cx, cy);
+    if (this.nestsByChunk.has(key)) return;
+    const list: Nest[] = [];
+    for (let row = cy * CHUNK_ROWS; row < (cy + 1) * CHUNK_ROWS; row++) {
+      for (let col = cx * CHUNK_COLS; col < (cx + 1) * CHUNK_COLS; col++) {
+        const biome = this.biomeAtHex(col, row);
+        // nestAt keeps the landing site clear itself — it is where you learn
+        // the game and where you run to, and neither works with a burrow
+        // next door.
+        const species = nestAt(col, row, this.seed, biome, this.spawn);
+        if (!species) continue;
+        const c = hexToWorld(col, row);
+        const y = c.y + dropFor(biome);
+        list.push({
+          species,
+          x: c.x,
+          y,
+          sprite: this.add.image(c.x, y + 4, "nest").setOrigin(0.5, 0.8).setDepth(y - 2),
+          brood: [],
+          nextSpawnAt: 0,
+        });
+      }
+    }
+    if (list.length) this.nestsByChunk.set(key, list);
+  }
+
+  private unloadChunkNests(cx: number, cy: number): void {
+    const key = chunkKey(cx, cy);
+    const list = this.nestsByChunk.get(key);
+    if (!list) return;
+    for (const nest of list) {
+      for (const e of nest.brood) {
+        this.tweens.killTweensOf(e.sprite);
+        e.sprite.destroy();
+      }
+      nest.sprite.destroy();
+    }
+    this.nestsByChunk.delete(key);
+  }
+
+  private spawnEnemy(nest: Nest, now: number): void {
+    const def = SPECIES[nest.species];
+    const angle = this.rng() * Math.PI * 2;
+    const x = nest.x + Math.cos(angle) * 26;
+    const y = nest.y + Math.sin(angle) * 18;
+    const sprite = this.physics.add.sprite(x, y, def.idle);
+    sprite.setScale(def.size / sprite.height);
+    sprite.body!.setSize(sprite.width * 0.7, sprite.height * 0.55);
+    this.physics.add.collider(sprite, this.obstacles);
+    nest.brood.push({
+      species: nest.species,
+      def,
+      sprite,
+      home: { x: nest.x, y: nest.y },
+      health: def.health,
+      target: null,
+      lostFor: 0,
+      nextBiteAt: 0,
+      nextWanderAt: now,
+      wander: { x, y },
+      flashUntil: 0,
+      dying: false,
+    });
+  }
+
+  /**
+   * The whole of enemy behaviour.
+   *
+   * Chase the nearest player in range; give up once they have been clear for
+   * a moment or once home is too far behind; otherwise potter about near the
+   * nest. Nothing here is clever — the point is that it is predictable, so
+   * running is always the right answer and always works.
+   */
+  private runEnemies(now: number, dtMs: number, night: number): void {
+    const dt = dtMs / 1000;
+    const aggro = AGGRO_RANGE * (1 + night * AGGRO_NIGHT_BONUS);
+
+    for (const list of this.nestsByChunk.values()) {
+      for (const nest of list) {
+        const def = SPECIES[nest.species];
+        if (nest.brood.length < def.brood && now >= nest.nextSpawnAt) {
+          nest.nextSpawnAt = now + NEST_RESPAWN_MS;
+          this.spawnEnemy(nest, now);
+        }
+
+        for (let i = nest.brood.length - 1; i >= 0; i--) {
+          const e = nest.brood[i];
+          if (!e.sprite.active) {
+            nest.brood.splice(i, 1);
+            continue;
+          }
+          if (e.dying) continue; // fading out; it neither chases nor bites
+          this.stepEnemy(e, now, dt, aggro);
+        }
+      }
+    }
+  }
+
+  private stepEnemy(e: Enemy, now: number, dt: number, aggro: number): void {
+    const body = e.sprite.body as Phaser.Physics.Arcade.Body;
+    const homeDist = Phaser.Math.Distance.Between(
+      e.sprite.x,
+      e.sprite.y,
+      e.home.x,
+      e.home.y,
+    );
+
+    // ── who, if anyone, are we after ──
+    let target: PlayerEntity | null = null;
+    if (homeDist < LEASH_RANGE) {
+      let best = Infinity;
+      for (const p of this.players.values()) {
+        if (!this.activeSlots.has(p.slot) || p.driving) continue; // riders are safe
+        const d = Phaser.Math.Distance.Between(e.sprite.x, e.sprite.y, p.sprite.x, p.sprite.y);
+        // Already chasing? Keep at it out to LOSE_RANGE; otherwise you have
+        // to come within aggro range to be noticed at all.
+        const notice = e.target === p.slot ? LOSE_RANGE : aggro;
+        if (d < notice && d < best) {
+          best = d;
+          target = p;
+        }
+      }
+      if (target && best > LOSE_RANGE * 0.85) e.lostFor += dt;
+      else e.lostFor = 0;
+      if (e.lostFor > LOSE_TIME) target = null;
+    }
+
+    if (target) {
+      if (e.target !== target.slot) e.lostFor = 0;
+      e.target = target.slot;
+    } else if (e.target !== null) {
+      e.target = null;
+      e.lostFor = 0;
+    }
+
+    // ── move ──
+    const speed = e.def.speed * (WALK_MODS[this.terrainAt(e.sprite.x, e.sprite.y)] || 0.4);
+    let goal: { x: number; y: number };
+    if (target) {
+      goal = { x: target.sprite.x, y: target.sprite.y };
+    } else if (homeDist > WANDER_RANGE * 1.4) {
+      goal = e.home; // too far out — head back
+    } else {
+      if (now >= e.nextWanderAt) {
+        e.nextWanderAt = now + WANDER_EVERY * (0.5 + this.rng());
+        const a = this.rng() * Math.PI * 2;
+        const r = this.rng() * WANDER_RANGE;
+        e.wander = { x: e.home.x + Math.cos(a) * r, y: e.home.y + Math.sin(a) * r };
+      }
+      goal = e.wander;
+    }
+
+    const dx = goal.x - e.sprite.x;
+    const dy = goal.y - e.sprite.y;
+    const dist = Math.hypot(dx, dy);
+    const pace = target ? speed : speed * 0.38; // ambling, unless hunting
+    if (dist > 6) {
+      body.setVelocity((dx / dist) * pace, (dy / dist) * pace);
+      e.sprite.setFlipX(dx < 0);
+      e.sprite.setTexture(
+        e.def.walk[Math.floor(now / 160) % e.def.walk.length],
+      );
+    } else {
+      body.setVelocity(0, 0);
+      e.sprite.setTexture(e.def.idle);
+    }
+    e.sprite.setDepth(e.sprite.y);
+
+    if (e.flashUntil && now > e.flashUntil) {
+      e.sprite.clearTint();
+      e.flashUntil = 0;
+    }
+
+    // ── bite ──
+    if (!target || now < e.nextBiteAt) return;
+    if (Phaser.Math.Distance.Between(e.sprite.x, e.sprite.y, target.sprite.x, target.sprite.y) > BITE_RANGE) {
+      return;
+    }
+    e.nextBiteAt = now + BITE_COOLDOWN;
+    this.damagePlayer(target, e.def.damage, e.sprite.x, e.sprite.y);
+  }
+
+  private damagePlayer(p: PlayerEntity, amount: number, fromX: number, fromY: number) {
+    p.health -= amount;
+    const away = new Phaser.Math.Vector2(p.sprite.x - fromX, p.sprite.y - fromY)
+      .normalize()
+      .scale(BITE_KNOCKBACK);
+    (p.sprite.body as Phaser.Physics.Arcade.Body).setVelocity(away.x, away.y);
+    p.sprite.setTint(0xff6b6b);
+    this.time.delayedCall(180, () => p.sprite.clearTint());
+    this.floatText(p.sprite.x, p.sprite.y - 46, `−${amount}`, "#ff6b6b");
+    this.cameras.main.shake(120, 0.006);
+    if (p.health <= 0) this.killPlayer(p);
+    else this.pushVitals(p);
+  }
+
+  /** Nearest living animal within `range` of a player, or null. */
+  private enemyWithin(p: PlayerEntity, range: number): Enemy | null {
+    let best: Enemy | null = null;
+    let bestDist = range;
+    for (const list of this.nestsByChunk.values()) {
+      for (const nest of list) {
+        for (const e of nest.brood) {
+          if (e.dying || !e.sprite.active) continue;
+          const d = Phaser.Math.Distance.Between(
+            p.sprite.x,
+            p.sprite.y,
+            e.sprite.x,
+            e.sprite.y,
+          );
+          if (d < bestDist) {
+            bestDist = d;
+            best = e;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  /** Bare-handed: shove the nearest animal off you. Not a weapon system —
+   *  that arrives with the `weapon` primitive — just enough that being cornered
+   *  is something you can act on rather than only run from. */
+  private tryShove(p: PlayerEntity, now: number): boolean {
+    if (now < p.nextShoveAt) return false;
+    const best = this.enemyWithin(p, SHOVE_RANGE);
+    if (!best) return false;
+    p.nextShoveAt = now + SHOVE_COOLDOWN;
+    best.health -= 1;
+
+    const away = new Phaser.Math.Vector2(best.sprite.x - p.sprite.x, best.sprite.y - p.sprite.y)
+      .normalize()
+      .scale(SHOVE_KNOCKBACK);
+    (best.sprite.body as Phaser.Physics.Arcade.Body).setVelocity(away.x, away.y);
+    best.sprite.setTexture(best.def.hit);
+    best.sprite.setTint(0xffd0d0);
+    best.flashUntil = now + 220;
+
+    if (best.health <= 0) this.killEnemy(best, p);
+    return true;
+  }
+
+  private killEnemy(e: Enemy, by: PlayerEntity) {
+    if (e.dying) return;
+    e.dying = true;
+    e.sprite.setTexture(e.def.dead);
+    e.sprite.clearTint();
+    (e.sprite.body as Phaser.Physics.Arcade.Body).enable = false;
+    this.tweens.add({
+      targets: e.sprite,
+      alpha: 0,
+      duration: 700,
+      delay: 250,
+      onComplete: () => e.sprite.destroy(),
+    });
+    // Something to eat. Not much — hunting shouldn't out-earn foraging, it
+    // should just mean a fight you won wasn't for nothing.
+    if (packLoad(by.pack) < PACK_CAPACITY) {
+      by.pack.food += 1;
+      this.floatText(e.sprite.x, e.sprite.y - 30, "+1 food", "#c9e77f");
+      this.pushVitals(by);
+    }
+  }
+
   // ── survival ──────────────────────────────────────────────────
 
   private pushVitals(p: PlayerEntity) {
@@ -1860,7 +2215,15 @@ export class WorldScene extends Phaser.Scene {
       }
 
       // A near a node = gather (hold). Otherwise A-edge = enter / ping.
-      const node = this.nearestNode(p.sprite.x, p.sprite.y, HARVEST_RANGE);
+      //
+      // Unless something is actually on you: with one action button, gathering
+      // wins ties, and standing at a tree with a spider biting your ankles
+      // would mean pressing A to chop wood while you take damage. Anything
+      // inside biting distance takes the button.
+      const underAttack = aEdge && this.enemyWithin(p, BITE_RANGE + 10);
+      const node = underAttack
+        ? null
+        : this.nearestNode(p.sprite.x, p.sprite.y, HARVEST_RANGE);
       if (node && input.buttons.a) {
         const rate = p.tool?.spec.harvest?.rate ?? HAND_RATE;
         const materials = p.tool?.spec.harvest?.materials ?? HAND_MATERIALS;
@@ -1878,6 +2241,8 @@ export class WorldScene extends Phaser.Scene {
         // then a machine to climb into, then the ping.
         if (this.tryCollectDrop(p)) {
           // collected
+        } else if (this.tryShove(p, now)) {
+          // saw something off
         } else {
           const vehicle = this.nearestEnterableVehicle(p);
           if (vehicle) this.enterVehicle(p, vehicle);
@@ -1895,6 +2260,7 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
+    this.runEnemies(now, dtMs, night);
     this.runStructureEmissions();
     this.runAutomation(now);
     this.updateFabricatorPresence(now);
