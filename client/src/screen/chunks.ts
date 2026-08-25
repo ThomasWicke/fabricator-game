@@ -16,7 +16,7 @@
 
 import Phaser from "phaser";
 import { HEX_W, ROW_H, hexImageTopLeft, hexToWorld } from "./hexgrid";
-import { BIOMES, type BiomeType, biomeAt, decorAt } from "./worldgen";
+import { BIOMES, decorAt, tileAt } from "./worldgen";
 
 export const CHUNK_COLS = 10;
 export const CHUNK_ROWS = 12;
@@ -43,28 +43,6 @@ const MAX_CHUNKS = 34;
 /** Chunks built per frame. Building is a few milliseconds of batched draws;
  *  more than a couple in one frame is a visible hitch when you drive fast. */
 const BUILDS_PER_FRAME = 2;
-
-/**
- * Vertical offset per biome, in pixels. Lowering a tile uncovers that much of
- * the slab side of the tile above it, which reads as a step down; raising it
- * covers more and exposes its own slab to the row below, which reads as a step
- * up. That's the whole relief system — the sea sits in a basin, the mountains
- * stand above the plain, and it costs nothing to draw.
- */
-const DROP: Record<BiomeType, number> = {
-  water: 9,
-  lava: 9,
-  magic: 6,
-  sand: 2,
-  grass: 0,
-  autumn: 0,
-  dirt: 0,
-  snow: 0,
-  stone: -4,
-  rock: -8,
-};
-
-export const dropFor = (b: BiomeType): number => DROP[b];
 
 export type ChunkKey = string;
 export const chunkKey = (cx: number, cy: number): ChunkKey => `${cx},${cy}`;
@@ -184,15 +162,15 @@ export class ChunkField {
 
     rt.beginDraw();
     // Two rows of bleed-in above and one column to the left: a tile's image
-    // hangs 41px below its row, and a lowered water tile hangs further still,
-    // so the row two above can just reach into this chunk. Ascending row order
-    // is what makes each row's top face cover the slab of the row above it.
+    // hangs 41px below its row, and a sunken sea tile (+11) hangs 52px, so the
+    // row two above can just reach in. Raised ground (-14) reaches less far,
+    // not more, so two rows still covers the worst case. Ascending row order is
+    // what makes each row's top face cover the slab of the row above it.
     for (let row = row0 - 2; row < row0 + CHUNK_ROWS; row++) {
       for (let col = col0 - 1; col < col0 + CHUNK_COLS; col++) {
-        const biome = biomeAt(col, row, this.seed);
+        const { biome, drop } = tileAt(col, row, this.seed);
         const c = hexToWorld(col, row);
         const tl = hexImageTopLeft(col, row);
-        const drop = DROP[biome];
         rt.batchDraw(BIOMES[biome].tile, tl.x - x0, tl.y + drop - y0);
         const deco = decorAt(col, row, this.seed, biome);
         if (deco) {

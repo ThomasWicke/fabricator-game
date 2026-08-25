@@ -192,6 +192,35 @@ export function makeForageTexture(scene: Phaser.Scene): void {
   canvas.refresh();
 }
 
+/**
+ * A soft contact shadow for boulders.
+ *
+ * The pack's pines carry their own baked shadow; the rocks don't, and on
+ * matching ground they lose their footing entirely — a snow-capped rock on a
+ * snowfield has a top face the same near-white as the tile, so only its
+ * shaded sides show and it reads as a notch cut into the ground rather than a
+ * lump sitting on it. A shadow puts it back on the surface.
+ */
+export function makeShadowTexture(scene: Phaser.Scene): void {
+  if (scene.textures.exists("shadow")) return;
+  const w = 54;
+  const h = 26;
+  const canvas = scene.textures.createCanvas("shadow", w, h)!;
+  const ctx = canvas.context;
+  const g = ctx.createRadialGradient(w / 2, h / 2, 1, w / 2, h / 2, w / 2);
+  g.addColorStop(0, "rgba(20, 28, 38, 0.32)");
+  g.addColorStop(0.6, "rgba(20, 28, 38, 0.16)");
+  g.addColorStop(1, "rgba(20, 28, 38, 0)");
+  ctx.save();
+  ctx.translate(w / 2, h / 2);
+  ctx.scale(1, h / w);
+  ctx.translate(-w / 2, -w / 2);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, w);
+  ctx.restore();
+  canvas.refresh();
+}
+
 /** A burrow: the thing enemies come out of, and the thing they run back to.
  *  Deliberately dark and low — you should spot it before it spots you. */
 export function makeNestTexture(scene: Phaser.Scene): void {

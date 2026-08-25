@@ -43,7 +43,6 @@ import {
   ChunkField,
   chunkKey,
   chunkOfHex,
-  dropFor,
   type ChunkKey,
 } from "./chunks";
 import {
@@ -52,6 +51,7 @@ import {
   makePackTexture,
   makePadTexture,
   makeParticleTextures,
+  makeShadowTexture,
   mulberry32,
 } from "./textures";
 import {
@@ -81,6 +81,7 @@ import {
   isLiquid,
   scatterAt,
   terrainOf,
+  tileAt,
   worldSeed,
 } from "./worldgen";
 
@@ -419,6 +420,8 @@ type ResourceNode = {
   remaining: number;
   /** Berry overlay, on forage only. */
   berries?: Phaser.GameObjects.Image;
+  /** Contact shadow, on boulders only. */
+  shadow?: Phaser.GameObjects.Image;
 };
 
 /** What the minimap needs. Sampled on demand rather than pushed, because it
@@ -485,6 +488,7 @@ export class WorldScene extends Phaser.Scene {
   /** biomeAt is pure but not free, and the sim asks about the same few hexes
    *  every frame. Bounded so an endless world can't grow an endless cache. */
   private biomeCache = new Map<string, BiomeType>();
+  private dropCache = new Map<string, number>();
 
   stockpile: Stockpile = { ...STARTING_STOCK };
   /** Screen shell subscribes for the HUD. */
@@ -548,6 +552,7 @@ export class WorldScene extends Phaser.Scene {
     makeForageTexture(this);
     makePackTexture(this);
     makeNestTexture(this);
+    makeShadowTexture(this);
 
     this.obstacles = this.physics.add.staticGroup();
     // Wildlife wanders and spawns with jitter; seeded so replaying the same
@@ -712,10 +717,18 @@ export class WorldScene extends Phaser.Scene {
     return terrainOf(this.biomeAtPoint(x, y));
   }
 
-  /** Vertical offset of a hex's surface. Relief is per biome now: the sea
-   *  sits in a basin, the bog a step down, bare rock a step up. */
+  /** Vertical offset of a hex's surface — sea in a basin, bog a step down,
+   *  high ground a step up. Cached alongside the biome because the sim asks
+   *  about the same handful of hexes every frame. */
   private dropAt(col: number, row: number): number {
-    return dropFor(this.biomeAtHex(col, row));
+    const key = `${col},${row}`;
+    let d = this.dropCache.get(key);
+    if (d === undefined) {
+      d = tileAt(col, row, this.seed).drop;
+      if (this.dropCache.size > 4096) this.dropCache.clear();
+      this.dropCache.set(key, d);
+    }
+    return d;
   }
 
   // ── resource nodes, streamed with their chunk ─────────────────
@@ -748,10 +761,7 @@ export class WorldScene extends Phaser.Scene {
         const remaining = delta ? delta.remaining : entry.units;
 
         const c = hexToWorld(col, row);
-        // Boulders are raised blocks. Sunk along with a lowered biome surface
-        // they cut into the higher hexes at the border, so they sit at
-        // un-dropped height — resting on the bog rather than in it.
-        const drop = dropFor(biome);
+        const drop = this.dropAt(col, row);
         const cy2 = c.y + drop;
 
         let sprite: Phaser.GameObjects.Image;
@@ -759,6 +769,7 @@ export class WorldScene extends Phaser.Scene {
         let bodyH: number;
         let bodyDY: number;
         let berries: Phaser.GameObjects.Image | undefined;
+        let shadow: Phaser.GameObjects.Image | undefined;
         if (entry.art === "bush") {
           // Forage stands on the tile and is walked through — a berry bush
           // that body-blocks you would be infuriating, and the whole point of
@@ -772,8 +783,19 @@ export class WorldScene extends Phaser.Scene {
           bodyH = 0;
           bodyDY = 0;
         } else if (entry.art === "boulder") {
+          // Stamped like a tile, and it has to move WITH its tile: relief can
+          // raise ground as well as sink it, and a boulder pinned to the
+          // un-dropped height sits several pixels below the mountainside it
+          // is supposed to be standing on.
+          // A contact shadow, drawn under the block: without it a rock whose
+          // top face matches the ground it stands on shows only its shaded
+          // sides, and reads as a notch rather than a lump.
+          shadow = this.add
+            .image(c.x, cy2 + 4, "shadow")
+            .setDepth(cy2 - 1)
+            .setAlpha(0.85);
           sprite = this.add
-            .image(c.x - HEX_W / 2, c.y - 32, entry.texture)
+            .image(c.x - HEX_W / 2, cy2 - 32, entry.texture)
             .setOrigin(0, 0);
           bodyW = 44;
           bodyH = 24;
@@ -809,6 +831,7 @@ export class WorldScene extends Phaser.Scene {
         const node: ResourceNode = {
           sprite,
           berries,
+          shadow,
           blocker,
           cx: c.x,
           cy: cy2,
@@ -833,6 +856,7 @@ export class WorldScene extends Phaser.Scene {
       this.tweens.killTweensOf(node.sprite);
       node.sprite.destroy();
       node.berries?.destroy();
+      node.shadow?.destroy();
       node.blocker.destroy();
     }
     this.nodesByChunk.delete(key);
@@ -1030,6 +1054,7 @@ export class WorldScene extends Phaser.Scene {
     }
     node.blocker.destroy(); // frees the hex for walking immediately
     node.berries?.destroy();
+    node.shadow?.destroy();
     if (!animate) {
       node.sprite.destroy();
       return;
@@ -1573,7 +1598,7 @@ export class WorldScene extends Phaser.Scene {
         const species = nestAt(col, row, this.seed, biome, this.spawn);
         if (!species) continue;
         const c = hexToWorld(col, row);
-        const y = c.y + dropFor(biome);
+        const y = c.y + this.dropAt(col, row);
         list.push({
           species,
           x: c.x,

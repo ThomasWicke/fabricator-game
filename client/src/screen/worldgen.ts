@@ -194,6 +194,54 @@ function classify(elev: number, temp: number, moist: number): BiomeType {
   return moist > 0.54 ? "autumn" : "grass";
 }
 
+/**
+ * Vertical relief, in pixels. Positive sinks a tile, negative raises it.
+ *
+ * Keyed to ELEVATION, not to biome, and that distinction is the whole point.
+ * Biome-keyed relief looks right until you notice that `snow` covers both
+ * lowland tundra and mountain peaks: a tundra hex beside a foothill then gets
+ * a step it has no business having, and since both are pale grey it reads as
+ * a row of little dark spikes rather than as terrain. Elevation is continuous,
+ * so a step now appears only where the ground genuinely rises, and the steps
+ * line up into contours instead of jagged mismatches at colour boundaries.
+ */
+function reliefFor(elev: number): number {
+  if (elev < 0.446) return 3; // beach, a touch below the land behind it
+  if (elev < 0.55) return 0;
+  if (elev < 0.635) return -4;
+  if (elev < 0.7) return -9;
+  return -14;
+}
+
+/** The bog is a hollow you step down into, and liquid sits lower still —
+ *  relief these two carry on top of whatever their elevation says. */
+const BIOME_SINK: Partial<Record<BiomeType, number>> = {
+  magic: 5,
+  water: 8,
+  lava: 8,
+};
+
+export type TileInfo = { biome: BiomeType; drop: number };
+
+/**
+ * Biome and relief together, from one pass of the noise.
+ *
+ * Cheaper than asking for them separately: biomeAt already computes elevation
+ * and throws it away, so a caller that needs both was paying for it twice.
+ */
+export function tileAt(col: number, row: number, seed: number): TileInfo {
+  const { gx, gy } = geo(col, row);
+  const base = fbm(gx * F_CONTINENT, gy * F_CONTINENT, seed, 5);
+  const relief = fbm(gx * F_RELIEF, gy * F_RELIEF, seed + 7717, 3);
+  const elevation = base * 0.76 + relief * 0.24;
+  const biome = classify(
+    elevation,
+    fbm(gx * F_TEMP, gy * F_TEMP, seed + 3313, 3),
+    fbm(gx * F_MOISTURE, gy * F_MOISTURE, seed + 5591, 4),
+  );
+  return { biome, drop: reliefFor(elevation) + (BIOME_SINK[biome] ?? 0) };
+}
+
 /** Just the biome — the hot path, called once per tile per chunk build. */
 export function biomeAt(col: number, row: number, seed: number): BiomeType {
   const { gx, gy } = geo(col, row);
