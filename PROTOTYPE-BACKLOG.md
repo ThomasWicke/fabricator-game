@@ -1,4 +1,7 @@
-# Universal Fabricator — from working PoC to a game people want to keep playing
+# VibeTech Privateer — from working PoC to a game people want to keep playing
+
+*(Working title per the story concept below; "Universal Fabricator" remains
+the machine's name — the product VibeTech is so proud of.)*
 
 A product backlog, written as a handover. The PoC proves the thesis: sketches
 become working machines, the world is endless, two people can play it on one
@@ -21,44 +24,76 @@ Status: `[ ]` open · priority `P0` (fun-critical) / `P1` (fun-multiplier) /
 
 ---
 
-## Epic G · A reason to be here (the spine) — the biggest gap
+## Epic G · The story spine: VibeTech Privateer
 
-The game has verbs and no sentence. Materials gate capabilities, but nothing
-asks for the capabilities. Players stop when their curiosity does — usually at
-minute 25, when they've built a car and a hut and ask "now what?"
+**The premise.** You are a privateer under contract to VibeTech — the company
+behind the Universal Fabricator™ — sent to assay and claim resource-rich
+worlds. You crashed. The Fabricator survived, damaged; intergalactic comms
+did not. The machine still runs VibeTech firmware and still believes in the
+mission. You, over the weeks, stop believing in it — because the thing the
+game quietly measures is that you started planting flowers.
 
-- [ ] **G1 · The premise, on screen. P0/S/M1.** You crash-landed; the
-      Fabricator is the ship's survived printer. Three sentences at expedition
-      start, one image. Costs a day, reframes everything: gathering is
-      salvage, the Fabricator is your way home, the map edge is hope.
-- [ ] **G2 · The Beacon — a win condition. P0/M/M1.** One monumental
-      end-goal build (rescue beacon / relay tower) whose bill is deliberately
-      absurd: large amounts of ALL SIX materials. It is visible in the design
-      library from minute one, permanently, greyed until affordable. The whole
-      economy already points at it — six materials, four of them behind
-      expeditions — it just needs the thing that demands them. Completing it
-      ends the run with a scene + stats (days survived, designs made, hexes
-      travelled) and offers "keep playing".
-- [ ] **G3 · Fabricator repair tiers. P0/L/M1.** The machine survived the
-      crash *damaged*. Tier 0 compiles tools only; repairing it (a material
-      bill, growing per tier) unlocks structures, then vehicles, then the
-      Beacon blueprint. This staggers the vocabulary so the first hour has
-      unlock beats, gives early gathering a purpose, and makes the machine a
-      character with an arc rather than a vending machine. (Deliberately
-      deferred in the PoC plan; its time has come.)
-- [ ] **G4 · Fabricator requests. P1/M/M2.** Between repairs, the machine
-      asks for things: "Bring me 20 stone", then later "Build something that
-      can cross water — I want to see the wreck offshore." Requests teach
-      primitives one at a time, reward with repair progress or rare
-      materials, and give aimless minutes a default direction. Hand-authored
-      list (~15), not procedural.
-- [ ] **G5 · The wreck sites. P1/M/M2.** 3–5 fixed-per-seed crash debris
-      landmarks (reuse the landmark lattice) holding one-time material caches
-      and one line of story each. Somewhere to point a first vehicle at.
-- [ ] **G6 · Run stats & endscreen. P2/S/M3.** Even without finishing the
-      Beacon: a "story of your expedition" panel from data already tracked —
-      distance, designs, deaths, regions named. Ends sessions on a note
-      instead of a tab-close.
+**Why this premise is load-bearing rather than paint:** the tension it names
+— strip the planet vs. live on it — is a tension the systems *already have*.
+The stockpile, the converters, the ore expeditions are the exploitation
+game; the farms, lamps, wards and the pantry are the homemaking game. The
+story doesn't need new mechanics; it needs a voice that notices which game
+you're playing. Tone: corporate satire, wry not grimdark — the flavor lines
+already speak this way.
+
+- [ ] **G1 · The opening, on screen. P0/S/M1.** Three sentences and one
+      image at claim-start: the contract, the crash, the dead uplink. The
+      Fabricator's first words set the voice: *"Good news, Privateer: the
+      asset survived. Refer to me as the asset. Directive one: stop bleeding."*
+- [ ] **G2 · The Uplink — one bill, two endings. P0/M/M1.** The monumental
+      end-goal build keeps its economic job (an absurd bill across all six
+      materials, pinned in the library from minute one, greyed until
+      affordable) but it is now the QUANTUM UPLINK — the only way to reach
+      VibeTech again. Completing it presents the game's one real decision:
+      **Transmit the claim** — the contract ending: VibeTech arrives, the
+      epilogue is an extraction fleet over your screenshots, you get paid,
+      the machine is proud of you. Or **repurpose the array** — the parts
+      become the settlement's heart (a lighthouse for the harbour you built),
+      the firmware objects, fails to object convincingly, and stays. Same
+      cost, same stats screen, two closing scenes. The economy points one
+      way; the meaning is chosen at the end.
+- [ ] **G3 · Fabricator repair tiers. P0/L/M1.** Unchanged mechanically
+      (tools → structures → vehicles → the Uplink blueprint), now voiced:
+      each tier restores a little more firmware personality, and the tier
+      names are corporate ("Field Provisioning" → "Claims Infrastructure" →
+      "Logistics" → "Communications"). Early game gathering is literally
+      working for the company.
+- [ ] **G4 · Directives. P1/M/M2.** The requests become VibeTech directives
+      with an extractive bent — "Assay the southern silicate deposit"
+      (glass), "The bog alloy interests our partners" (bogiron) — teaching
+      primitives one at a time and paying out repair progress. ~15
+      hand-written. Late-list directives get quietly ignorable, which is the
+      arc doing its work.
+- [ ] **G5 · The wreck sites. P1/M/M2.** 3–5 fixed-per-seed debris fields
+      from YOUR ship (reuse the landmark lattice): one-time caches, and one
+      recovered log line each — the privateer's own voice pre-crash, cocky
+      and contract-minded, so the player can hear who they were.
+- [ ] **G6 · The ledger — the arc, measured. P1/M/M2.** The game already
+      counts everything; give the counts a reading. Two invisible tallies —
+      EXTRACTION (ore banked, converters built, nests destroyed, trees
+      felled) and HOMESTEAD (farms, lamps, wards, food banked, structures
+      standing at dusk) — drive which one-liners the Fabricator serves and
+      which closing scene G2 offers as the *default* (both remain choosable).
+      No meters shown to the player; the game just seems to know you.
+- [ ] **G7 · Firmware interjections. P1/S/M2.** The Fabricator comments on
+      the ledger at natural beats (dawn, tier repair, big builds): praise for
+      extraction played straight — *"Quarterly numbers: strong"* — and
+      needling for homemaking — *"A flower bed, Privateer. I will file this
+      under morale."* One line at a time, rare enough to stay funny. This is
+      the cheapest way the arc becomes audible.
+- [ ] **G8 · Run stats & endscreen. P2/S/M3.** The claim's story from data
+      already tracked — distance, designs, deaths, regions named — plus the
+      two tallies from G6, finally shown, as the last beat before the title.
+- [ ] **G9 · Terminology pass. P2/S/M1.** The words carry the fiction:
+      expedition → CLAIM, the lobby's "START EXPEDITION" → "OPEN THE CLAIM",
+      players are Privateers, the save is the ledger. One sweep through
+      screen/controller copy; the game title on the landing page becomes
+      VibeTech Privateer with the machine keeping its proud product name.
 
 ## Epic F · The Fabricator as the star — multiply the core moment
 
@@ -84,7 +119,10 @@ the game, every time.
       asks for flawed-but-functional interpretations of over-ambitious asks;
       lean in: when the compiler clamps something hard (asked 1000 speed, got
       360), the flavor line should *acknowledge the compromise*. Pipe clamp
-      deltas into the flavor request. The machine having opinions is content.
+      deltas into the flavor request. The machine having opinions is content —
+      and with the VibeTech persona (Epic G), the opinions have an employer:
+      the system prompt's flavor instruction gets the firmware voice, so every
+      design ships with a line of corporate satire at no extra cost.
 - [ ] **F14 · Design naming moments. P2/S/M2.** "Mk II" is prefilled on
       modify — go further: the library shows lineage trees, and the machine
       occasionally comments on a family ("the fourth barrow this week").
@@ -214,11 +252,12 @@ Testers who don't reach a fabrication never come back. Nothing in this epic
 is a tutorial screen.
 
 - [ ] **O1 · The scripted first minute. P0/M/M1.** Spawn beside the damaged
-      machine (G1's three lines), one bush and three trees guaranteed within
-      sight (spawn-area authored overrides), the machine asks for its first
-      repair (G3 tier 0→1: "bring me 10 wood"), completing it opens the
-      blueprint pad unprompted with "draw me an axe — anything axe-shaped".
-      First fabrication inside 4 minutes, guaranteed by layout not by text.
+      machine (G1's opening), one bush and three trees guaranteed within
+      sight (spawn-area authored overrides), the machine issues Directive one
+      (G3 tier 0→1: "10 timber units, Privateer — the company measures
+      initiative"), completing it opens the blueprint pad unprompted with
+      "draw me an axe — anything axe-shaped". First fabrication inside 4
+      minutes, guaranteed by layout not by text.
 - [ ] **O2 · Contextual one-liners, unified. P0/S/M1.** The hint system
       exists in pieces (hunger, carry prompts). Unify: one queue, one style,
       each hint fires once per world, ~12 total (first ore sighting → "bare
