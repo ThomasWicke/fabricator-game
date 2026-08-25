@@ -13,6 +13,7 @@ import {
   resolveIdentity,
   sanitizeNickname,
 } from "../identity";
+import { createSketchPad } from "../sketch";
 import { RoomConnection } from "../socket";
 import { keepScreenAwake } from "../wake-lock";
 import type {
@@ -486,78 +487,32 @@ export function startController(code: string) {
     const nameInput = document.getElementById("sketch-name") as HTMLInputElement;
     const intentInput = document.getElementById("sketch-intent") as HTMLInputElement;
     const sketchCanvas = document.getElementById("sketch-canvas") as HTMLCanvasElement;
-    const sketchCtx = sketchCanvas.getContext("2d")!;
-
-    const sizeSketchCanvas = () => {
-      const rect = sketchCanvas.getBoundingClientRect();
-      if (rect.width && rect.height) {
-        // preserve drawing on resize is overkill for the PoC; just resize
-        sketchCanvas.width = Math.round(rect.width);
-        sketchCanvas.height = Math.round(rect.height);
-        sketchCtx.lineWidth = 6;
-        sketchCtx.lineCap = "round";
-        sketchCtx.lineJoin = "round";
-        sketchCtx.strokeStyle = "#1c232e";
-      }
-    };
-
-    let drawing = false;
-    let hasInk = false;
-    sketchCanvas.addEventListener("pointerdown", (e) => {
-      drawing = true;
-      hasInk = true;
-      try {
-        sketchCanvas.setPointerCapture(e.pointerId);
-      } catch {
-        // synthetic events (test harness)
-      }
-      const r = sketchCanvas.getBoundingClientRect();
-      sketchCtx.beginPath();
-      sketchCtx.moveTo(e.clientX - r.left, e.clientY - r.top);
-      sketchCtx.lineTo(e.clientX - r.left + 0.1, e.clientY - r.top + 0.1);
-      sketchCtx.stroke();
-    });
-    sketchCanvas.addEventListener("pointermove", (e) => {
-      if (!drawing) return;
-      const r = sketchCanvas.getBoundingClientRect();
-      sketchCtx.lineTo(e.clientX - r.left, e.clientY - r.top);
-      sketchCtx.stroke();
-    });
-    const endStroke = () => {
-      drawing = false;
-    };
-    sketchCanvas.addEventListener("pointerup", endStroke);
-    sketchCanvas.addEventListener("pointercancel", endStroke);
+    const pad = createSketchPad(sketchCanvas);
 
     blueprintBtn.addEventListener("click", () => {
       if (blueprintBtn.disabled) return;
       overlay.classList.remove("hidden");
-      requestAnimationFrame(sizeSketchCanvas);
+      requestAnimationFrame(pad.fit);
     });
     document.getElementById("sketch-cancel")!.addEventListener("click", () => {
       overlay.classList.add("hidden");
     });
-    document.getElementById("sketch-clear")!.addEventListener("click", () => {
-      sketchCtx.clearRect(0, 0, sketchCanvas.width, sketchCanvas.height);
-      hasInk = false;
-    });
+    document.getElementById("sketch-clear")!.addEventListener("click", pad.clear);
     document.getElementById("sketch-submit")!.addEventListener("click", () => {
       const name = nameInput.value.trim();
       if (!name) {
         nameInput.focus();
         return;
       }
-      // Crop to the ink, then downscale to ≤256px; keep alpha (the sketch
-      // becomes the body sprite).
-      const image = hasInk
-        ? cropInkToDataUrl(sketchCanvas, SKETCH_MAX_SIDE, SKETCH_CROP_PADDING)
-        : undefined;
       conn.send({
         scope: "ui",
         type: "blueprint",
         name,
+        slot: slot ?? undefined,
+        // Cropped to the ink and downscaled; alpha is kept, because the
+        // sketch is the fallback body sprite.
         intent: intentInput.value.trim() || undefined,
-        image,
+        image: pad.toDataUrl(SKETCH_MAX_SIDE, SKETCH_CROP_PADDING),
       });
       overlay.classList.add("hidden");
       fabricatingNote.textContent = `FABRICATING: ${name}…`;
@@ -682,60 +637,6 @@ function escapeHtml(s: string): string {
     (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
   );
-}
-
-/** Crop a sketch canvas to the bounding box of its non-transparent pixels
- *  (plus a little padding) and downscale so the longest side is ≤ maxSide,
- *  preserving aspect ratio. Players draw in a small patch of the pad, so
- *  sending the raw canvas wastes most of the frame on transparent margin —
- *  which makes the body sprite render as a faint speck once stretched to the
- *  spec size, and gives the compiler an image where the subject is tiny.
- *  Returns undefined when the canvas holds no ink. */
-function cropInkToDataUrl(
-  source: HTMLCanvasElement,
-  maxSide: number,
-  padding: number,
-): string | undefined {
-  const w = source.width;
-  const h = source.height;
-  if (!w || !h) return undefined;
-
-  let pixels: Uint8ClampedArray;
-  try {
-    pixels = source.getContext("2d")!.getImageData(0, 0, w, h).data;
-  } catch {
-    return undefined; // tainted canvas — shouldn't happen, we only draw strokes
-  }
-
-  let minX = w;
-  let minY = h;
-  let maxX = -1;
-  let maxY = -1;
-  for (let y = 0; y < h; y++) {
-    const row = y * w * 4;
-    for (let x = 0; x < w; x++) {
-      if (pixels[row + x * 4 + 3] === 0) continue;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      maxY = y; // rows are scanned top-down, so this is always the lowest so far
-    }
-  }
-  if (maxX < 0) return undefined; // fully transparent
-
-  const sx = Math.max(0, minX - padding);
-  const sy = Math.max(0, minY - padding);
-  const sw = Math.min(w, maxX + 1 + padding) - sx;
-  const sh = Math.min(h, maxY + 1 + padding) - sy;
-
-  const scale = Math.min(1, maxSide / Math.max(sw, sh));
-  const out = document.createElement("canvas");
-  out.width = Math.max(1, Math.round(sw * scale));
-  out.height = Math.max(1, Math.round(sh * scale));
-  const outCtx = out.getContext("2d")!;
-  outCtx.imageSmoothingQuality = "high";
-  outCtx.drawImage(source, sx, sy, sw, sh, 0, 0, out.width, out.height);
-  return out.toDataURL("image/png");
 }
 
 function round2(n: number): number {

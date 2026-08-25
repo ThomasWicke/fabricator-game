@@ -297,6 +297,15 @@ export class WorldScene extends Phaser.Scene {
   private darkness: Phaser.GameObjects.Rectangle[] = [];
   private spawnCount = 0;
   private field!: ChunkField;
+  /**
+   * Who is actually playing. The world always holds two characters, but a
+   * slot only wakes up when someone arrives for it — a phone taking the seat,
+   * or a hand touching that half of the keyboard. Until then the second
+   * player is parked and invisible, and player one gets the whole screen.
+   */
+  private activeSlots = new Set<Slot>([1]);
+  /** Suppresses keyboard control while a screen overlay owns the keys. */
+  private uiOpen = false;
 
   /** Arrow pointing at the other player, one per viewport. */
   private pointers = new Map<Slot, {
@@ -336,6 +345,10 @@ export class WorldScene extends Phaser.Scene {
   onDirty: (() => void) | null = null;
   /** Fired once the scene exists and can accept a snapshot. */
   onReady: (() => void) | null = null;
+  /** Fired when the viewport goes from solo to split, or back. */
+  onSplitChanged: ((split: boolean) => void) | null = null;
+  /** Fired when a second player arrives, so the HUD can greet them. */
+  onSlotActivated: ((slot: Slot) => void) | null = null;
 
   private markDirty() {
     this.onDirty?.();
@@ -435,6 +448,14 @@ export class WorldScene extends Phaser.Scene {
     }
     const p1 = this.spawnPlayer(1, this.pad.x - 44, this.pad.y + 52, 0xf06eaa);
     const p2 = this.spawnPlayer(2, this.pad.x + 44, this.pad.y + 52, 0xffcf4d);
+    // Player two exists from the start but stays out of sight until someone
+    // shows up for them — an idle alien standing at the pad all game reads as
+    // a bug, and it would keep half the screen busy watching nothing.
+    if (!this.activeSlots.has(2)) {
+      p2.sprite.setVisible(false);
+      p2.label.setVisible(false);
+      (p2.sprite.body as Phaser.Physics.Arcade.Body).enable = false;
+    }
     this.physics.add.collider(p1.sprite, this.obstacles);
     this.physics.add.collider(p2.sprite, this.obstacles);
     this.physics.add.collider(p1.sprite, p2.sprite);
@@ -692,17 +713,83 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /** Solo gets the whole frame; two players split it down the middle. */
   private layoutCameras() {
     const w = this.scale.width;
     const h = this.scale.height;
-    this.cameras.main.setViewport(0, 0, Math.floor(w / 2), h);
-    this.cam2.setViewport(Math.floor(w / 2), 0, Math.ceil(w / 2), h);
+    const split = this.activeSlots.size > 1;
+    if (split) {
+      this.cameras.main.setViewport(0, 0, Math.floor(w / 2), h);
+      this.cam2.setViewport(Math.floor(w / 2), 0, Math.ceil(w / 2), h);
+    } else {
+      this.cameras.main.setViewport(0, 0, w, h);
+      // Parked off to one side rather than resized: an invisible camera with a
+      // zero-area viewport still reports a worldView, and chunk streaming
+      // reads worldViews.
+      this.cam2.setViewport(0, 0, 1, 1);
+    }
+    this.cam2.setVisible(split);
+  }
+
+  /**
+   * Someone arrived for a slot. Idempotent, and one-way: a slot that has been
+   * played never goes quiet again, so a phone dropping its connection doesn't
+   * yank half the screen away mid-game.
+   */
+  private activateSlot(slot: Slot) {
+    if (this.activeSlots.has(slot)) return;
+    this.activeSlots.add(slot);
+
+    const arriving = this.players.get(slot);
+    const host = this.players.get(slot === 1 ? 2 : 1);
+    if (arriving && host) {
+      // Land beside the player already out there, not back at the Fabricator.
+      // In an endless world "spawn at base" can mean a twenty-minute walk.
+      const spot = this.freeSpotNear(host.sprite.x, host.sprite.y);
+      arriving.sprite.setPosition(spot.x, spot.y);
+      arriving.sprite.setVisible(true);
+      arriving.label.setVisible(true);
+      (arriving.sprite.body as Phaser.Physics.Arcade.Body).enable = true;
+      this.materializeFlash(spot.x, spot.y, 48);
+      this.floatText(spot.x, spot.y - 44, `Player ${slot} joins`, "#8fc1ff");
+    }
+
+    this.layoutCameras();
+    this.onSplitChanged?.(this.activeSlots.size > 1);
+    this.onSlotActivated?.(slot);
+  }
+
+  /** Called by the shell when the roster says a slot is occupied. */
+  setSlotOccupied(slot: Slot) {
+    this.activateSlot(slot);
+  }
+
+  /** Overlays on the screen take the keyboard while they are open. */
+  setUiOpen(open: boolean) {
+    this.uiOpen = open;
+  }
+
+  /** A walkable spot next to a point, spiralling out until one is dry. */
+  private freeSpotNear(x: number, y: number): { x: number; y: number } {
+    for (let ring = 1; ring < 8; ring++) {
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const px = x + Math.cos(a) * ring * 34;
+        const py = y + Math.sin(a) * ring * 34;
+        if (this.walkable(px, py)) return { x: px, y: py };
+      }
+    }
+    return { x, y };
   }
 
   /** Called by the screen shell when a controller input arrives. */
   setInput(slot: Slot, input: PlayerInput) {
     const p = this.players.get(slot);
-    if (p) p.net = input;
+    if (!p) return;
+    p.net = input;
+    // A phone sending input is a player arriving, even if the roster
+    // broadcast that would have said so got lost or arrived late.
+    if (!this.activeSlots.has(slot)) this.activateSlot(slot);
   }
 
   setNickname(slot: Slot, nickname: string) {
@@ -1312,7 +1399,9 @@ export class WorldScene extends Phaser.Scene {
 
   private keyboardInput(slot: Slot): PlayerInput | null {
     const k = this.keys;
-    if (!k) return null;
+    // While a screen overlay is up, the keyboard belongs to it — otherwise
+    // typing a blueprint's name walks your character into the bog.
+    if (!k || this.uiOpen) return null;
     const [up, down, left, right, a, b] =
       slot === 1
         ? [k.W, k.S, k.A, k.D, k.F, k.G]
@@ -1320,6 +1409,8 @@ export class WorldScene extends Phaser.Scene {
     const x = (right.isDown ? 1 : 0) - (left.isDown ? 1 : 0);
     const y = (down.isDown ? 1 : 0) - (up.isDown ? 1 : 0);
     if (!x && !y && !a.isDown && !b.isDown) return null;
+    // Touching the second player's keys IS the second player arriving.
+    if (!this.activeSlots.has(slot)) this.activateSlot(slot);
     const len = Math.hypot(x, y) || 1;
     return {
       stick: { x: x / len, y: y / len },
@@ -1379,6 +1470,11 @@ export class WorldScene extends Phaser.Scene {
       v.glow.setAlpha(0.25 + night * 0.75);
     }
     for (const p of this.players.values()) {
+      // Nobody is playing this slot yet; its character stays parked.
+      if (!this.activeSlots.has(p.slot)) {
+        this.keyboardInput(p.slot); // still watched, so arriving wakes it up
+        continue;
+      }
       const input = this.keyboardInput(p.slot) ?? p.net;
       const aEdge = input.buttons.a && !p.prevA;
       const bEdge = input.buttons.b && !p.prevB;
@@ -1474,11 +1570,16 @@ export class WorldScene extends Phaser.Scene {
    */
   private updateFabricatorPresence(now: number): void {
     let anyone = false;
+    const nearSlots: Slot[] = [];
     for (const p of this.players.values()) {
+      // A parked player is standing on the pad but isn't anybody, so they
+      // must not keep the machine lit up in a solo game.
+      if (!this.activeSlots.has(p.slot)) continue;
       const near =
         Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, this.pad.x, this.pad.y) <
         FABRICATOR_RANGE;
       anyone ||= near;
+      if (near) nearSlots.push(p.slot);
       if (near === p.atFabricator) continue;
       p.atFabricator = near;
       this.onFabricatorRange?.(p.slot, near);
@@ -1488,6 +1589,14 @@ export class WorldScene extends Phaser.Scene {
     this.padRing.setVisible(anyone);
     this.padPrompt.setVisible(anyone);
     this.padLabel.setAlpha(anyone ? 1 : 0.55);
+    if (anyone) {
+      // Name the actual key for whoever is standing here. The phone is the
+      // other way in, not the only one, and a prompt that only mentions it
+      // reads as "you need a phone" to someone playing on a keyboard.
+      this.padPrompt.setText(
+        `press ${nearSlots.join(" or ")} · or BLUEPRINT on your phone`,
+      );
+    }
     if (anyone) {
       // A slow breath rather than a tween: no object to leak, and it stops
       // dead the moment nobody is there.
@@ -1562,6 +1671,10 @@ export class WorldScene extends Phaser.Scene {
       const self = this.players.get(slot);
       const other = this.players.get(slot === 1 ? 2 : 1);
       if (!self || !other) {
+        ui.container.setVisible(false);
+        continue;
+      }
+      if (!this.activeSlots.has(slot) || this.activeSlots.size < 2) {
         ui.container.setVisible(false);
         continue;
       }
@@ -1837,7 +1950,9 @@ export class WorldScene extends Phaser.Scene {
   /** Sampled by the HUD a few times a second — cheap, and never allocates
    *  anything the scene keeps. */
   minimapData(): MinimapData {
-    const players = [...this.players.values()].map((p) => {
+    const players = [...this.players.values()]
+      .filter((p) => this.activeSlots.has(p.slot))
+      .map((p) => {
       const h = worldToHex(p.sprite.x, p.sprite.y);
       return { slot: p.slot, col: h.col, row: h.row, color: p.color };
     });

@@ -20,6 +20,11 @@ export type Design = {
   id: string;
   spec: FabricatedSpec;
   createdBy: string;
+  /** Which player slot drew it. A phone's playerId maps to a slot through the
+   *  roster, but a design drawn on the shared screen has the *screen's*
+   *  playerId — which belongs to no slot — so the slot travels explicitly.
+   *  Absent on designs made before the screen had its own pad. */
+  createdBySlot?: 1 | 2;
   createdAt: number;
   timesBuilt: number;
   /** AI body sprite exists at /sprites/body/<id>.png */
@@ -40,6 +45,8 @@ export type DesignSummary = {
   createdAt: number;
   timesBuilt: number;
   hasArt: boolean;
+  /** Which player slot drew it, when that was known. */
+  createdBySlot?: 1 | 2;
   /** Where the art actually lives. Resolved server-side, where the body/sketch
    *  distinction is still known — a phone holding only a summary would have to
    *  guess, and guess wrong for a design that never got a generated body. */
@@ -57,6 +64,7 @@ export function summarize(d: Design): DesignSummary {
     createdAt: d.createdAt,
     timesBuilt: d.timesBuilt,
     hasArt: d.hasBody || d.hasSketch,
+    createdBySlot: d.createdBySlot,
     artUrl: designArtUrl(d),
   };
 }

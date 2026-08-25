@@ -104,7 +104,9 @@ export class FabricatorServer extends Server<Env> {
 
     switch (msg.type) {
       case "blueprint": {
-        if (fromScreen) break;
+        // Screens submit these too: the shared screen has its own blueprint
+        // pad so the game is playable on a keyboard and mouse alone, with no
+        // phone in the room at all.
         this.sendToScreens(message); // drives the pad's FABRICATING animation
         const playerId = this.connToPlayer.get(connection.id);
         if (playerId) void this.draftDesign(msg as BlueprintMsg, playerId);
@@ -191,6 +193,7 @@ export class FabricatorServer extends Server<Env> {
         id,
         spec,
         createdBy: byPlayerId,
+        createdBySlot: msg.slot,
         createdAt: Date.now(),
         timesBuilt: 0,
         hasBody: false,

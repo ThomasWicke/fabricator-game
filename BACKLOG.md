@@ -55,6 +55,22 @@ code, using every biome in the Kenney hexagon pack.
 - [ ] **P6 · Survival HUD.** Health and hunger in the in-frame HUD, plus the
       carried-inventory strip.
 
+## Playing without two phones
+
+The keyboard fallback (P1 WASD+F/G, P2 arrows+K/L) turned out to be how the
+game gets tried first — but it can only walk and gather, and the world always
+assumed exactly two players.
+
+- [x] **UX-1 · The Fabricator on the screen.** Blueprint pad and design store
+      reachable from the keyboard, drawn with the mouse. Same gating as the
+      phone: only at the machine.
+- [x] **UX-2 · Solo, and drop-in co-op.** One player gets the whole screen. The
+      split appears the moment a second player arrives — a phone joining, or
+      someone touching the arrow keys — and they land next to player one rather
+      than a continent away.
+- [x] **UX-3 · Control hints.** Say what the keys are, in the game, where you
+      need them.
+
 ## Fabrication
 
 - [x] **F1 · The Fabricator is a place.** BLUEPRINT and DESIGNS only open when

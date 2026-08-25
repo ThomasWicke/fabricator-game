@@ -128,6 +128,10 @@ export type BlueprintMsg = {
   scope: "ui";
   type: "blueprint";
   name: string;
+  /** Which player this is for. A phone knows its own slot; the shared screen
+   *  says which of its keyboard players opened the pad. Without it, a design
+   *  drawn on the screen has no one to hand the finished tool to. */
+  slot?: Slot;
   intent?: string;
   /** data:image/png;base64,... downscaled sketch (≤256px). */
   image?: string;

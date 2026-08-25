@@ -21,6 +21,7 @@ import { resolveIdentity } from "../identity";
 import { RoomConnection } from "../socket";
 import { keepScreenAwake } from "../wake-lock";
 import { startBackdrop } from "../backdrop";
+import { createSketchPad } from "../sketch";
 import { WorldScene, type MinimapData, type PlaceableDesign } from "./world";
 import {
   BIOMES,
@@ -336,6 +337,43 @@ export function startScreen(code: string) {
             </div>
           </div>
 
+          <div class="fab-panel hidden" id="fab-panel">
+            <div class="fab-sheet">
+              <header class="fab-head">
+                <span class="fab-who" id="fab-who">PLAYER 1</span>
+                <div class="fab-tabs">
+                  <button data-tab="blueprint" class="on">BLUEPRINT</button>
+                  <button data-tab="designs">DESIGNS <span id="fab-count">0</span></button>
+                </div>
+                <span class="spacer"></span>
+                <span class="fab-stock" id="fab-stock"></span>
+                <button class="fab-close" id="fab-close">ESC</button>
+              </header>
+
+              <section class="fab-pane" data-pane="blueprint">
+                <div class="fab-fields">
+                  <input id="fab-name" type="text" maxlength="32" autocomplete="off"
+                         spellcheck="false" placeholder="Name it — e.g. Swamp Buggy" />
+                  <input id="fab-intent" type="text" maxlength="80" autocomplete="off"
+                         spellcheck="false" placeholder="Optional: what should it do?" />
+                </div>
+                <div class="fab-canvas-wrap"><canvas id="fab-sketch"></canvas></div>
+                <div class="fab-actions">
+                  <span class="hint">Draw with the mouse. The Fabricator reads the shape, not the artistry.</span>
+                  <span class="spacer"></span>
+                  <button id="fab-clear">Clear</button>
+                  <button class="primary" id="fab-submit">FABRICATE</button>
+                </div>
+              </section>
+
+              <section class="fab-pane hidden" data-pane="designs">
+                <div class="fab-list" id="fab-list"></div>
+              </section>
+            </div>
+          </div>
+
+          <div class="key-hints" id="key-hints"></div>
+
           <div class="qr-overlay hidden" id="qr-overlay">
             <div class="label">scan with both phones to join · or enter the code at ${window.location.origin}</div>
             <div class="code">${upperCode}</div>
@@ -438,6 +476,147 @@ export function startScreen(code: string) {
         conn.send({ scope: "ui", type: "world-save", snapshot: worldScene.snapshot() });
       }, 3000);
     };
+
+    // ── the Fabricator, on the screen ───────────────────────────
+    // Everything the phone can do, reachable from the keyboard and mouse:
+    // 1 opens it for player one, 2 for player two, Esc closes. Same rule as
+    // the phone — only at the machine — because otherwise the keyboard would
+    // quietly be the better way to play.
+    const fabPanel = document.getElementById("fab-panel")!;
+    const fabWho = document.getElementById("fab-who")!;
+    const fabCount = document.getElementById("fab-count")!;
+    const fabStock = document.getElementById("fab-stock")!;
+    const fabList = document.getElementById("fab-list")!;
+    const fabName = document.getElementById("fab-name") as HTMLInputElement;
+    const fabIntent = document.getElementById("fab-intent") as HTMLInputElement;
+    const pad = createSketchPad(document.getElementById("fab-sketch") as HTMLCanvasElement, 7);
+    let fabSlot: Slot = 1;
+
+    const showPane = (tab: string) => {
+      for (const btn of fabPanel.querySelectorAll<HTMLElement>("[data-tab]")) {
+        btn.classList.toggle("on", btn.dataset.tab === tab);
+      }
+      for (const pane of fabPanel.querySelectorAll<HTMLElement>("[data-pane]")) {
+        pane.classList.toggle("hidden", pane.dataset.pane !== tab);
+      }
+      if (tab === "blueprint") requestAnimationFrame(pad.fit);
+      else renderFabList();
+    };
+
+    function renderFabList() {
+      const items = [...designs.values()].sort((a, b) => b.createdAt - a.createdAt);
+      fabCount.textContent = String(items.length);
+      if (!items.length) {
+        fabList.innerHTML =
+          `<div class="fab-empty">No designs yet. Sketch one on the BLUEPRINT tab — ` +
+          `the Fabricator turns it into something buildable, and you can build it ` +
+          `as often as you can afford it.</div>`;
+        return;
+      }
+      const s = lastStock ?? { wood: 0, stone: 0, bogiron: 0 };
+      fabList.innerHTML = items
+        .map((d) => {
+          const c = d.spec.cost;
+          const afford = s.wood >= c.wood && s.stone >= c.stone && s.bogiron >= c.bogiron;
+          const art = designArtUrl(d);
+          return `
+            <div class="fab-row">
+              ${art ? `<img src="${art}" alt="" />` : `<div class="noart"></div>`}
+              <div class="meta">
+                <div class="n">${escapeHtml(d.spec.displayName)}</div>
+                <div class="c">${d.spec.category}${
+                  d.timesBuilt ? ` · built ${d.timesBuilt}×` : ""
+                } · ${formatCost(c)}</div>
+                <div class="f">${escapeHtml(d.spec.flavor)}</div>
+              </div>
+              <button data-build="${d.id}" ${afford ? "" : "disabled"}>${
+                afford ? "BUILD" : "NEED MORE"
+              }</button>
+            </div>`;
+        })
+        .join("");
+    }
+
+    const openFab = (slot: Slot) => {
+      if (!scene?.isAtFabricator(slot)) {
+        toast(`Player ${slot} has to be standing at the Fabricator.`, true);
+        return;
+      }
+      fabSlot = slot;
+      fabWho.textContent = `PLAYER ${slot}`;
+      fabPanel.classList.remove("hidden");
+      fabPanel.classList.toggle("p2", slot === 2);
+      fabStock.textContent = lastStock
+        ? `${Math.floor(lastStock.wood)} wood · ${Math.floor(lastStock.stone)} stone · ${Math.floor(lastStock.bogiron)} bogiron`
+        : "";
+      worldScene.setUiOpen(true);
+      showPane("blueprint");
+      fabName.focus();
+    };
+    const closeFab = () => {
+      fabPanel.classList.add("hidden");
+      worldScene.setUiOpen(false);
+    };
+
+    fabPanel.addEventListener("click", (e) => {
+      const tab = (e.target as HTMLElement).closest<HTMLElement>("[data-tab]");
+      if (tab) showPane(tab.dataset.tab!);
+      const build = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-build]");
+      if (build && !build.disabled) {
+        const d = designs.get(build.dataset.build!);
+        if (d && scene) {
+          const outcome = scene.tryFabricate(placeable(d), fabSlot);
+          if (!outcome.ok) toast(outcome.reason, true);
+          else if (outcome.carrying) {
+            toast(
+              `<span class="lead">${escapeHtml(d.spec.displayName)} is on your shoulder</span> — ` +
+                `walk it where it should stand, then press <b>${fabSlot === 1 ? "F" : "K"}</b>. ` +
+                `<span class="hint">Nothing is spent until you put it down.</span>`,
+            );
+            closeFab();
+          } else {
+            toast(
+              `<span class="lead">Built ${escapeHtml(d.spec.displayName)}</span> ` +
+                `<span class="cost">−${formatCost(d.spec.cost)}</span>`,
+            );
+            closeFab();
+          }
+        }
+      }
+    });
+    document.getElementById("fab-close")!.addEventListener("click", closeFab);
+    document.getElementById("fab-clear")!.addEventListener("click", pad.clear);
+    document.getElementById("fab-submit")!.addEventListener("click", () => {
+      const name = fabName.value.trim();
+      if (!name) {
+        fabName.focus();
+        return;
+      }
+      conn.send({
+        scope: "ui",
+        type: "blueprint",
+        name,
+        slot: fabSlot,
+        intent: fabIntent.value.trim() || undefined,
+        image: pad.toDataUrl(256, 8),
+      });
+      scene?.setFabricating(name);
+      fabName.value = "";
+      fabIntent.value = "";
+      pad.clear();
+      closeFab();
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !fabPanel.classList.contains("hidden")) {
+        closeFab();
+        return;
+      }
+      // Ignore the shortcut while someone is typing into the panel itself.
+      if (document.activeElement instanceof HTMLInputElement) return;
+      if (e.key === "1") openFab(1);
+      else if (e.key === "2") openFab(2);
+    });
 
     // ── minimap ─────────────────────────────────────────────────
     // Redrawn a few times a second, not per frame: the biome field is a pure
@@ -554,6 +733,28 @@ export function startScreen(code: string) {
       conn.send({ scope: "ui", type: "design-built", designId });
     };
 
+    // Solo vs. split: the divider only belongs on screen when there are two
+    // views to divide.
+    const stageEl = document.getElementById("stage")!;
+    const hintsEl = document.getElementById("key-hints")!;
+    let split = false;
+    const applyLayout = () => {
+      stageEl.classList.toggle("solo", !split);
+      hintsEl.innerHTML = split
+        ? `<b>P1</b> WASD · F use · G run · <b>1</b> Fabricator` +
+          `<span class="sep"></span><b>P2</b> arrows · K use · L run · <b>2</b> Fabricator`
+        : `<b>WASD</b> move · <b>F</b> use · <b>G</b> run · <b>1</b> Fabricator` +
+          `<span class="sep"></span>arrow keys or a second phone to join`;
+    };
+    applyLayout();
+    worldScene.onSplitChanged = (isSplit) => {
+      split = isSplit;
+      applyLayout();
+    };
+    worldScene.onSlotActivated = (slot) => {
+      toast(`<span class="lead">Player ${slot} joined the expedition.</span>`);
+    };
+
     worldScene.onFabricatorRange = (slot, inRange) => {
       fabRange[slot] = inRange;
       conn.send({ scope: "ui", type: "fabricator-range", slot, inRange });
@@ -585,6 +786,9 @@ export function startScreen(code: string) {
         const nameEl = document.getElementById(`name-p${slot}`)!;
         const toolEl = document.getElementById(`tool-p${slot}`)!;
         const p = bySlot.get(slot);
+        // A phone taking a seat is a player arriving: wake that half of the
+        // screen up even if they never touch the stick.
+        if (p?.connected) worldScene.setSlotOccupied(slot);
         card.classList.toggle("on", !!p?.connected);
         nameEl.textContent = p?.nickname || `Player ${slot}`;
         if (p) worldScene.setNickname(slot, p.nickname);

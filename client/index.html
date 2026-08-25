@@ -757,6 +757,284 @@
         pointer-events: none;
         z-index: 5;
       }
+      /* Solo: one camera fills the frame, so there is nothing to divide and
+         the second player's card has no half to sit over. */
+      .screen-stage.solo .split-divider,
+      .screen-stage.solo .player-card.p2 {
+        display: none;
+      }
+
+      /* ── keyboard hints ──────────────────────────────────────── */
+      /* Sits along the bottom edge, quiet enough to ignore once learned. */
+      .key-hints {
+        position: absolute;
+        left: 50%;
+        bottom: 0.5em;
+        transform: translateX(-50%);
+        z-index: 7;
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+        padding: 0.35em 0.9em;
+        border-radius: 999px;
+        background: rgba(8, 11, 17, 0.55);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        font-family: var(--mono);
+        font-size: 0.6em;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #7c8798;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      .key-hints b {
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .key-hints .sep {
+        width: 1px;
+        height: 1em;
+        background: rgba(255, 255, 255, 0.14);
+        margin: 0 0.3em;
+      }
+
+      /* ── the Fabricator panel (keyboard + mouse play) ────────── */
+      .fab-panel {
+        position: absolute;
+        inset: 0;
+        z-index: 12;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2vh 2vw;
+        background: rgba(4, 7, 12, 0.78);
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
+      }
+      .fab-panel.hidden {
+        display: none;
+      }
+      .fab-sheet {
+        width: min(880px, 96%);
+        max-height: 92%;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px solid rgba(108, 158, 248, 0.35);
+        background: linear-gradient(180deg, rgba(26, 35, 49, 0.97), rgba(14, 19, 28, 0.97));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.06),
+          0 24px 70px rgba(0, 0, 0, 0.6);
+        font-size: 14px;
+      }
+      .fab-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .fab-who {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        color: var(--p1);
+      }
+      .fab-panel.p2 .fab-who {
+        color: var(--p2);
+      }
+      .fab-tabs {
+        display: flex;
+        gap: 3px;
+        padding: 3px;
+        border-radius: 10px;
+        background: rgba(8, 11, 17, 0.6);
+        border: 1px solid var(--line);
+      }
+      .fab-tabs button {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        padding: 6px 12px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        color: var(--muted);
+      }
+      .fab-tabs button.on {
+        background: var(--accent);
+        color: #08111f;
+      }
+      .fab-stock {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .fab-close {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        padding: 6px 11px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: rgba(8, 11, 17, 0.6);
+        color: var(--muted);
+      }
+      .fab-pane {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 0;
+      }
+      .fab-pane.hidden {
+        display: none;
+      }
+      .fab-fields {
+        display: flex;
+        gap: 10px;
+      }
+      .fab-fields input {
+        flex: 1;
+        font: inherit;
+        font-weight: 600;
+        padding: 11px 13px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: rgba(8, 11, 17, 0.6);
+        color: var(--text);
+        outline: none;
+      }
+      .fab-fields input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      /* The pad itself is white paper: you are drawing a blueprint, and ink on
+         a dark panel would read as a screen rather than a sketch. */
+      .fab-canvas-wrap {
+        flex: 1;
+        min-height: 0;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        background: #eef2f7;
+      }
+      .fab-canvas-wrap canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
+        touch-action: none;
+      }
+      .fab-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .fab-actions .hint {
+        font-size: 12px;
+      }
+      .fab-actions button {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        padding: 11px 18px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: rgba(8, 11, 17, 0.6);
+        color: var(--text);
+      }
+      .fab-actions button.primary {
+        border-color: rgba(108, 158, 248, 0.5);
+        background: var(--accent);
+        color: #08111f;
+      }
+      .fab-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        overflow: auto;
+        min-height: 0;
+        max-height: 60vh;
+      }
+      .fab-empty {
+        padding: 26px;
+        text-align: center;
+        line-height: 1.6;
+        color: var(--muted);
+        border: 1px dashed var(--line);
+        border-radius: 12px;
+      }
+      .fab-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: rgba(8, 11, 17, 0.5);
+        border: 1px solid var(--line);
+      }
+      .fab-row img,
+      .fab-row .noart {
+        flex: none;
+        width: 56px;
+        height: 56px;
+        border-radius: 9px;
+        object-fit: contain;
+        padding: 3px;
+        border: 1px solid var(--line);
+        background-color: rgba(8, 11, 17, 0.7);
+        background-image:
+          linear-gradient(45deg, rgba(255, 255, 255, 0.045) 25%, transparent 25%),
+          linear-gradient(-45deg, rgba(255, 255, 255, 0.045) 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.045) 75%),
+          linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.045) 75%);
+        background-size: 10px 10px;
+        background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+      }
+      .fab-row .meta {
+        flex: 1;
+        min-width: 0;
+      }
+      .fab-row .n {
+        font-weight: 800;
+        font-size: 15px;
+      }
+      .fab-row .c {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .fab-row .f {
+        font-size: 12px;
+        color: #6f7b8d;
+        font-style: italic;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .fab-row button {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        padding: 11px 16px;
+        border-radius: 10px;
+        border: 1px solid rgba(108, 158, 248, 0.5);
+        background: var(--accent);
+        color: #08111f;
+      }
+      .fab-row button:disabled {
+        background: var(--panel-2);
+        border-color: var(--line);
+        color: #56637a;
+        cursor: not-allowed;
+      }
+
       /* ── in-frame HUD ────────────────────────────────────────── */
       .hud {
         position: absolute;
