@@ -15,9 +15,13 @@
 // No Workers types in this file: the client imports these types too.
 
 import { computeCost } from "../shared/fabricator/cost";
+import { SPEC_VERSION, clampSpec } from "../shared/fabricator/schema";
 import type { MaterialCost, FabricatedSpec } from "../shared/fabricator/schema";
 
 export type Design = {
+  /** Schema generation this spec was last migrated to. Absent on designs
+   *  stored before versioning existed — treated as "old", migrated on load. */
+  specVersion?: number;
   id: string;
   spec: FabricatedSpec;
   createdBy: string;
@@ -103,13 +107,15 @@ export class DesignStore {
         for (const value of all.values()) {
           if (value && typeof value === "object") {
             const d = value as Design;
-            // Reprice on the way in. Cost is a pure function of the spec —
-            // that is the whole point of computing it in code — so what is
-            // stored is a cache, and rebalancing the game has to reprice the
-            // library with it. Otherwise a design compiled last week keeps a
-            // price the rules no longer agree with, and the only way to fix
-            // one is to throw it out and sketch it again.
-            d.spec = { ...d.spec, cost: computeCost(d.spec) };
+            // Re-clamp AND reprice on the way in. The stored spec is the
+            // durable copy and the rules keep moving under it: clamp ranges
+            // tighten, category restrictions appear, costs rebalance. Cost is
+            // a pure function of the spec and the clamp is idempotent, so
+            // both are safe to reapply — and this load path is the only
+            // migration hook the store has.
+            const clamped = clampSpec(d.spec);
+            d.spec = { ...clamped, cost: computeCost(clamped) };
+            d.specVersion = SPEC_VERSION;
             this.designs.set(d.id, d);
           }
         }

@@ -457,6 +457,31 @@ export function startController(code: string) {
     // The phone briefly becomes the Fabricator's design surface; the game
     // keeps running on the shared screen meanwhile.
     const fabricatingNote = document.getElementById("fabricating-note")!;
+    // Mirror of the screen's patience budget: a dead fabrication must not
+    // leave the note up forever, and an error should be read, not glimpsed.
+    let noteTimeout: ReturnType<typeof setTimeout> | null = null;
+    const disarmNoteTimeout = () => {
+      if (noteTimeout) clearTimeout(noteTimeout);
+      noteTimeout = null;
+    };
+    const armNoteTimeout = () => {
+      disarmNoteTimeout();
+      noteTimeout = setTimeout(
+        () => showNoteError("The Fabricator has gone quiet — that design isn't coming. Try again."),
+        90_000,
+      );
+    };
+    const showNoteError = (message: string) => {
+      disarmNoteTimeout();
+      fabricatingNote.textContent = message;
+      fabricatingNote.classList.remove("hidden");
+      fabricatingNote.classList.add("err");
+      noteTimeout = setTimeout(() => {
+        fabricatingNote.classList.add("hidden");
+        fabricatingNote.classList.remove("err");
+        noteTimeout = null;
+      }, 7_000);
+    };
     const overlay = document.getElementById("sketch-overlay")!;
     const nameInput = document.getElementById("sketch-name") as HTMLInputElement;
     const intentInput = document.getElementById("sketch-intent") as HTMLInputElement;
@@ -491,6 +516,8 @@ export function startController(code: string) {
       overlay.classList.add("hidden");
       fabricatingNote.textContent = `FABRICATING: ${name}…`;
       fabricatingNote.classList.remove("hidden");
+      fabricatingNote.classList.remove("err");
+      armNoteTimeout();
     });
 
     onUiMsg = (msg) => {
@@ -507,12 +534,19 @@ export function startController(code: string) {
         renderDesigns();
         if (isNew) {
           fabricatingNote.classList.add("hidden");
+          disarmNoteTimeout();
           if ("vibrate" in navigator) navigator.vibrate([30, 60, 30]);
         }
       } else if (msg.type === "stockpile") {
         renderDesigns();
+      } else if (msg.type === "fabricate-progress") {
+        const m = msg as unknown as { name: string };
+        fabricatingNote.textContent = `DRAWING: ${m.name}…`;
+        armNoteTimeout();
       } else if (msg.type === "fabricate-error") {
-        fabricatingNote.classList.add("hidden");
+        // The phone used to buzz and say nothing — the one person who chose
+        // whether to try again was the one person with no error text.
+        showNoteError(String(msg.message ?? "Fabrication failed."));
         if ("vibrate" in navigator) navigator.vibrate(200);
       }
     };

@@ -253,6 +253,21 @@ export type FabricateErrorMsg = {
   scope: "ui";
   type: "fabricate-error";
   message: string;
+  /** The player whose blueprint failed. Screens always hear about it (they
+   *  have a pad animation to stop); phones only hear about their own. */
+  to?: string;
+};
+
+/** Server → room: the fabrication moved to its next stage. The gap between
+ *  submitting and design-added is ~40s, most of it image generation, and a
+ *  pad that says the same word the whole time reads as hung. */
+export type FabricateProgressMsg = {
+  scope: "ui";
+  type: "fabricate-progress";
+  /** "art": the spec compiled, the body is being drawn. */
+  stage: "art";
+  name: string;
+  to?: string;
 };
 
 // ─── world persistence ─────────────────────────────────────────────────────

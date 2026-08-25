@@ -10,7 +10,7 @@ import type { FabricatorProvider, ProviderResult } from "../provider";
 export const anthropicProvider: FabricatorProvider = {
   id: "anthropic",
 
-  async compileSpec(input, model, apiKey): Promise<ProviderResult> {
+  async compileSpec(input, model, apiKey, signal): Promise<ProviderResult> {
     const content: Record<string, unknown>[] = [];
     if (input.imageBase64) {
       content.push({
@@ -22,6 +22,7 @@ export const anthropicProvider: FabricatorProvider = {
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal,
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,

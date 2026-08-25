@@ -116,6 +116,24 @@ export function startScreen(code: string) {
   let roster: PublicPlayer[] = [];
   let phase: Phase = "lobby";
   let scene: WorldScene | null = null;
+  // ── the fabrication patience budget ───────────────────────────
+  // A fabrication that has truly died must not leave the pad spinning
+  // forever. 90s covers a slow compile plus slow art with room to spare;
+  // each progress message re-arms it, so only genuine silence trips it.
+  // Outer scope, because the socket handler that arms it outlives any view.
+  let fabTimeout: ReturnType<typeof setTimeout> | null = null;
+  const disarmFabTimeout = () => {
+    if (fabTimeout) clearTimeout(fabTimeout);
+    fabTimeout = null;
+  };
+  const armFabTimeout = () => {
+    disarmFabTimeout();
+    fabTimeout = setTimeout(() => {
+      fabTimeout = null;
+      scene?.clearFabricating();
+      toast("The Fabricator has gone quiet — that design isn't coming. Try again.", true);
+    }, 90_000);
+  };
   let connStatus = "connecting";
   /** The lobby's animated hex field. Torn down when the world starts — it's a
    *  rAF loop, and the game needs every frame it can get. */
@@ -1033,6 +1051,14 @@ export function startScreen(code: string) {
         // is still up — they feed the game that hasn't started yet.
         if (msg.type === "blueprint") {
           scene?.setFabricating(String(msg.name ?? "…"));
+          armFabTimeout();
+        } else if (msg.type === "fabricate-progress") {
+          // The spec is done; the rest of the wait is the artist. Give the
+          // patience budget a fresh start — progress proves it isn't hung.
+          scene?.setFabricatingStage(
+            `DRAWING: ${String((msg as unknown as { name: string }).name)}…`,
+          );
+          armFabTimeout();
         } else if (msg.type === "design-catalog") {
           for (const d of (msg as unknown as DesignCatalogMsg).designs as Design[]) {
             designs.set(d.id, d);
@@ -1041,6 +1067,7 @@ export function startScreen(code: string) {
           const m = msg as unknown as DesignAddedMsg;
           designs.set(m.design.id, m.design);
           scene?.clearFabricating();
+          disarmFabTimeout();
           toast(
             `<span class="lead">Design ready: ${escapeHtml(m.design.spec.displayName)}</span> ` +
               `<span class="cost">${formatCost(m.design.spec.cost)}</span> — ` +
@@ -1123,6 +1150,7 @@ export function startScreen(code: string) {
           scene?.cycleTool((msg as unknown as { slot: Slot }).slot);
         } else if (msg.type === "fabricate-error") {
           scene?.clearFabricating();
+          disarmFabTimeout();
           toast(String(msg.message ?? "Fabrication failed."), true);
         }
         return;

@@ -25,6 +25,12 @@
 // ISOMORPHIC — must run in PartyKit workers AND browsers. No process.env,
 // no PartyKit imports, no Node APIs.
 
+/** Bump when a spec field is renamed, removed, or changes meaning — the cue
+ *  for DesignStore's load path to migrate stored specs. Additions don't need
+ *  a bump: old specs simply lack the optional field, and clamp-on-load plus
+ *  normalizeModifiers absorb them. */
+export const SPEC_VERSION = 1;
+
 export type LocomotionType = "none" | "wheels" | "tracks" | "legs" | "float";
 /** Movement classes, not biomes. The world paints ten Kenney biomes; they all
  *  collapse into these six for the purposes of "can this machine cross it, and

@@ -12,12 +12,13 @@ export type CompilerConfig = {
 };
 
 /**
- * Dev default: Gemini free tier ($0 during development).
+ * Default: Gemini, on the user's paid tier-1 key.
  *
- * Model choice (probed 2026-08-24 against a free-tier key): the 2.5 family
- * is retired ("no longer available to new users"), and both
- * `gemini-flash-latest` and `gemini-3.7-flash` are capacity-gated on the
- * free tier — they hang past 25s. `gemini-3.6-flash` answers in ~1.7s.
+ * Model choice (probed 2026-08-24, then a FREE-tier key): the 2.5 family is
+ * retired, and `gemini-flash-latest` / `gemini-3.7-flash` hung past 25s —
+ * but that was free-tier capacity gating, and the account has since moved to
+ * paid tier 1. Both are worth re-probing via the eval before trusting this
+ * default again. `gemini-3.6-flash` answers in ~1.7s.
  */
 export const DEFAULT_COMPILER_CONFIG: CompilerConfig = {
   provider: "google",
@@ -41,6 +42,9 @@ export type CompileInput = {
   intent?: string;
   /** Raw base64 PNG (no data: prefix), ≤256px sketch. */
   imageBase64?: string;
+  /** Validation errors from a failed previous attempt, fed back so the retry
+   *  is a correction rather than a blind re-roll. */
+  feedback?: string;
 };
 
 export type TokenUsage = { inputTokens: number; outputTokens: number };
@@ -57,5 +61,7 @@ export interface FabricatorProvider {
     input: CompileInput,
     model: string,
     apiKey: string,
+    /** Per-attempt timeout, owned by the orchestrator. */
+    signal?: AbortSignal,
   ): Promise<ProviderResult>;
 }

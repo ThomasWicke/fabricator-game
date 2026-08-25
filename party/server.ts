@@ -19,6 +19,7 @@ import type {
   DesignBodyMsg,
   DesignCatalogMsg,
   FabricateErrorMsg,
+  FabricateProgressMsg,
   IdentifyMsg,
   Phase,
   PresenceClientMsg,
@@ -208,12 +209,26 @@ export class FabricatorServer extends Server<Env> {
       if (await this.designs.isFull()) {
         throw new Error("The Fabricator's design memory is full.");
       }
-      const sketch = decodeDataUrl(msg.image);
+      const sketch = decodeDataUrl(msg.image, MAX_SKETCH_BYTES);
+      if (msg.image && !sketch) {
+        throw new Error("That sketch is too large for the Fabricator's scanner.");
+      }
       const spec = await this.fabricator.compile({
         name: msg.name,
         intent: msg.intent,
         imageBase64: sketch?.base64,
       });
+      // The spec exists; the remaining wait is all image generation. Telling
+      // the room turns a 40-second silence into two legible stages.
+      const progress: FabricateProgressMsg = {
+        scope: "ui",
+        type: "fabricate-progress",
+        stage: "art",
+        name: spec.displayName,
+        to: byPlayerId,
+      };
+      this.sendToScreens(JSON.stringify(progress));
+      this.sendToControllers(JSON.stringify(progress), byPlayerId);
       const rawBody = await this.fabricator.bodySprite(spec, sketch?.base64);
 
       const id = crypto.randomUUID();
@@ -246,17 +261,36 @@ export class FabricatorServer extends Server<Env> {
       this.sendToControllers(designSummaryMsg(design));
     } catch (err) {
       console.error("design failed:", err);
-      const message =
-        err instanceof Error && /overheated|memory is full/.test(err.message)
-          ? err.message
-          : "The Fabricator sputters and rejects the blueprint. Try again.";
-      const fail: FabricateErrorMsg = { scope: "ui", type: "fabricate-error", message };
-      this.broadcast(JSON.stringify(fail));
+      // Say what actually happened, in the machine's voice. The catch-all
+      // used to swallow every distinct failure into one sentence, which made
+      // "the model is overloaded" and "your sketch is 4MB" indistinguishable
+      // to the person deciding whether to try again.
+      const raw = err instanceof Error ? err.message : String(err);
+      const message = /overheated|memory is full|too large/.test(raw)
+        ? raw
+        : /abort|timed? ?out/i.test(raw)
+          ? "The Fabricator lost its train of thought — the design took too long. Try again."
+          : /failed validation/.test(raw)
+            ? "The Fabricator couldn't make sense of that blueprint. Try a clearer name or intent."
+            : /API 4\d\d/.test(raw)
+              ? "The Fabricator's uplink rejected the request. If this keeps happening, something is wrong on our side."
+              : "The Fabricator sputters and rejects the blueprint. Try again.";
+      const fail: FabricateErrorMsg = {
+        scope: "ui",
+        type: "fabricate-error",
+        message,
+        to: byPlayerId,
+      };
+      // Screens need it regardless (a pad animation to stop); of the phones,
+      // only the submitter — the other player's screen buzzing about a
+      // blueprint they never sent is noise.
+      this.sendToScreens(JSON.stringify(fail));
+      this.sendToControllers(JSON.stringify(fail), byPlayerId);
     }
   }
 
   private async storeBody(msg: DesignBodyMsg) {
-    const decoded = decodeDataUrl(msg.body);
+    const decoded = decodeDataUrl(msg.body, MAX_BODY_BYTES);
     if (!decoded) return;
     try {
       await this.env.SPRITES.put(`body/${msg.designId}.png`, decoded.bytes, {
@@ -471,11 +505,21 @@ export class FabricatorServer extends Server<Env> {
   }
 }
 
+/** Sketches are ≤256px PNGs — tens of KB. Anything near this cap is not a
+ *  sketch, and decoding it inside a Durable Object costs everyone. */
+const MAX_SKETCH_BYTES = 400_000;
+/** Generated body art runs bigger, but not megabytes bigger. */
+const MAX_BODY_BYTES = 2_000_000;
+
 function decodeDataUrl(
   dataUrl: string | undefined,
+  maxBytes: number,
 ): { mimeType: string; base64: string; bytes: Uint8Array } | null {
   const m = dataUrl?.match(DATA_URL_RE);
   if (!m) return null;
+  // Base64 is 4/3 the decoded size; checking before atob keeps the oversize
+  // payload from ever being materialised.
+  if (m[2].length > (maxBytes * 4) / 3) return null;
   const binary = atob(m[2]);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);

@@ -29,6 +29,12 @@ export function buildUserText(input: CompileInput): string {
     (input.intent ? `\nStated intent: "${input.intent}"` : "") +
     (input.imageBase64
       ? "\nThe attached image is the player's sketch."
-      : "\n(No sketch provided.)")
+      : "\n(No sketch provided.)") +
+    // The retry carries the reasons the last answer was rejected. A blind
+    // re-roll fails the same way it failed the first time.
+    (input.feedback
+      ? `\n\nYour previous answer was rejected by the validator: ${input.feedback}. ` +
+        "Produce a corrected spec that fixes exactly these problems."
+      : "")
   );
 }

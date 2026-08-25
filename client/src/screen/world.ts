@@ -1201,6 +1201,12 @@ export class WorldScene extends Phaser.Scene {
     this.fabFx = [ring, text];
   }
 
+  /** Update the pad's status line in place — the ring keeps pulsing. */
+  setFabricatingStage(line: string) {
+    const text = this.fabFx[1] as Phaser.GameObjects.Text | undefined;
+    text?.setText(line);
+  }
+
   clearFabricating() {
     for (const fx of this.fabFx) {
       this.tweens.killTweensOf(fx); // the ring tween repeats forever
