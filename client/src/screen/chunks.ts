@@ -174,6 +174,22 @@ export class ChunkField {
     const col0 = cx * CHUNK_COLS;
     const row0 = cy * CHUNK_ROWS;
 
+    // Terrain is stamped at WHOLE PIXELS. HEX_W is 65, so odd rows are offset
+    // by 32.5 and every one of them used to land on a half pixel — which the
+    // GPU resolves by resampling the tile, softening both edges into partial
+    // transparency. Where a softened edge meets its neighbour the coverage no
+    // longer adds up to one, the darker slab beneath shows through, and the
+    // result is a faint seam along every hex edge in the world.
+    //
+    // Measured, not reasoned: compositing the real tile at 32.5 leaves visible
+    // banding, and at 33 the same patch comes out a uniform field. Rounding
+    // moves a tile by at most half a pixel, which the art absorbs — the images
+    // are 89 tall on a 48px pitch and 65 wide with full-width middles, so they
+    // overlap far too generously for half a pixel to open a gap.
+    //
+    // hexToWorld itself stays exact. This is a drawing concern, and rounding
+    // the world would put the simulation on a different grid from the maths.
+    const px = Math.round;
     rt.beginDraw();
     // Two rows of bleed-in above and one column to the left: a tile's image
     // hangs 41px below its row, and a sunken sea tile (+11) hangs 52px, so the
@@ -185,14 +201,16 @@ export class ChunkField {
         const { biome, drop } = tileAt(col, row, this.seed);
         const c = hexToWorld(col, row);
         const tl = hexImageTopLeft(col, row);
-        rt.batchDraw(BIOMES[biome].tile, tl.x - x0, tl.y + drop - y0);
+        rt.batchDraw(BIOMES[biome].tile, px(tl.x - x0), px(tl.y + drop - y0));
         const deco = decorAt(col, row, this.seed, biome);
         if (deco) {
+          // Same rule, same reason: an odd-width prop centred on a hex lands
+          // on a half pixel and comes out soft.
           const img = this.scene.textures.get(deco).getSourceImage();
           rt.batchDraw(
             deco,
-            c.x - img.width / 2 - x0,
-            c.y - img.height + 4 + drop - y0,
+            px(c.x - img.width / 2 - x0),
+            px(c.y - img.height + 4 + drop - y0),
           );
         }
       }

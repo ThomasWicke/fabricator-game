@@ -24,6 +24,7 @@ import { startBackdrop } from "../backdrop";
 import { createSketchPad } from "../sketch";
 import { createTouchPad } from "../touchpad";
 import { WorldScene, type MinimapData, type PlaceableDesign } from "./world";
+import { CHUNK_COLS, CHUNK_ROWS, chunkOfHex } from "./chunks";
 import {
   BIOMES,
   type BiomeType,
@@ -358,6 +359,7 @@ export function startScreen(code: string) {
             <div class="hud-map glass" id="hud-map">
               <canvas id="minimap" width="150" height="150"></canvas>
               <div class="map-where" id="map-where"></div>
+              <div class="map-at" id="map-at"></div>
             </div>
 
             <div class="hud-bottom">
@@ -737,6 +739,7 @@ export function startScreen(code: string) {
     // travelled. Markers are cheap and repaint every tick.
     const mapCanvas = document.getElementById("minimap") as HTMLCanvasElement;
     const whereEl = document.getElementById("map-where")!;
+    const atEl = document.getElementById("map-at")!;
     const mapCtx = mapCanvas.getContext("2d")!;
     const terrainLayer = document.createElement("canvas");
     terrainLayer.width = mapCanvas.width;
@@ -791,6 +794,11 @@ export function startScreen(code: string) {
       }
 
       whereEl.textContent = describeWhere(d);
+      // Exact address, for reporting something you can see and I cannot. The
+      // hex is what worldgen is a function of; the chunk is what terrain is
+      // drawn in, and knowing which of the two a fault lines up with is most
+      // of the diagnosis.
+      atEl.textContent = describeExactly(d);
     };
     const mapTimer = setInterval(paintMinimap, 250);
     window.addEventListener("beforeunload", () => clearInterval(mapTimer));
@@ -1185,6 +1193,19 @@ function describeWhere(d: MinimapData): string {
   // somebody else. The ground and the distance are the detail.
   const where = d.region || BIOMES[d.biome].label;
   return dist < 6 ? `${where} · at the Fabricator` : `${where} · ${dist} hexes out`;
+}
+
+/** Where exactly, in the two coordinate systems that can be wrong. */
+function describeExactly(d: MinimapData): string {
+  const p = d.players[0];
+  if (!p) return "";
+  const { cx, cy } = chunkOfHex(p.col, p.row);
+  // Position within the chunk too: "0" or the last column means a fault is
+  // sitting on a chunk boundary, which is a different bug from one that
+  // happens anywhere.
+  const ix = ((p.col % CHUNK_COLS) + CHUNK_COLS) % CHUNK_COLS;
+  const iy = ((p.row % CHUNK_ROWS) + CHUNK_ROWS) % CHUNK_ROWS;
+  return `hex ${p.col},${p.row} · chunk ${cx},${cy} (${ix},${iy})`;
 }
 
 function escapeHtml(s: string): string {

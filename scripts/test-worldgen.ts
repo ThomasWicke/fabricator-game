@@ -6,6 +6,8 @@
 
 import { readdirSync } from "node:fs";
 
+import { HEX_W, hexImageTopLeft } from "../client/src/screen/hexgrid";
+
 import {
   BIOMES,
   BIOME_TILE_KEYS,
@@ -313,6 +315,38 @@ console.log("\n── seams ─────────────────�
     );
     check(`${b} holds at most one seam`, owners.length <= 1, owners.join("+"));
   }
+}
+
+console.log("\n── terrain lands on whole pixels ───────────────────────────");
+
+{
+  // HEX_W is 65, so odd rows are offset by half a tile — 32.5 — and land on a
+  // half pixel. The GPU resolves that by resampling the tile, which softens
+  // both edges into partial transparency; where a softened edge meets its
+  // neighbour the coverage stops adding up to one and the darker slab beneath
+  // shows through as a seam along every hex edge in the world.
+  //
+  // chunks.ts rounds the stamp. What has to hold is that rounding does not
+  // break the grid: tiles in a row must still sit exactly HEX_W apart, or the
+  // fix trades a soft seam for a hard one.
+  let maxShift = 0;
+  let spacingOk = true;
+  let halfPixels = 0;
+  for (let row = -40; row <= 40; row++) {
+    for (let col = -40; col < 40; col++) {
+      const exact = hexImageTopLeft(col, row).x;
+      const drawn = Math.round(exact);
+      if (exact !== Math.floor(exact)) halfPixels++;
+      maxShift = Math.max(maxShift, Math.abs(drawn - exact));
+      if (drawn - Math.round(hexImageTopLeft(col - 1, row).x) !== HEX_W) spacingOk = false;
+      // Rows are already whole: hexImageTopLeft's y is row * ROW_H exactly.
+      if (hexImageTopLeft(col, row).y % 1 !== 0) spacingOk = false;
+    }
+  }
+  console.log(`  ${halfPixels} of 6480 tiles sat on a half pixel before rounding`);
+  check("half the grid really was off-pixel", halfPixels > 3000, `${halfPixels}`);
+  check("rounding moves a tile by at most half a pixel", maxShift <= 0.5, `${maxShift}`);
+  check("…and neighbours stay exactly HEX_W apart", spacingOk);
 }
 
 console.log("\n── every texture the world asks for ────────────────────────");

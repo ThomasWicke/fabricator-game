@@ -21,5 +21,5 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["node"]
   },
-  "include": ["scripts/**/*", "shared/**/*", "client/src/screen/worldgen.ts", "client/src/screen/enemies.ts", "client/src/screen/belt.ts", "client/src/touchpad.ts"]
+  "include": ["scripts/**/*", "shared/**/*", "client/src/screen/worldgen.ts", "client/src/screen/enemies.ts", "client/src/screen/belt.ts", "client/src/screen/hexgrid.ts", "client/src/touchpad.ts"]
 }

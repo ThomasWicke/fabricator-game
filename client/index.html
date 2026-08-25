@@ -871,7 +871,17 @@
           width: 5.5em;
           height: 5.5em;
         }
-        .map-where {
+        /* The exact address, under the human-readable one. Quiet: it is for
+         reporting a fault, not for playing by. */
+      .map-at {
+        font-family: var(--mono);
+        font-size: 0.54em;
+        letter-spacing: 0.02em;
+        color: #7f8ea6;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+      }
+      .map-where {
           display: none;
         }
         .player-card {
@@ -1298,6 +1308,16 @@
         border-radius: 8px;
         image-rendering: pixelated;
         display: block;
+      }
+      /* The exact address, under the human-readable one. Quiet: it is for
+         reporting a fault, not for playing by. */
+      .map-at {
+        font-family: var(--mono);
+        font-size: 0.54em;
+        letter-spacing: 0.02em;
+        color: #7f8ea6;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
       }
       .map-where {
         font-size: 0.62em;
