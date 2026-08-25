@@ -22,8 +22,10 @@ import type { BiomeType } from "./worldgen";
  * scripts/test-enemies.ts asserts the relationship, which it could not do if
  * they lived in a module that needs a browser to load.
  */
-export const WALK_SPEED = 200;
-export const SPRINT_MULT = 1.65;
+export const WALK_SPEED = 170;
+/** Sprint was 1.65 and outran most fabricated vehicles, which made building
+ *  one pointless. A sprint is now a burst you'd still trade for wheels. */
+export const SPRINT_MULT = 1.35;
 /** Speed multiplier while hungry — the slowest a player can ever be. */
 export const HUNGRY_SPEED = 0.72;
 
@@ -89,7 +91,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     walk: ["spider_walk1", "spider_walk2"],
     hit: "spider_hit",
     dead: "spider_dead",
-    speed: chase(0.89),
+    speed: chase(0.78),
     damage: 8,
     health: 20,
     size: 26,
@@ -100,7 +102,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     walk: ["snake", "snake_walk"],
     hit: "snake_hit",
     dead: "snake_dead",
-    speed: chase(0.86),
+    speed: chase(0.76),
     damage: 10,
     health: 24,
     size: 20,
@@ -111,7 +113,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     walk: ["mouse", "mouse_walk"],
     hit: "mouse_hit",
     dead: "mouse_dead",
-    speed: chase(0.92),
+    speed: chase(0.8),
     damage: 6,
     health: 14,
     size: 20,
@@ -122,7 +124,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     walk: ["bat", "bat_fly"],
     hit: "bat_hit",
     dead: "bat_dead",
-    speed: chase(0.93),
+    speed: chase(0.815),
     damage: 7,
     health: 16,
     size: 24,
@@ -133,7 +135,7 @@ export const SPECIES: Record<SpeciesId, Species> = {
     walk: ["slimeGreen", "slimeGreen_walk"],
     hit: "slimeGreen_hit",
     dead: "slimeGreen_dead",
-    speed: chase(0.81),
+    speed: chase(0.74),
     damage: 11,
     health: 30,
     size: 24,

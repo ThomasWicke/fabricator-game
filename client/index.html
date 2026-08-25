@@ -1240,8 +1240,21 @@
          able to read "in trouble" from across a room without doing maths. */
       .player-card .bars {
         display: flex;
-        gap: 0.28em;
+        gap: 0.45em;
         margin-top: 0.3em;
+      }
+      /* A bar's meaning should not require asking. The icon carries the
+         answer at a glance; the title carries the full sentence on hover. */
+      .player-card .vital {
+        display: flex;
+        align-items: center;
+        gap: 0.22em;
+      }
+      .player-card .vic {
+        width: 0.72em;
+        height: 0.72em;
+        flex: none;
+        opacity: 0.9;
       }
       .player-card.p2 .bars {
         flex-direction: row-reverse;

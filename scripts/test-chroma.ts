@@ -74,6 +74,48 @@ for (const [label, bg] of [
   if (out.applied) check("  …opaque", alphaAt(d, 64, 32, 32) === 255);
 }
 
+console.log("\n── enclosed openings ───────────────────────────────────────");
+
+{
+  // A car window the model painted background-colour: enclosed by subject,
+  // unreachable from the border. On MAGENTA the keyer clears it globally —
+  // no real machine is magenta — which is how sprites stopped shipping with
+  // magenta glass.
+  const d = subjectOn([255, 0, 255], [60, 90, 200]);
+  for (let y = 28; y < 36; y++) {
+    for (let x = 26; x < 38; x++) {
+      const i = (y * 64 + x) * 4;
+      d[i] = 250;
+      d[i + 1] = 20;
+      d[i + 2] = 252;
+    }
+  }
+  const out = keyImage(d, 64, 64);
+  check("keys with a magenta window inside", out.applied);
+  check("  the enclosed magenta went transparent", alphaAt(d, 64, 30, 30) === 0);
+  check("  the body around it stayed", alphaAt(d, 64, 20, 32) === 255);
+}
+
+{
+  // The same shape on a GREY backdrop with a grey patch inside: enclosed
+  // near-background pixels stay, because on any non-magenta ground "looks
+  // like the background" and "is the background" genuinely differ — this is
+  // the grey machine with grey panels, and eating them was the original bug.
+  const bg: RGB = [128, 128, 130];
+  const d = subjectOn(bg, [60, 90, 200]);
+  for (let y = 28; y < 36; y++) {
+    for (let x = 26; x < 38; x++) {
+      const i = (y * 64 + x) * 4;
+      d[i] = 130;
+      d[i + 1] = 128;
+      d[i + 2] = 132;
+    }
+  }
+  const out = keyImage(d, 64, 64);
+  check("keys on grey with a grey panel inside", out.applied);
+  check("  the enclosed grey panel SURVIVED", alphaAt(d, 64, 30, 30) === 255);
+}
+
 console.log("\n── images it must refuse ───────────────────────────────────");
 
 {

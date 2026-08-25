@@ -25,6 +25,18 @@ export const FLATNESS = 72;
 /** Removing more than this much means the key matched the subject too. */
 export const MAX_REMOVED = 0.97;
 
+/** When the learned background IS magenta, keying can afford to be global
+ *  and generous: no real machine is magenta, so pixels near the key are
+ *  background wherever they sit — including ENCLOSED regions the border
+ *  flood can never reach, which is how cars shipped with magenta windows.
+ *  The flood-only, tight-threshold path stays for every other background,
+ *  where "looks like the background" and "is the background" genuinely
+ *  differ (the grey machine on the grey backdrop). */
+export const MAGENTA: RGB = [255, 0, 255];
+export const MAGENTA_KEY_DIST = 90;
+export const MAGENTA_HARD = 74;
+export const MAGENTA_SOFT = 118;
+
 export const dist = (r: number, g: number, b: number, k: RGB): number =>
   Math.sqrt((r - k[0]) ** 2 + (g - k[1]) ** 2 + (b - k[2]) ** 2);
 
@@ -142,6 +154,19 @@ export function keyImage(d: Uint8ClampedArray, w: number, h: number): KeyOutcome
     return { applied: false, reason: "ate-everything", spread };
   }
 
+  // Magenta backgrounds also key GLOBALLY: windows, wheel arches and other
+  // enclosed openings that the model painted background-colour are not
+  // reachable from the border, and they shipped as magenta patches inside
+  // otherwise clean sprites.
+  const magenta = dist(key[0], key[1], key[2], MAGENTA) < MAGENTA_KEY_DIST;
+  if (magenta) {
+    for (let p = 0; p < w * h; p++) {
+      if (mask[p]) continue;
+      const i = p * 4;
+      if (dist(d[i], d[i + 1], d[i + 2], key) < MAGENTA_HARD) mask[p] = 1;
+    }
+  }
+
   // Fringe pass runs on a copy so a late refusal leaves the input pristine.
   const out = new Uint8ClampedArray(d);
   for (let y = 0; y < h; y++) {
@@ -161,10 +186,13 @@ export function keyImage(d: Uint8ClampedArray, w: number, h: number): KeyOutcome
         (x < w - 1 && mask[p + 1]) ||
         (y > 0 && mask[p - w]) ||
         (y < h - 1 && mask[p + w]);
-      if (!touchesBg) continue;
+      if (!touchesBg && !magenta) continue;
+      const soft = magenta ? MAGENTA_SOFT : SOFT;
+      const hard = magenta ? MAGENTA_HARD : HARD;
       const dk = dist(out[i], out[i + 1], out[i + 2], key);
-      if (dk >= SOFT) continue;
-      const t = Math.max(0, (dk - HARD) / (SOFT - HARD)); // 0 = key, 1 = subject
+      if (dk >= soft) continue;
+      if (!touchesBg && !magenta) continue;
+      const t = Math.max(0, (dk - hard) / (soft - hard)); // 0 = key, 1 = subject
       out[i + 3] = Math.round(out[i + 3] * t);
       const lum = 0.299 * out[i] + 0.587 * out[i + 1] + 0.114 * out[i + 2];
       const pull = (1 - t) * 0.6;

@@ -424,7 +424,17 @@ export function clampSpec(raw: RawSpec): RawSpec {
       terrainModifiers: immobile
         ? { ...NO_TERRAIN }
         : (Object.fromEntries(
-            TERRAINS.map((k) => [k, clamp(t[k], 0, 1)]),
+            TERRAINS.map((k) => {
+              let v = clamp(t[k], 0, 1);
+              // A vehicle spawns on the grass beside the Fabricator, so a
+              // vehicle the model gives grass 0 is bricked where it stands —
+              // most painfully a pure boat, which could never reach the
+              // water it was built for. Everything can at least be trundled
+              // across a lawn, and a hull can be dragged over sand.
+              if (k === "grass") v = Math.max(v, 0.12);
+              if (k === "sand" && raw.locomotion.type === "float") v = Math.max(v, 0.15);
+              return [k, v];
+            }),
           ) as TerrainModifiers),
     },
     harvest: raw.harvest

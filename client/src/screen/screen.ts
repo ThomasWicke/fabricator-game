@@ -71,8 +71,14 @@ function vitalsCard(slot: Slot): string {
         <span class="name" id="name-p${slot}">Player ${slot}</span>
         <span class="tool" id="tool-p${slot}">waiting to join…</span>
         <span class="bars">
-          <span class="bar health"><i id="hp-p${slot}"></i></span>
-          <span class="bar hunger"><i id="hg-p${slot}"></i></span>
+          <span class="vital" title="Health — refills on its own while you are fed.">
+            <svg class="vic" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 10.6 1.8 6.3a2.6 2.6 0 1 1 3.7-3.7l.5.5.5-.5a2.6 2.6 0 1 1 3.7 3.7Z" fill="#6fcf7f"/></svg>
+            <span class="bar health"><i id="hp-p${slot}"></i></span>
+          </span>
+          <span class="vital" title="Food — forage berries from bushes; you eat automatically when hungry. Empty means starving.">
+            <svg class="vic" viewBox="0 0 12 12" aria-hidden="true"><circle cx="5" cy="5" r="3.4" fill="#e3b25a"/><path d="M7.6 7.6 10.4 10.4" stroke="#e3b25a" stroke-width="2.2" stroke-linecap="round"/></svg>
+            <span class="bar hunger"><i id="hg-p${slot}"></i></span>
+          </span>
         </span>
         <span class="carry" id="carry-p${slot}"></span>
       </span>

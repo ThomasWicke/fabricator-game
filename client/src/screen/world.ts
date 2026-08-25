@@ -341,6 +341,8 @@ type PlayerEntity = {
   belt: CarriedTool[];
   /** How long A has been held on a liftable structure, for the pickup. */
   aHoldMs: number;
+  /** The "find food" hint fired for the current bout of hunger. */
+  hungerHinted?: boolean;
   /** Index into `belt`, or -1 for bare hands. Hands are a real choice: they
    *  gather wood, stone and food, which a single-ore drill does not. */
   equipped: number;
@@ -2542,6 +2544,15 @@ export class WorldScene extends Phaser.Scene {
       this.floatText(p.sprite.x, p.sprite.y - 46, `ate · +${FOOD_VALUE}`, "#c9e77f");
     }
 
+    // The mechanics are automatic (forage → auto-eat → heal while fed), and
+    // automatic mechanics are invisible: say the one actionable thing, once,
+    // when it starts to matter.
+    if (p.hunger < AUTO_EAT_AT && p.pack.food <= 0 && !p.hungerHinted) {
+      p.hungerHinted = true;
+      this.floatText(p.sprite.x, p.sprite.y - 58, "hungry — pick berries from bushes", "#e3b25a");
+    }
+    if (p.hunger > AUTO_EAT_AT + 10) p.hungerHinted = false;
+
     if (p.hunger <= 0) {
       p.health -= STARVE_DAMAGE * dt;
       if (p.health <= 0) {
@@ -3134,11 +3145,10 @@ export class WorldScene extends Phaser.Scene {
       const h = worldToHex(p.sprite.x, p.sprite.y);
       const region = regionAt(h.col, h.row, this.seed);
       if (p.region && sameRegion(p.region, region)) continue;
-      const first = p.region === null;
+      // No announcement. Walking along a border flips the region every few
+      // steps, and a label that pops a dozen times teaches you to ignore
+      // labels. The minimap caption carries the current name, quietly.
       p.region = region;
-      if (!first) {
-        this.floatText(p.sprite.x, p.sprite.y - 52, regionName(region, this.seed), "#dfe8f4");
-      }
     }
   }
 
