@@ -48,6 +48,19 @@ export type TerrainModifiers = Record<TerrainType, number>;
  *  BEHIND the thing that makes it; light is the one that surrounds it. */
 export type EmissionKind = "light" | "smoke" | "steam" | "sparks";
 
+/** Every closed vocabulary the provider is constrained to. The JSON schema
+ *  below is built from these rather than repeating them — the enum that was
+ *  written out by hand is the one that went stale. */
+export const CATEGORIES = ["vehicle", "structure", "tool"] as const;
+export const LOCOMOTION_TYPES: readonly LocomotionType[] = [
+  "none",
+  "wheels",
+  "tracks",
+  "legs",
+  "float",
+];
+export const EMISSION_KINDS: readonly EmissionKind[] = ["light", "smoke", "steam", "sparks"];
+
 export const MATERIALS: readonly MaterialType[] = [
   "wood",
   "stone",
@@ -141,7 +154,7 @@ export type RawSpec = Omit<FabricatedSpec, "cost">;
 export const SPEC_JSON_SCHEMA = {
   type: "object",
   properties: {
-    category: { type: "string", enum: ["vehicle", "structure", "tool"] },
+    category: { type: "string", enum: [...CATEGORIES] },
     displayName: { type: "string" },
     size: {
       type: "object",
@@ -152,7 +165,7 @@ export const SPEC_JSON_SCHEMA = {
     locomotion: {
       type: "object",
       properties: {
-        type: { type: "string", enum: ["none", "wheels", "tracks", "legs", "float"] },
+        type: { type: "string", enum: [...LOCOMOTION_TYPES] },
         speed: { type: "number" },
         terrainModifiers: {
           type: "object",
@@ -177,7 +190,13 @@ export const SPEC_JSON_SCHEMA = {
         rate: { type: "number" },
         materials: {
           type: "array",
-          items: { type: "string", enum: ["wood", "stone", "bogiron"] },
+          // Derived, never written out. This list was hand-copied and went
+          // stale the moment three more materials existed: the model was
+          // being handed a schema that forbade "glass", so a Glass Miner
+          // could not say glass and picked the nearest thing it was allowed
+          // to say. The prompt described six materials while the grammar
+          // permitted three, and the grammar wins.
+          items: { type: "string", enum: [...MATERIALS] },
         },
       },
       required: ["rate", "materials"],
@@ -186,7 +205,7 @@ export const SPEC_JSON_SCHEMA = {
     emission: {
       type: "object",
       properties: {
-        kind: { type: "string", enum: ["light", "smoke", "steam", "sparks"] },
+        kind: { type: "string", enum: [...EMISSION_KINDS] },
         intensity: { type: "number" },
       },
       required: ["kind", "intensity"],

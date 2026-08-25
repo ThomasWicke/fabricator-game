@@ -1305,6 +1305,14 @@ export class WorldScene extends Phaser.Scene {
         .setDepth(1e6 - 1);
       const outline = this.add
         .polygon(p.sprite.x, p.sprite.y, HEX_POINTS.flat(), 0x7fe08a, 0.16)
+        // setOrigin(0) is load-bearing. Phaser sizes a Polygon from its
+        // points' bounding box and then makes the display origin the CENTRE
+        // of that box — which the renderer subtracts from every point. Our
+        // points are already centred on (0,0), so the default origin drew the
+        // outline half a hex up and to the left: it highlighted one hex and
+        // the structure landed on another, which is exactly as confusing as
+        // it sounds.
+        .setOrigin(0, 0)
         .setDepth(1e6 - 3);
       outline.setStrokeStyle(2, 0x7fe08a, 0.95);
       const prompt = this.add
@@ -1336,7 +1344,14 @@ export class WorldScene extends Phaser.Scene {
   private updateCarry(p: PlayerEntity) {
     const c = p.carrying;
     if (!c) return;
-    const hex = worldToHex(p.sprite.x, p.sprite.y);
+    // The FEET, not the sprite's middle. Everything else that asks "which
+    // ground is this player on" — walkable, terrainAt, the shore slide — uses
+    // the physics body's centre, and the sprite's own origin sits about 13px
+    // higher, which is a quarter of a row. Asking a different question here
+    // than the rest of the game asks is how the outline ends up on a hex the
+    // player is not standing on.
+    const feet = (p.sprite.body as Phaser.Physics.Arcade.Body).center;
+    const hex = worldToHex(feet.x, feet.y);
     const centre = hexToWorld(hex.col, hex.row);
     const drop = this.dropAt(hex.col, hex.row);
     c.hex = hex;

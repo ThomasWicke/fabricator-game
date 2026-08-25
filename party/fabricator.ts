@@ -60,6 +60,13 @@ export class FabricatorEndpoint {
    * AI body sprite for the spec (Google key only — Anthropic has no image
    * model). Failures return null: the game falls back to the player's
    * sketch, fabrication never dies on the art step.
+   *
+   * Tools used to be skipped here, on the grounds that they render as 22px
+   * icons and are not worth the round trip. That stopped being true when they
+   * became things you carry: a tool now has a thumbnail in the library and an
+   * entry on the belt. Worse, the fallback it relied on does not exist for a
+   * blueprint submitted with only a name — the sketch pad returns nothing
+   * when nothing was drawn — so those tools came out as a grey rectangle.
    */
   async bodySprite(
     spec: FabricatedSpec,
@@ -67,9 +74,6 @@ export class FabricatorEndpoint {
   ): Promise<string | null> {
     const googleKey = this.env.GOOGLE_API_KEY as string | undefined;
     if (!googleKey) return null;
-    // Tools stay sketch-bodied: they render as 22px icons, not worth an
-    // image-gen round trip.
-    if (spec.category === "tool") return null;
     try {
       const t0 = Date.now();
       const sprite = await generateBodySprite(spec, sketchBase64, googleKey);

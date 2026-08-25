@@ -66,7 +66,13 @@ function buildImagePrompt(spec: FabricatedSpec, hasSketch: boolean): string {
         "a clean side profile. Do NOT draw it at an isometric or three-quarter angle, " +
         "and do NOT angle it toward any corner of the frame. Light it evenly and flatly, " +
         "with no strong directional shadow — the sprite gets mirrored to drive the other way. "
-      : "Viewed from a high three-quarter top-down angle. ";
+      : spec.category === "tool"
+        ? // Something held, not something stood on: a building wants the map's
+          // viewing angle, a tool wants to look like the item it is.
+          "Shown as a clean inventory item icon: the object alone, at a slight " +
+          "three-quarter angle, oriented diagonally with its business end toward " +
+          "the lower left. Not held by anyone, not resting on anything. "
+        : "Viewed from a high three-quarter top-down angle. ";
 
   return (
     `A single 2D video-game sprite: the body of "${spec.displayName}" (a ${spec.category}). ${spec.flavor} ` +

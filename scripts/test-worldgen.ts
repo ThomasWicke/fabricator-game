@@ -6,7 +6,7 @@
 
 import { readdirSync } from "node:fs";
 
-import { HEX_W, hexImageTopLeft } from "../client/src/screen/hexgrid";
+import { HEX_POINTS, HEX_W, hexImageTopLeft } from "../client/src/screen/hexgrid";
 
 import {
   BIOMES,
@@ -347,6 +347,24 @@ console.log("\n── terrain lands on whole pixels ─────────�
   check("half the grid really was off-pixel", halfPixels > 3000, `${halfPixels}`);
   check("rounding moves a tile by at most half a pixel", maxShift <= 0.5, `${maxShift}`);
   check("…and neighbours stay exactly HEX_W apart", spacingOk);
+}
+
+{
+  // The placement outline is a Phaser Polygon built from these points, and it
+  // is drawn with setOrigin(0) because they are centred on (0,0). If they ever
+  // stop being centred, that outline silently moves off its hex — which is how
+  // it came to highlight one hex while the structure landed on another.
+  const xs = HEX_POINTS.map((pt) => pt[0]);
+  const ys = HEX_POINTS.map((pt) => pt[1]);
+  const centred =
+    Math.abs(Math.min(...xs) + Math.max(...xs)) < 1e-9 &&
+    Math.abs(Math.min(...ys) + Math.max(...ys)) < 1e-9;
+  check("the hex outline's points are centred on the hex", centred);
+  check(
+    "…and span exactly one tile",
+    Math.max(...xs) - Math.min(...xs) === HEX_W,
+    `${Math.max(...xs) - Math.min(...xs)}`,
+  );
 }
 
 console.log("\n── every texture the world asks for ────────────────────────");

@@ -5,7 +5,16 @@
 // on meaningful capability, never on fields the compiler fills in
 // arbitrarily — and the material split must never deadlock progression.
 
-import { clampSpec, type MaterialType, type RawSpec } from "../shared/fabricator/schema";
+import {
+  EMISSION_KINDS,
+  LOCOMOTION_TYPES,
+  MATERIALS,
+  SPEC_JSON_SCHEMA,
+  TERRAINS,
+  clampSpec,
+  type MaterialType,
+  type RawSpec,
+} from "../shared/fabricator/schema";
 import { computeCost, formatCost } from "../shared/fabricator/cost";
 import { mockCompile } from "../shared/fabricator/mock";
 
@@ -305,6 +314,36 @@ for (const spec of [harvester, glowing, weaponised, farm, fence, everything]) {
   const c = computeCost(spec);
   const sum = c.wood + c.stone + c.bogiron + c.basalt + c.glass + c.rime;
   check(`${spec.displayName || "spec"}: parts sum to the total`, sum === c.total, `${sum} vs ${c.total}`);
+}
+
+// ── the grammar the model is actually held to ──────────────────────
+//
+// The prompt is advice; the JSON schema is a grammar, and when they disagree
+// the grammar wins silently. The materials enum was hand-written and went
+// stale the moment there were six materials, so a Glass Miner was forbidden
+// from saying "glass" and picked the nearest thing it was allowed to say —
+// which reads, in game, as the compiler not understanding what you asked for.
+{
+  const props = SPEC_JSON_SCHEMA.properties as Record<string, any>;
+  const same = (a: readonly string[], b: readonly string[]) =>
+    a.length === b.length && a.every((x, i) => x === b[i]);
+  check(
+    "the provider may name every material",
+    same(props.harvest.properties.materials.items.enum, MATERIALS),
+    props.harvest.properties.materials.items.enum.join(","),
+  );
+  check(
+    "…every terrain class",
+    same(Object.keys(props.locomotion.properties.terrainModifiers.properties), TERRAINS),
+    Object.keys(props.locomotion.properties.terrainModifiers.properties).join(","),
+  );
+  check("…every locomotion type", same(props.locomotion.properties.type.enum, LOCOMOTION_TYPES));
+  check("…and every emission kind", same(props.emission.properties.kind.enum, EMISSION_KINDS));
+
+  // Every primitive the game simulates must be reachable from the grammar.
+  for (const key of ["harvest", "emission", "weapon", "storage", "nourish", "ward"]) {
+    check(`the grammar has a '${key}'`, key in props);
+  }
 }
 
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
