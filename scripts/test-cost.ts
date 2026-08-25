@@ -243,6 +243,52 @@ for (const ore of ["wood", "stone", "bogiron", "basalt", "glass", "rime"] as Mat
   );
 }
 
+// …and the version of that check that actually bites.
+//
+// The one above passes trivially: a harvester on its own has no weapon, no
+// farm and no ward, so nothing charges it an ore and the rule looks safe. But
+// the compiler is free to decide a heavy pick also swings well, and a BASALT
+// pick that picked up a weapon was billed 6 basalt — a locked door with the
+// key behind it. What saves it cannot be "the model usually does not do that",
+// so pile every capability on and check the one thing that must hold.
+for (const ore of ["bogiron", "basalt", "glass", "rime"] as MaterialType[]) {
+  const kitchenSink = clampSpec(structure(DRY));
+  kitchenSink.category = "tool";
+  kitchenSink.harvest = { rate: 4, materials: [ore] };
+  kitchenSink.weapon = { damage: 38, reach: 140, cooldown: 0.3 };
+  kitchenSink.emission = { kind: "sparks", intensity: 1 };
+  kitchenSink.storage = { capacity: 30 };
+  const c = computeCost(kitchenSink);
+  check(
+    `a ${ore} harvester never costs ${ore}, whatever else it can do`,
+    c[ore] === 0,
+    formatCost(c),
+  );
+}
+
+// Structures can harvest too — an automatic extractor is not a tool.
+for (const ore of ["bogiron", "basalt", "glass", "rime"] as MaterialType[]) {
+  const rig = clampSpec(structure(DRY));
+  rig.harvest = { rate: 3, materials: [ore] };
+  rig.nourish = { rate: 10 };
+  rig.ward = { radius: 250 };
+  check(`a ${ore} extractor never costs ${ore} either`, computeCost(rig)[ore] === 0, formatCost(computeCost(rig)));
+}
+
+// A rig that digs several ores pays for none of them.
+{
+  const multi = clampSpec(structure(DRY));
+  multi.category = "vehicle";
+  multi.harvest = { rate: 4, materials: ["basalt", "glass", "rime", "bogiron"] };
+  multi.weapon = { damage: 30, reach: 100, cooldown: 0.5 };
+  const c = computeCost(multi);
+  check(
+    "a rig that digs everything owes nothing to any of it",
+    c.basalt === 0 && c.glass === 0 && c.rime === 0 && c.bogiron === 0,
+    formatCost(c),
+  );
+}
+
 // A machine that wants everything is expensive, not unbuildable.
 const everything = clampSpec(
   vehicle("float", { grass: 0.3, sand: 0.3, swamp: 0.9, rock: 0.3, snow: 0.3, water: 1 }),

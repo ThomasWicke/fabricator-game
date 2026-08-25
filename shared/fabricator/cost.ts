@@ -107,6 +107,21 @@ export function computeCost(spec: RawSpec): MaterialCost {
     rime: spec.ward ? 0.3 * past(spec.ward.radius, 140, 260) : 0,
   };
 
+  // NOTHING EVER COSTS WHAT IT DIGS.
+  //
+  // This is the rule the whole progression rests on, and it has to be
+  // structural rather than a consequence of the numbers above. Every ore is
+  // behind a tool that can extract it, so a basalt pick costing basalt is not
+  // an expensive tool — it is a locked door with the key behind it.
+  //
+  // The thresholds nearly hid this. A harvester on its own has no weapon, no
+  // farm and no ward, so it came out clean and the test agreed. But the
+  // compiler is free to decide a heavy pick also swings well, and a basalt
+  // pick that picked up a weapon was billed 6 basalt. What saves it cannot be
+  // "the model usually does not do that".
+  const digs = new Set<string>(spec.harvest?.materials ?? []);
+  for (const m of EXOTICS) if (digs.has(m)) share[m] = 0;
+
   // A thing can want several at once — a warded greenhouse with a gun on it —
   // and the shares must not add up to the whole bill.
   const demanded = EXOTICS.reduce((sum, m) => sum + share[m], 0);
