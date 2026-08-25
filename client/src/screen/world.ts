@@ -1422,6 +1422,28 @@ export class WorldScene extends Phaser.Scene {
     this.pushBelt(p);
   }
 
+  /**
+   * Is this design part of the world right now?
+   *
+   * Deleting one that is would be worse than it looks: a built object is
+   * saved as an id and a position, so the design going away means the
+   * building silently fails to come back the next time the save is loaded.
+   * The screen is the only place that can answer this — the server holds the
+   * library, but the world lives here.
+   */
+  usesDesign(designId: string): { where: string } | null {
+    for (const v of this.vehicles) {
+      if (v.designId === designId) return { where: "it is standing in the world" };
+    }
+    for (const p of this.players.values()) {
+      if (p.belt.some((t) => t.designId === designId)) return { where: "it is on a belt" };
+      if (p.carrying?.design.id === designId) {
+        return { where: "someone is carrying it" };
+      }
+    }
+    return null;
+  }
+
   /** Next thing on the belt, wrapping through bare hands. One control does
    *  the whole job, which is what lets a phone, a keyboard and a thumb on
    *  glass all offer it without inventing three different UIs. */

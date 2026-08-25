@@ -13,6 +13,7 @@ import { DesignStore, summarize, type Design } from "./designs";
 import type {
   BlueprintMsg,
   ClientToServer,
+  DesignDeleteMsg,
   DesignAddedMsg,
   DesignAddedSummaryMsg,
   DesignBodyMsg,
@@ -112,6 +113,17 @@ export class FabricatorServer extends Server<Env> {
         if (playerId) void this.draftDesign(msg as BlueprintMsg, playerId);
         break;
       }
+      case "design-delete": {
+        // From a phone this is a request; the screen is the only one who can
+        // see whether the design has been built, so it decides and sends its
+        // own. From a screen it is the decision.
+        if (!fromScreen) {
+          this.sendToScreens(message);
+          break;
+        }
+        void this.removeDesign((msg as unknown as DesignDeleteMsg).designId);
+        break;
+      }
       case "design-body": {
         // A screen finished chroma-keying: park it in R2 and tell everyone
         // the design now has art (they fetch it over HTTP).
@@ -150,6 +162,25 @@ export class FabricatorServer extends Server<Env> {
         this.sendToScreens(playerId ? JSON.stringify({ ...msg, from: playerId }) : message);
       }
     }
+  }
+
+  /** Delete a design and the art that belongs to it. The blobs are best
+   *  effort: an orphaned sprite in R2 costs a few kilobytes, while a failed
+   *  delete that aborted the whole thing would leave the design in the
+   *  library with no way to try again. */
+  private async removeDesign(designId: string): Promise<void> {
+    const gone = await this.designs.remove(designId);
+    if (!gone) return;
+    for (const key of [`body/${designId}.png`, `sketch/${designId}.png`]) {
+      try {
+        await this.env.SPRITES.delete(key);
+      } catch (err) {
+        console.warn(`could not delete ${key}:`, err);
+      }
+    }
+    this.broadcast(
+      JSON.stringify({ scope: "ui", type: "design-removed", designId }),
+    );
   }
 
   onClose(connection: Connection): void {

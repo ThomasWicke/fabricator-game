@@ -16,7 +16,7 @@
 
 import Phaser from "phaser";
 import QRCode from "qrcode";
-import { formatCost } from "../../../shared/fabricator/cost";
+import { canAfford, formatCost } from "../../../shared/fabricator/cost";
 import { resolveIdentity } from "../identity";
 import { RoomConnection } from "../socket";
 import { keepScreenAwake } from "../wake-lock";
@@ -124,6 +124,10 @@ export function startScreen(code: string) {
   let onRoster: () => void = () => {};
   let onConnStatus: () => void = () => {};
   let onSnapshot: () => void = () => {};
+  /** Set once the game view exists. The socket is listening long before that,
+   *  so both are no-ops until there is something to act on. */
+  let requestDiscardRef: (id: string) => void = () => {};
+  let renderFabListRef: () => void = () => {};
   /** Set by startGame; restores a saved world once both it and the scene
    *  are in hand. A no-op while the lobby is up. */
   let tryRestore: () => void = () => {};
@@ -570,11 +574,15 @@ export function startScreen(code: string) {
           `as often as you can afford it.</div>`;
         return;
       }
-      const s = lastStock ?? { wood: 0, stone: 0, bogiron: 0 };
+      const s =
+        lastStock ??
+        (Object.fromEntries(MATERIALS.map((m) => [m, 0])) as Record<MaterialType, number>);
       fabList.innerHTML = items
         .map((d) => {
           const c = d.spec.cost;
-          const afford = s.wood >= c.wood && s.stone >= c.stone && s.bogiron >= c.bogiron;
+          // canAfford, not three comparisons: the hand-written version silently
+          // stopped covering the bill the moment there were more materials.
+          const afford = canAfford(s, c);
           const art = designArtUrl(d);
           return `
             <div class="fab-row">
@@ -586,13 +594,42 @@ export function startScreen(code: string) {
                 } · ${formatCost(c)}</div>
                 <div class="f">${escapeHtml(d.spec.flavor)}</div>
               </div>
-              <button data-build="${d.id}" ${afford ? "" : "disabled"}>${
-                afford ? "BUILD" : "NEED MORE"
-              }</button>
+              <div class="row-actions">
+                <button data-build="${d.id}" ${afford ? "" : "disabled"}>${
+                  afford ? "BUILD" : "NEED MORE"
+                }</button>
+                <button class="discard" data-discard="${d.id}" title="Throw this design away">✕</button>
+              </div>
             </div>`;
         })
         .join("");
     }
+
+    /**
+     * Throw a design away — from this screen or on a phone's behalf.
+     *
+     * The check has to happen here because only the screen holds the world.
+     * A design that exists as a building is saved as an id and a position, so
+     * deleting it would not remove the building now; it would remove it the
+     * next time the save was loaded, which is a far worse way to find out.
+     */
+    const requestDiscard = (designId: string) => {
+      const d = designs.get(designId);
+      if (!d) return;
+      const inUse = scene?.usesDesign(designId);
+      if (inUse) {
+        toast(
+          `<span class="lead">${escapeHtml(d.spec.displayName)} is still in use</span> — ` +
+            `${inUse.where}. Get rid of that first.`,
+          true,
+        );
+        return;
+      }
+      conn.send({ scope: "ui", type: "design-delete", designId });
+    };
+
+    requestDiscardRef = requestDiscard;
+    renderFabListRef = renderFabList;
 
     const openFab = (slot: Slot) => {
       if (!scene?.isAtFabricator(slot)) {
@@ -604,7 +641,9 @@ export function startScreen(code: string) {
       fabPanel.classList.remove("hidden");
       fabPanel.classList.toggle("p2", slot === 2);
       fabStock.textContent = lastStock
-        ? `${Math.floor(lastStock.wood)} wood · ${Math.floor(lastStock.stone)} stone · ${Math.floor(lastStock.bogiron)} bogiron`
+        ? MATERIALS.filter((m) => m === "wood" || m === "stone" || lastStock![m] > 0)
+            .map((m) => `${Math.floor(lastStock![m])} ${m}`)
+            .join(" · ")
         : "";
       worldScene.setUiOpen(true);
       showPane("blueprint");
@@ -618,6 +657,11 @@ export function startScreen(code: string) {
     fabPanel.addEventListener("click", (e) => {
       const tab = (e.target as HTMLElement).closest<HTMLElement>("[data-tab]");
       if (tab) showPane(tab.dataset.tab!);
+      const discard = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-discard]");
+      if (discard) {
+        requestDiscard(discard.dataset.discard!);
+        return;
+      }
       const build = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-build]");
       if (build && !build.disabled) {
         const d = designs.get(build.dataset.build!);
@@ -1058,6 +1102,15 @@ export function startScreen(code: string) {
                 `<span class="cost">−${formatCost(d.spec.cost)}</span>`,
             );
           }
+        } else if (msg.type === "design-delete") {
+          // A phone asked. The screen is the one that can answer.
+          requestDiscardRef(String((msg as unknown as { designId: string }).designId));
+        } else if (msg.type === "design-removed") {
+          const id = String((msg as unknown as { designId: string }).designId);
+          const gone = designs.get(id);
+          designs.delete(id);
+          renderFabListRef();
+          if (gone) toast(`Discarded ${escapeHtml(gone.spec.displayName)}.`);
         } else if (msg.type === "tool-cycle") {
           scene?.cycleTool((msg as unknown as { slot: Slot }).slot);
         } else if (msg.type === "fabricate-error") {

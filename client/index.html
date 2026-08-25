@@ -2040,6 +2040,33 @@
       .fab-btn.hidden {
         display: none;
       }
+      /* Discard sits beside BUILD but must never be mistaken for it: no fill,
+         no border, and it only takes its warning colour under the pointer. */
+      .row-actions,
+      .drow-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.35em;
+      }
+      .discard,
+      .ddiscard {
+        background: none;
+        border: none;
+        color: var(--muted);
+        font-size: 0.95em;
+        line-height: 1;
+        padding: 0.45em 0.55em;
+        border-radius: 0.4em;
+        cursor: pointer;
+        transition: color 0.15s, background 0.15s;
+      }
+      .discard:hover,
+      .ddiscard:hover,
+      .discard:focus-visible,
+      .ddiscard:focus-visible {
+        color: #ffb4b4;
+        background: rgba(255, 120, 120, 0.14);
+      }
       .fabricating-note.hidden {
         display: none;
       }

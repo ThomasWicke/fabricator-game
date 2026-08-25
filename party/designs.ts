@@ -86,6 +86,7 @@ const MAX_DESIGNS = 500;
 type StorageLike = {
   put(entries: Record<string, unknown>): Promise<void>;
   list(options?: { prefix?: string }): Promise<Map<string, unknown>>;
+  delete(key: string): Promise<boolean>;
 };
 
 export class DesignStore {
@@ -132,6 +133,17 @@ export class DesignStore {
     await this.ready();
     this.designs.set(d.id, d);
     await this.persist(d);
+  }
+
+  /** Throw one out. Returns what was removed, so the caller can go and clean
+   *  up its art — the store knows nothing about R2. */
+  async remove(id: string): Promise<Design | null> {
+    await this.ready();
+    const d = this.designs.get(id);
+    if (!d) return null;
+    this.designs.delete(id);
+    await this.storage.delete(`d:${id}`);
+    return d;
   }
 
   /** Record that the screen-processed body sprite is now in R2. */

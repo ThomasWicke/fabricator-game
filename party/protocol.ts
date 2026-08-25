@@ -223,6 +223,16 @@ export type StockpileMsg = {
   stock: Partial<Record<MaterialType, number>>;
 };
 
+/** Throw a design away for good. Sent by a phone it is a request, which the
+ *  screen answers — only the screen knows whether the thing has been built,
+ *  and deleting a design that exists in the world would quietly delete the
+ *  buildings too, next time the save was loaded. Sent by a screen it is the
+ *  decision, and the server acts on it. */
+export type DesignDeleteMsg = { scope: "ui"; type: "design-delete"; designId: string };
+
+/** Server → everyone: it is gone. */
+export type DesignRemovedMsg = { scope: "ui"; type: "design-removed"; designId: string };
+
 /** Screens → phone: what is on this player's belt, and what is in hand. The
  *  phone owns no game state, so it cannot work either out for itself. */
 export type BeltMsg = {

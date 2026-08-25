@@ -401,9 +401,12 @@ export function startController(code: string) {
                 <div class="dmeta">${d.category}${built}</div>
                 <div class="dcost">${costMarkup(d.cost)}</div>
               </div>
-              <button data-build="${d.id}" ${
-                affordable && atFabricator ? "" : "disabled"
-              }>${label}</button>
+              <div class="drow-actions">
+                <button data-build="${d.id}" ${
+                  affordable && atFabricator ? "" : "disabled"
+                }>${label}</button>
+                <button class="ddiscard" data-discard="${d.id}" aria-label="Discard">✕</button>
+              </div>
             </div>`;
         })
         .join("");
@@ -428,6 +431,13 @@ export function startController(code: string) {
     };
 
     designsList.addEventListener("click", (e) => {
+      const drop = (e.target as HTMLElement).closest("[data-discard]") as HTMLElement | null;
+      if (drop) {
+        // A request, not an order: the screen holds the world and is the only
+        // one that can see whether this design is standing in it.
+        conn.send({ scope: "ui", type: "design-delete", designId: drop.dataset.discard! });
+        return;
+      }
       const btn = (e.target as HTMLElement).closest("[data-build]") as HTMLElement | null;
       if (!btn || (btn as HTMLButtonElement).disabled) return;
       conn.send({ scope: "ui", type: "manufacture", designId: btn.dataset.build! });
@@ -540,6 +550,9 @@ export function startController(code: string) {
         if (msg.type === "stockpile") {
           const s = (msg as unknown as StockpileMsg).stock;
           for (const m of MATERIALS) stock[m] = s[m] ?? 0;
+        } else if (msg.type === "design-removed") {
+          designs.delete(String((msg as unknown as { designId: string }).designId));
+          renderDesigns();
         } else if (msg.type === "belt") {
           const b = msg as unknown as BeltMsg;
           if (b.slot === slot) applyBelt(b);
