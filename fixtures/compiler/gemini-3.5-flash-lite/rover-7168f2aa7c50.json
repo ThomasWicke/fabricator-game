@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "name": "Rover",
+    "hasSketch": true,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:11:14.421Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Rover",
+    "size": {
+      "w": 70,
+      "h": 40
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 120,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 0.9,
+        "swamp": 0.1,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Four round things supporting a rectangular box, a timeless testament to human transit engineering.",
+    "storage": {
+      "capacity": 20
+    }
+  },
+  "usage": {
+    "inputTokens": 2409,
+    "outputTokens": 191
+  }
+}

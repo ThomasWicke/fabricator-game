@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "name": "Outpost",
+    "hasSketch": true,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:11:25.856Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Outpost Spire",
+    "size": {
+      "w": 40,
+      "h": 120
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 1
+      }
+    },
+    "seats": 0,
+    "flavor": "A beacon of civilization that keeps the dark at bay, provided you don't mind the hum.",
+    "emission": {
+      "kind": "light",
+      "intensity": 0.8
+    },
+    "storage": {
+      "capacity": 20
+    },
+    "ward": {
+      "radius": 150
+    }
+  },
+  "usage": {
+    "inputTokens": 2410,
+    "outputTokens": 229
+  }
+}

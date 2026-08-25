@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Greenhouse",
+    "intent": "Grows food under glass.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:11:05.372Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Greenhouse",
+    "size": {
+      "w": 120,
+      "h": 90
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "A transparent dome where alien plants reluctantly decide not to kill you.",
+    "nourish": {
+      "rate": 8
+    }
+  },
+  "usage": {
+    "inputTokens": 1328,
+    "outputTokens": 190
+  }
+}

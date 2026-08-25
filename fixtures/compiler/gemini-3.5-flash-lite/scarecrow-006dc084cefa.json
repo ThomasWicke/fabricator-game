@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Scarecrow",
+    "intent": "Keeps the creatures off the crops.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:11:07.435Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Scarecrow",
+    "size": {
+      "w": 40,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "It smells faintly of straw and existential dread.",
+    "ward": {
+      "radius": 120
+    }
+  },
+  "usage": {
+    "inputTokens": 1331,
+    "outputTokens": 173
+  }
+}

@@ -34,7 +34,6 @@ import {
   loadFixture,
   replayProvider,
   saveFixture,
-  type Fixture,
 } from "./lib/fixtures";
 import { sketchBase64, type SketchId } from "./lib/sketches";
 
@@ -425,8 +424,8 @@ async function main() {
         parentSpec: pair.parentSpec,
       }));
       try {
-        let spec: FabricatedSpec;
-        let attempts: number;
+        let spec: FabricatedSpec | undefined;
+        let attempts = 0;
         let ms = 0;
         if (useLive) {
           const rec = recording(PROVIDERS[config.provider]);
@@ -438,22 +437,6 @@ async function main() {
             attempts = outcome.attempts;
             totalIn += outcome.usage.inputTokens;
             totalOut += outcome.usage.outputTokens;
-            const fixture: Fixture = {
-              meta: {
-                name: pair.name,
-                intent: pair.intent,
-                hasSketch: !!pair.sketch,
-                model: config.model,
-                recordedAt: new Date().toISOString(),
-                attempts,
-              },
-              raw: rec.last()!.raw,
-              usage: rec.last()!.usage,
-            };
-            saveFixture(config, input, fixture);
-          } catch (err) {
-            // A failed live run is a recordable fact too: replay will
-            // reproduce the failure until a later live run heals it.
             saveFixture(config, input, {
               meta: {
                 name: pair.name,
@@ -461,15 +444,24 @@ async function main() {
                 hasSketch: !!pair.sketch,
                 model: config.model,
                 recordedAt: new Date().toISOString(),
-                attempts: 0,
+                attempts,
+                passedAtRecord: pair.check(spec) === null,
               },
-              error: (err as Error).message.slice(0, 300),
+              raw: rec.last()!.raw,
+              usage: rec.last()!.usage,
             });
+          } catch (err) {
+            // A failed live call leaves NO fixture, on purpose. Recording the
+            // failure sounded rigorous and served nobody: replay would report
+            // a network blip as OUR regression, and --missing would see a
+            // fixture and decline to retry the one pair that needs it.
             throw err;
           } finally {
             await sleep(1000); // paid tier: modest pacing, not free-tier crawling
           }
-        } else {
+        }
+        let knownBad = false;
+        if (!useLive) {
           const fixture = loadFixture(config, input);
           if (!fixture) {
             missing++;
@@ -480,9 +472,17 @@ async function main() {
           ms = Date.now() - t0;
           spec = outcome.spec;
           attempts = fixture.meta.attempts;
+          knownBad = fixture.meta.passedAtRecord === false;
         }
 
+        if (!spec) continue; // unreachable: both branches assign or bail
         const problem = pair.check(spec);
+        if (problem && knownBad) {
+          // The model already failed this at record time. Worth seeing in the
+          // table, not worth failing the build — nothing of ours regressed.
+          console.log(`~ ${display.padEnd(22)} known model limitation: ${problem}`);
+          continue;
+        }
         if (problem) failed++;
         else passed++;
         const t = spec.locomotion.terrainModifiers;

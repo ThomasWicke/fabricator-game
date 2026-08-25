@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Wooden Bench",
+    "intent": "Somewhere to sit.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:11:09.776Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Wooden Bench",
+    "size": {
+      "w": 48,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "For when standing up becomes too mainstream on alien terrain."
+  },
+  "usage": {
+    "inputTokens": 1326,
+    "outputTokens": 156
+  }
+}

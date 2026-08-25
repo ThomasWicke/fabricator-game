@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "name": "Mining Pick",
+    "intent": "For breaking ore out of stone.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:13:16.568Z",
+    "attempts": 1,
+    "passedAtRecord": false
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Mining Pick",
+    "size": {
+      "w": 36,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 1
+      }
+    },
+    "seats": 0,
+    "flavor": "A classic weight distribution designed specifically to ruin geological formations.",
+    "harvest": {
+      "rate": 1.2,
+      "materials": [
+        "stone",
+        "basalt"
+      ]
+    },
+    "weapon": {
+      "damage": 12,
+      "reach": 45,
+      "cooldown": 0.6
+    }
+  },
+  "usage": {
+    "inputTokens": 1329,
+    "outputTokens": 232
+  }
+}

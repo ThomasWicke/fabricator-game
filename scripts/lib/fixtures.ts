@@ -33,12 +33,17 @@ export type Fixture = {
     model: string;
     recordedAt: string;
     attempts: number;
+    /** Did the pair's check pass on the live answer? A fixture recorded as
+     *  failing is a KNOWN model limitation — replay reports it but does not
+     *  fail the build over it. Only a pass that turns into a failure is a
+     *  regression of ours. */
+    passedAtRecord?: boolean;
   };
-  /** The raw response that ended the run — parsed JSON on success. */
-  raw?: unknown;
-  usage?: { inputTokens: number; outputTokens: number };
-  /** Set instead of `raw` when the live run itself failed. */
-  error?: string;
+  /** The raw response that ended the run — parsed JSON. A failed live call
+   *  saves nothing: an error fixture would replay a network blip as a code
+   *  regression and stop --missing from retrying the pair. */
+  raw: unknown;
+  usage: { inputTokens: number; outputTokens: number };
 };
 
 /** Everything that shapes the request, hashed. `buildUserText` is included
@@ -93,11 +98,7 @@ export function replayProvider(fixture: Fixture) {
   return {
     id: "google" as const,
     async compileSpec(): Promise<ProviderResult> {
-      if (fixture.error) throw new Error(fixture.error);
-      return {
-        raw: fixture.raw,
-        usage: fixture.usage ?? { inputTokens: 0, outputTokens: 0 },
-      };
+      return { raw: fixture.raw, usage: fixture.usage };
     },
   };
 }

@@ -21,7 +21,7 @@ import { generateBodySprite } from "../shared/fabricator/image";
 import { clampSpec, computeCost } from "../shared/fabricator";
 import type { FabricatedSpec, RawSpec } from "../shared/fabricator";
 import { dist, keyImage, readKey } from "../client/src/screen/chroma-core";
-import { decodePng, encodePng, makeImage, blit, type Image } from "./lib/png";
+import { decodeImage, encodePng, makeImage, blit, type Image } from "./lib/png";
 
 // minimal .env loader, same as the compile eval
 try {
@@ -115,8 +115,10 @@ async function main() {
       const sprite = await generateBodySprite(s, {}, apiKey);
       const ms = Date.now() - t0;
       const b64 = sprite.dataUrl.split(",")[1];
-      const img = decodePng(Buffer.from(b64, "base64"));
-      writeFileSync(join(OUT_DIR, `${s.displayName.toLowerCase().replace(/\W+/g, "-")}.png`), Buffer.from(b64, "base64"));
+      const raw = Buffer.from(b64, "base64");
+      const img = decodeImage(raw);
+      const ext = sprite.mimeType.includes("jpeg") ? "jpg" : "png";
+      writeFileSync(join(OUT_DIR, `${s.displayName.toLowerCase().replace(/\W+/g, "-")}.${ext}`), raw);
 
       // Did the model obey the magenta instruction? Learn the background the
       // same way the keyer does, before keying mutates the pixels.

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "name": "Mud Raft",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:08:58.674Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Mud Raft",
+    "size": {
+      "w": 120,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "float",
+      "speed": 80,
+      "terrainModifiers": {
+        "grass": 0.2,
+        "sand": 0.2,
+        "swamp": 0.9,
+        "rock": 0.1,
+        "snow": 0.1,
+        "water": 0.85
+      }
+    },
+    "seats": 1,
+    "flavor": "Floats splendidly through the muck, and tolerably well upon the actual sea.",
+    "storage": {
+      "capacity": 20
+    }
+  },
+  "usage": {
+    "inputTokens": 1317,
+    "outputTokens": 196
+  }
+}

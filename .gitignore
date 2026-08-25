@@ -6,3 +6,7 @@ dist/
 .env.local
 .dev.vars
 .DS_Store
+# eval-art output: regenerable with an API key, ~400KB per image. The three
+# curated style refs are embedded in shared/fabricator/style-refs.ts; the
+# compiler fixtures ARE committed — they are the free regression suite.
+fixtures/art/

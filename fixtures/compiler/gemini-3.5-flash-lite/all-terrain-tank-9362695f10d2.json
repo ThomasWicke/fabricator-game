@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "All-Terrain Tank",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:09:23.142Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "All-Terrain Tank",
+    "size": {
+      "w": 140,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 160,
+      "terrainModifiers": {
+        "grass": 0.8,
+        "sand": 0.8,
+        "swamp": 0.5,
+        "rock": 0.8,
+        "snow": 0.8,
+        "water": 0
+      }
+    },
+    "seats": 2,
+    "flavor": "Heavy tracks solve everything except a deep lake.",
+    "weapon": {
+      "damage": 30,
+      "reach": 120,
+      "cooldown": 1.2
+    }
+  },
+  "usage": {
+    "inputTokens": 1318,
+    "outputTokens": 209
+  }
+}

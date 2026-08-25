@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "name": "Logging Truck",
+    "intent": "Drives around cutting down trees.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:05:24.071Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Logging Truck",
+    "size": {
+      "w": 110,
+      "h": 55
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 110,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 0.7,
+        "swamp": 0.15,
+        "rock": 0.4,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "A heavy six-wheeler equipped to chop, delimb, and haul forest canopy.",
+    "harvest": {
+      "rate": 2.2,
+      "materials": [
+        "wood"
+      ]
+    },
+    "storage": {
+      "capacity": 24
+    }
+  },
+  "usage": {
+    "inputTokens": 1329,
+    "outputTokens": 122
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "name": "Rover",
+    "hasSketch": true,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:07:34.631Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Legged Rover",
+    "size": {
+      "w": 88,
+      "h": 72
+    },
+    "locomotion": {
+      "type": "legs",
+      "speed": 110,
+      "terrainModifiers": {
+        "grass": 0.8,
+        "sand": 0.7,
+        "swamp": 0.65,
+        "rock": 0.75,
+        "snow": 0.6,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Creeps step-by-step over treacherous terrain where wheels throw dramatic fits.",
+    "storage": {
+      "capacity": 16
+    }
+  },
+  "usage": {
+    "inputTokens": 2409,
+    "outputTokens": 193
+  }
+}

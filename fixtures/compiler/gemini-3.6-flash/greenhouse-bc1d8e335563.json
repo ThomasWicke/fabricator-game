@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "name": "Greenhouse",
+    "intent": "Grows food under glass.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:06:39.408Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Greenhouse",
+    "size": {
+      "w": 88,
+      "h": 64
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "Traps sunlight and humidity to force crisp produce out of stubborn alien soil.",
+    "nourish": {
+      "rate": 8
+    },
+    "storage": {
+      "capacity": 12
+    },
+    "weapon": {
+      "damage": 0,
+      "reach": 0,
+      "cooldown": 0
+    }
+  },
+  "usage": {
+    "inputTokens": 1328,
+    "outputTokens": 115
+  }
+}

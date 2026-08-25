@@ -142,6 +142,12 @@ export const SPECIES: Record<SpeciesId, Species> = {
 };
 
 /** Every texture the enemies need, for preloading. */
+/** Player art. Lives here for the same reason WALK_SPEED does: the asset
+ *  audit has to enumerate every texture the game loads, and world.ts cannot
+ *  be imported outside a browser. */
+export const ALIEN_SKINS = { 1: "alienPink", 2: "alienYellow" } as const;
+export const ALIEN_FRAMES = ["stand", "walk1", "walk2", "climb1", "climb2"] as const;
+
 export const ENEMY_KEYS = [
   ...new Set(
     Object.values(SPECIES).flatMap((s) => [s.idle, ...s.walk, s.hit, s.dead]),

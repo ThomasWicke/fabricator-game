@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Dune Buggy Mk II",
+    "intent": "The same buggy, just faster.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:07:45.321Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Dune Buggy Mk II",
+    "size": {
+      "w": 80,
+      "h": 45
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 280,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 1,
+        "swamp": 0.1,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Kicks up sand twice as fast and still does not apologise."
+  },
+  "usage": {
+    "inputTokens": 1474,
+    "outputTokens": 98
+  }
+}

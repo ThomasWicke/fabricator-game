@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "name": "Vessel",
+    "hasSketch": true,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:07:40.257Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Vessel",
+    "size": {
+      "w": 110,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "float",
+      "speed": 140,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0.1,
+        "swamp": 0.7,
+        "rock": 0,
+        "snow": 0,
+        "water": 0.95
+      }
+    },
+    "seats": 2,
+    "flavor": "Harnesses atmospheric currents to make open water slightly less terrifying.",
+    "storage": {
+      "capacity": 16
+    }
+  },
+  "usage": {
+    "inputTokens": 2410,
+    "outputTokens": 100
+  }
+}

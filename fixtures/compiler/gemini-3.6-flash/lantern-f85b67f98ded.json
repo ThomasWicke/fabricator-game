@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Lantern",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:11:55.929Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Lantern",
+    "size": {
+      "w": 32,
+      "h": 32
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 1
+      }
+    },
+    "seats": 0,
+    "flavor": "A modest, portable beacon against the creeping alien dark.",
+    "emission": {
+      "kind": "light",
+      "intensity": 0.8
+    }
+  },
+  "usage": {
+    "inputTokens": 1315,
+    "outputTokens": 92
+  }
+}

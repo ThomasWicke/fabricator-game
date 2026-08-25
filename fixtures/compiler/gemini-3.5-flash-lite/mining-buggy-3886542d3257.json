@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Mining Buggy",
+    "intent": "Bolt a stone drill onto the buggy.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:11:23.490Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Mining Buggy",
+    "size": {
+      "w": 85,
+      "h": 45
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 200,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 1,
+        "swamp": 0.1,
+        "rock": 0.4,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Bolting a heavy drill to a light frame was either brave or foolish.",
+    "harvest": {
+      "rate": 1.2,
+      "materials": [
+        "stone",
+        "basalt"
+      ]
+    }
+  },
+  "usage": {
+    "inputTokens": 1472,
+    "outputTokens": 211
+  }
+}

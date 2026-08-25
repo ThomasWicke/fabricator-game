@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "name": "Iron Spear",
+    "intent": "For fighting off animals.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:06:06.775Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Iron Spear",
+    "size": {
+      "w": 48,
+      "h": 24
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "Simple, pointy, and remarkably effective at maintaining personal boundaries.",
+    "weapon": {
+      "damage": 18,
+      "reach": 110,
+      "cooldown": 0.75
+    }
+  },
+  "usage": {
+    "inputTokens": 1327,
+    "outputTokens": 103
+  }
+}

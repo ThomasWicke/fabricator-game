@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "name": "Heavy Maul",
+    "intent": "A huge two-handed hammer. Slow, and it hits like a falling tree.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:06:17.612Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Heavy Maul",
+    "size": {
+      "w": 42,
+      "h": 24
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 1
+      }
+    },
+    "seats": 0,
+    "flavor": "Subtlety is entirely absent from its design philosophy, replaced by sheer kinetic momentum.",
+    "weapon": {
+      "damage": 38,
+      "reach": 55,
+      "cooldown": 1.75
+    }
+  },
+  "usage": {
+    "inputTokens": 1339,
+    "outputTokens": 108
+  }
+}

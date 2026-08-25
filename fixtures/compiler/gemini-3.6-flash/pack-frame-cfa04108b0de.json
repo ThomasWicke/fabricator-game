@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Pack Frame",
+    "intent": "A harness that lets you carry far more than your arms can.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:06:31.654Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Pack Frame",
+    "size": {
+      "w": 32,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 1
+      }
+    },
+    "seats": 0,
+    "flavor": "Transfers the crushing weight of alien samples directly to your spinal column.",
+    "storage": {
+      "capacity": 24
+    }
+  },
+  "usage": {
+    "inputTokens": 1335,
+    "outputTokens": 91
+  }
+}

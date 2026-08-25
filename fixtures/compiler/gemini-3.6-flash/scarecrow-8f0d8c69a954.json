@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Scarecrow",
+    "intent": "Keeps the creatures off the crops.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:06:45.701Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Scarecrow",
+    "size": {
+      "w": 36,
+      "h": 60
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "A sinister bundle of straw and tattered fabric that makes local fauna reconsider approaching your plot.",
+    "ward": {
+      "radius": 160
+    }
+  },
+  "usage": {
+    "inputTokens": 1331,
+    "outputTokens": 97
+  }
+}

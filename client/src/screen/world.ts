@@ -57,7 +57,7 @@ import {
   makeShadowTexture,
   mulberry32,
 } from "./textures";
-import {
+import { ALIEN_FRAMES, ALIEN_SKINS,
   AGGRO_NIGHT_BONUS,
   AGGRO_RANGE,
   ENEMY_KEYS,
@@ -266,8 +266,7 @@ const POINTER_RANGE = 1300;
 /** Margin from the viewport edge the arrow rides at, in screen pixels. */
 const POINTER_INSET = 52;
 
-const ALIEN_SKINS = { 1: "alienPink", 2: "alienYellow" } as const;
-const ALIEN_FRAMES = ["stand", "walk1", "walk2", "climb1", "climb2"];
+
 
 export type PlayerInput = { stick: StickState; buttons: ButtonState };
 export type Stockpile = Record<MaterialType, number>;

@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "name": "Logging Truck",
+    "intent": "Drives around cutting down trees.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:12:15.039Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Logging Truck",
+    "size": {
+      "w": 140,
+      "h": 75
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 160,
+      "terrainModifiers": {
+        "grass": 0.7,
+        "sand": 0.7,
+        "swamp": 0.5,
+        "rock": 0.7,
+        "snow": 0.7,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "It sings the chainsaw song of progress to every forest it meets.",
+    "harvest": {
+      "rate": 2.5,
+      "materials": [
+        "wood"
+      ]
+    },
+    "storage": {
+      "capacity": 30
+    },
+    "weapon": {
+      "damage": 15,
+      "reach": 60,
+      "cooldown": 1
+    }
+  },
+  "usage": {
+    "inputTokens": 1329,
+    "outputTokens": 260
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "name": "Glass Kiln",
+    "intent": "Bakes stone into desert glass so nobody has to walk there.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:12:03.844Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Glass Kiln",
+    "size": {
+      "w": 68,
+      "h": 60
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "Extremely high heat turns plain crushed stone into smooth sheets, saving you a perilous trek to the scorching dunes.",
+    "emission": {
+      "kind": "smoke",
+      "intensity": 0.6
+    },
+    "production": {
+      "from": "stone",
+      "to": "glass",
+      "rate": 1.2
+    }
+  },
+  "usage": {
+    "inputTokens": 1336,
+    "outputTokens": 121
+  }
+}

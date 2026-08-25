@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Mining Drill",
+    "intent": "A handheld drill for extracting ore from rock.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:12:12.693Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Mining Drill",
+    "size": {
+      "w": 36,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 1
+      }
+    },
+    "seats": 0,
+    "flavor": "It vibrates aggressively enough to loosen your fillings, but the basalt yields.",
+    "harvest": {
+      "rate": 1.5,
+      "materials": [
+        "stone",
+        "basalt"
+      ]
+    }
+  },
+  "usage": {
+    "inputTokens": 1331,
+    "outputTokens": 210
+  }
+}

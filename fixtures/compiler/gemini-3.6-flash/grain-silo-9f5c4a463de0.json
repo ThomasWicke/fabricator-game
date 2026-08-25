@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "name": "Grain Silo",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:06:26.866Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Grain Silo",
+    "size": {
+      "w": 56,
+      "h": 96
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "Keeps the harvest dry and the local fauna perpetually frustrated.",
+    "storage": {
+      "capacity": 36
+    }
+  },
+  "usage": {
+    "inputTokens": 1317,
+    "outputTokens": 175
+  }
+}

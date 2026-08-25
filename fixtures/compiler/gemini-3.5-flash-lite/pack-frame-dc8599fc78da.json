@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Pack Frame",
+    "intent": "A harness that lets you carry far more than your arms can.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:11:03.182Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Pack Frame",
+    "size": {
+      "w": 36,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 1
+      }
+    },
+    "seats": 0,
+    "flavor": "Straps and canvas designed to make your spine regret your ambition.",
+    "storage": {
+      "capacity": 30
+    }
+  },
+  "usage": {
+    "inputTokens": 1335,
+    "outputTokens": 187
+  }
+}

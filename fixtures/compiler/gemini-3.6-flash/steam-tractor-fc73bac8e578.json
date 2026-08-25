@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "name": "Steam Tractor",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:06:02.065Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Steam Tractor",
+    "size": {
+      "w": 110,
+      "h": 65
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 90,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.8,
+        "swamp": 0.4,
+        "rock": 0.6,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Heavy, noisy, and remarkably effective at turning untouched landscape into raw timber and stone.",
+    "emission": {
+      "kind": "steam",
+      "intensity": 0.7
+    },
+    "harvest": {
+      "rate": 1.8,
+      "materials": [
+        "wood",
+        "stone"
+      ]
+    },
+    "storage": {
+      "capacity": 24
+    }
+  },
+  "usage": {
+    "inputTokens": 1316,
+    "outputTokens": 133
+  }
+}

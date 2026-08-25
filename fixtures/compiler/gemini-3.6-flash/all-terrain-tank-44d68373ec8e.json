@@ -3,8 +3,42 @@
     "name": "All-Terrain Tank",
     "hasSketch": false,
     "model": "gemini-3.6-flash",
-    "recordedAt": "2026-08-25T17:04:57.405Z",
-    "attempts": 0
+    "recordedAt": "2026-08-25T17:11:48.549Z",
+    "attempts": 1
   },
-  "error": "The operation was aborted due to timeout"
+  "raw": {
+    "category": "vehicle",
+    "displayName": "All-Terrain Tank",
+    "size": {
+      "w": 120,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 180,
+      "terrainModifiers": {
+        "grass": 0.85,
+        "sand": 0.8,
+        "swamp": 0.5,
+        "rock": 0.75,
+        "snow": 0.7,
+        "water": 0
+      }
+    },
+    "seats": 2,
+    "flavor": "Heavy treads and thick plating ensure you dominate the land, right until you drive off a pier.",
+    "emission": {
+      "kind": "smoke",
+      "intensity": 0.6
+    },
+    "weapon": {
+      "damage": 35,
+      "reach": 140,
+      "cooldown": 1.8
+    }
+  },
+  "usage": {
+    "inputTokens": 1318,
+    "outputTokens": 138
+  }
 }

@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Cargo Hauler",
+    "intent": "Slow but big, for moving resources.",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:09:03.306Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Cargo Hauler",
+    "size": {
+      "w": 140,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 60,
+      "terrainModifiers": {
+        "grass": 0.7,
+        "sand": 0.7,
+        "swamp": 0.5,
+        "rock": 0.7,
+        "snow": 0.7,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Moves at the speed of bureaucracy, but brings the whole warehouse with it.",
+    "storage": {
+      "capacity": 40
+    }
+  },
+  "usage": {
+    "inputTokens": 1331,
+    "outputTokens": 192
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "name": "Watchtower",
+    "hasSketch": false,
+    "model": "gemini-3.5-flash-lite",
+    "recordedAt": "2026-08-25T17:09:20.832Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Watchtower",
+    "size": {
+      "w": 60,
+      "h": 120
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "A tall place to stand and look at things while being rained on.",
+    "ward": {
+      "radius": 150
+    }
+  },
+  "usage": {
+    "inputTokens": 1316,
+    "outputTokens": 178
+  }
+}

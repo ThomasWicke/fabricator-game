@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Mining Pick",
+    "intent": "For breaking ore out of stone.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:07:06.507Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Mining Pick",
+    "size": {
+      "w": 34,
+      "h": 26
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "Simple leverage and hardened alloy turn stubborn geological deposits into usable rubble.",
+    "harvest": {
+      "rate": 1.8,
+      "materials": [
+        "stone",
+        "basalt"
+      ]
+    }
+  },
+  "usage": {
+    "inputTokens": 1329,
+    "outputTokens": 99
+  }
+}

@@ -8,6 +8,7 @@
 // no interlacing.
 
 import { deflateSync, inflateSync } from "node:zlib";
+import { decode as decodeJpegRaw } from "jpeg-js";
 
 export type Image = {
   width: number;
@@ -107,6 +108,20 @@ export function decodePng(buf: Buffer): Image {
     }
   }
   return { width, height, data };
+}
+
+/**
+ * Decode whatever the image model actually sent. The prompt says PNG; the
+ * model sends JPEG (measured 2026-08-25: ff d8 ff e0 …JFIF). The browser
+ * never noticed because <img> decodes anything — Node has to check the
+ * magic bytes and pick.
+ */
+export function decodeImage(buf: Buffer): Image {
+  if (buf.length > 2 && buf[0] === 0xff && buf[1] === 0xd8) {
+    const { width, height, data } = decodeJpegRaw(buf, { useTArray: true, formatAsRGBA: true });
+    return { width, height, data: new Uint8ClampedArray(data.buffer, data.byteOffset, data.length) };
+  }
+  return decodePng(buf);
 }
 
 export function encodePng(img: Image): Buffer {

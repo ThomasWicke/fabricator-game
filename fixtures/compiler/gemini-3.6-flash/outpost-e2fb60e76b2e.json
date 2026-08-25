@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "name": "Outpost",
+    "hasSketch": true,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:08:07.901Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Outpost",
+    "size": {
+      "w": 48,
+      "h": 120
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "A solitary marker tower providing light, emergency supply storage, and a protective perimeter field.",
+    "emission": {
+      "kind": "light",
+      "intensity": 0.75
+    },
+    "storage": {
+      "capacity": 20
+    },
+    "ward": {
+      "radius": 180
+    }
+  },
+  "usage": {
+    "inputTokens": 2410,
+    "outputTokens": 225
+  }
+}

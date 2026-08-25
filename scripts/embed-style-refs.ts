@@ -13,7 +13,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { decodePng, encodePng, makeImage } from "./lib/png";
+import { decodeImage, encodePng, makeImage } from "./lib/png";
 import { keyImage } from "../client/src/screen/chroma-core";
 
 const CATEGORIES = ["vehicle", "structure", "tool"] as const;
@@ -42,7 +42,7 @@ const refs: Record<string, { source: string; base64: string }> = {};
 const paletteCounts = new Map<string, number>();
 
 for (const [cat, file] of chosen) {
-  const img = decodePng(readFileSync(file));
+  const img = decodeImage(readFileSync(file));
 
   // Key the background out so the embedded ref carries the subject alone —
   // a magenta field in the reference would teach the model that magenta
