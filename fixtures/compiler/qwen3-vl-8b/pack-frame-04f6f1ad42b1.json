@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Pack Frame",
+    "intent": "A harness that lets you carry far more than your arms can.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:05:39.077Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Pack Frame",
+    "size": {
+      "w": 36,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 0,
+        "rock": 1,
+        "snow": 1,
+        "water": 0
+      }
+    },
+    "storage": {
+      "capacity": 8
+    },
+    "seats": 0,
+    "flavor": "You've got a sturdy frame to carry your gear, but it's not magic — you still need to strap it on and haul it yourself."
+  },
+  "usage": {
+    "inputTokens": 1349,
+    "outputTokens": 153
+  }
+}

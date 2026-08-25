@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "name": "Swamp Buggy",
+    "intent": "A vehicle for crossing swamps.",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:00:14.773Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Swamp Buggy",
+    "size": {
+      "w": 100,
+      "h": 50
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 120,
+      "terrainModifiers": {
+        "grass": 0.7,
+        "sand": 0.7,
+        "swamp": 0.5,
+        "rock": 0.7,
+        "snow": 0.5,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Ah, the swamps. Always fun to get your tracks clogged up with mud. You're welcome."
+  },
+  "usage": {
+    "inputTokens": 1345,
+    "outputTokens": 142
+  }
+}

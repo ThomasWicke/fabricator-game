@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Vessel",
+    "hasSketch": true,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:06:56.526Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Vessel",
+    "size": {
+      "w": 120,
+      "h": 60
+    },
+    "locomotion": {
+      "type": "float",
+      "speed": 120,
+      "terrainModifiers": {
+        "grass": 0.2,
+        "sand": 0.2,
+        "swamp": 0.7,
+        "rock": 0.2,
+        "snow": 0.3,
+        "water": 0.95
+      }
+    },
+    "emission": {
+      "kind": "sparks",
+      "intensity": 0.1
+    },
+    "seats": 1,
+    "flavor": "A humble sailboat, its canvas frayed from the wind and sea. It's not seaworthy for storms, but it'll get you across the water where the sand won't."
+  },
+  "usage": {
+    "inputTokens": 2361,
+    "outputTokens": 168
+  }
+}

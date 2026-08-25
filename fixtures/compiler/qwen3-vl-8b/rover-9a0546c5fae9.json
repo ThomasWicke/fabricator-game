@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "name": "Rover",
+    "hasSketch": true,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:06:28.858Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Rover",
+    "size": {
+      "w": 70,
+      "h": 40
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 320,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.9,
+        "swamp": 0.05,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 0.5,
+      "materials": [
+        "wood"
+      ]
+    },
+    "storage": {
+      "capacity": 16
+    },
+    "seats": 1,
+    "flavor": "A sturdy utility cart, but the wheels are stuck in the bog—perfect for hauling wood on dry ground."
+  },
+  "usage": {
+    "inputTokens": 2361,
+    "outputTokens": 153
+  }
+}

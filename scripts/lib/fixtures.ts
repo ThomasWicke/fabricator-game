@@ -62,8 +62,13 @@ export function fixtureKey(config: CompilerConfig, input: CompileInput): string 
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 32);
 
+/** Model ID → directory name. Only `:` and `/` are replaced (Ollama tags
+ *  like `qwen3-vl:8b`) so every existing cloud-model directory keeps its
+ *  name and its committed fixtures. */
+export const modelDir = (model: string) => model.replace(/[:/]/g, "-");
+
 function fixturePath(config: CompilerConfig, input: CompileInput): string {
-  const dir = join(ROOT, config.model);
+  const dir = join(ROOT, modelDir(config.model));
   return join(dir, `${slug(input.name)}-${fixtureKey(config, input)}.json`);
 }
 
@@ -78,7 +83,7 @@ export function saveFixture(
   input: CompileInput,
   fixture: Fixture,
 ): void {
-  const dir = join(ROOT, config.model);
+  const dir = join(ROOT, modelDir(config.model));
   mkdirSync(dir, { recursive: true });
   writeFileSync(fixturePath(config, input), JSON.stringify(fixture, null, 2) + "\n");
 }
@@ -86,7 +91,7 @@ export function saveFixture(
 /** Fixture files present for a model — stale ones (whose key no longer
  *  matches any pair) show up here and nowhere else. */
 export function listFixtures(model: string): string[] {
-  const dir = join(ROOT, model);
+  const dir = join(ROOT, modelDir(model));
   if (!existsSync(dir)) return [];
   return readdirSync(dir).filter((f) => f.endsWith(".json"));
 }

@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Steam Tractor",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:01:24.386Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Steam Tractor",
+    "size": {
+      "w": 120,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 160,
+      "terrainModifiers": {
+        "grass": 0.85,
+        "sand": 0.75,
+        "swamp": 0.55,
+        "rock": 0.7,
+        "snow": 0.55,
+        "water": 0
+      }
+    },
+    "emission": {
+      "kind": "steam",
+      "intensity": 0.6
+    },
+    "seats": 1,
+    "flavor": "A rugged little beast for tugging heavy loads through the mire - 'tractor' is a bit of a stretch, but it's the best word we've got."
+  },
+  "usage": {
+    "inputTokens": 1332,
+    "outputTokens": 166
+  }
+}

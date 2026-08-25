@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "name": "Heavy Maul",
+    "intent": "A huge two-handed hammer. Slow, and it hits like a falling tree.",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:01:36.116Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Heavy Maul",
+    "size": {
+      "w": 60,
+      "h": 50
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0.0001875,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 0.9,
+        "rock": 0.8,
+        "snow": 0.5,
+        "water": 0
+      }
+    },
+    "weapon": {
+      "damage": 38,
+      "reach": 90,
+      "cooldown": 1.1
+    },
+    "seats": 0,
+    "flavor": "It's a hammer. You swing it. It's heavy. It's a hammer."
+  },
+  "usage": {
+    "inputTokens": 1352,
+    "outputTokens": 151
+  }
+}

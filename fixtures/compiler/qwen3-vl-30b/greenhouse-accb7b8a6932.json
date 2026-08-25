@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Greenhouse",
+    "intent": "Grows food under glass.",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:01:51.503Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Greenhouse",
+    "size": {
+      "w": 100,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 0
+      }
+    },
+    "nourish": {
+      "rate": 6
+    },
+    "seats": 0,
+    "flavor": "A cozy little bubble of hope where the alien soil finally yields."
+  },
+  "usage": {
+    "inputTokens": 1342,
+    "outputTokens": 137
+  }
+}

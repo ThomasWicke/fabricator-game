@@ -12,12 +12,17 @@
 // model. Runs only with a GOOGLE_API_KEY.
 //
 // Run: npx tsx scripts/eval-art.ts
+//      npx tsx scripts/eval-art.ts --local     ← ComfyUI on the Mac mini
+//        (free; needs LOCAL_IMAGE_URL; add --no-rembg to test the
+//         prompt-only magenta fallback; output goes to fixtures/art-local/
+//         so local sheets never overwrite the Gemini curation set)
 
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { generateBodySprite } from "../shared/fabricator/image";
+import { generateBodySpriteLocal } from "../shared/fabricator/image-local";
 import { clampSpec, computeCost } from "../shared/fabricator";
 import type { FabricatedSpec, RawSpec } from "../shared/fabricator";
 import { dist, keyImage, readKey } from "../client/src/screen/chroma-core";
@@ -33,7 +38,10 @@ try {
   // no .env — rely on the environment
 }
 
-const OUT_DIR = fileURLToPath(new URL("../fixtures/art/", import.meta.url));
+const LOCAL = process.argv.includes("--local");
+const OUT_DIR = fileURLToPath(
+  new URL(LOCAL ? "../fixtures/art-local/" : "../fixtures/art/", import.meta.url),
+);
 
 const spec = (over: Partial<RawSpec>): FabricatedSpec => {
   const clamped = clampSpec({
@@ -91,10 +99,24 @@ function fit(img: Image, max: number): Image {
 
 async function main() {
   const apiKey = process.env.GOOGLE_API_KEY;
-  if (!apiKey) {
+  const localUrl = process.env.LOCAL_IMAGE_URL;
+  if (LOCAL && !localUrl) {
+    console.error("eval-art --local needs LOCAL_IMAGE_URL (the ComfyUI server).");
+    process.exit(1);
+  }
+  if (!LOCAL && !apiKey) {
     console.error("eval-art needs GOOGLE_API_KEY — it generates real images.");
     process.exit(1);
   }
+  const generate = LOCAL
+    ? (s: FabricatedSpec) =>
+        generateBodySpriteLocal(
+          s,
+          {},
+          { baseUrl: localUrl!, token: process.env.LOCAL_AI_TOKEN ?? "" },
+          { rembg: !process.argv.includes("--no-rembg") },
+        )
+    : (s: FabricatedSpec) => generateBodySprite(s, {}, apiKey!);
   mkdirSync(OUT_DIR, { recursive: true });
 
   type Row = {
@@ -112,7 +134,7 @@ async function main() {
   for (const s of SUBJECTS) {
     const t0 = Date.now();
     try {
-      const sprite = await generateBodySprite(s, {}, apiKey);
+      const sprite = await generate(s);
       const ms = Date.now() - t0;
       const b64 = sprite.dataUrl.split(",")[1];
       const raw = Buffer.from(b64, "base64");

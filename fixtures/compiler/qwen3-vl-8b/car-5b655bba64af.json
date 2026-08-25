@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Car",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:03:30.099Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Car",
+    "size": {
+      "w": 96,
+      "h": 56
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 220,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 0.85,
+        "swamp": 0.15,
+        "rock": 0.4,
+        "snow": 0.3,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "A sleek, low-slung machine that hums with potential on the plains. The chassis is strong enough for the desert, but its wheels are too small for the bog."
+  },
+  "usage": {
+    "inputTokens": 1330,
+    "outputTokens": 155
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "All-Terrain Tank",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:00:56.891Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "All-Terrain Tank",
+    "size": {
+      "w": 120,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 220,
+      "terrainModifiers": {
+        "grass": 0.8,
+        "sand": 0.75,
+        "swamp": 0.55,
+        "rock": 0.75,
+        "snow": 0.55,
+        "water": 0
+      }
+    },
+    "seats": 2,
+    "flavor": "You're going to want those tracks for the bog. Also, the tank's 'all-terrain' doesn't include water — sorry."
+  },
+  "usage": {
+    "inputTokens": 1334,
+    "outputTokens": 155
+  }
+}

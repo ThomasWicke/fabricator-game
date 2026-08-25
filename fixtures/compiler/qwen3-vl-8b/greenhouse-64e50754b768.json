@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "name": "Greenhouse",
+    "intent": "Grows food under glass.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:05:46.365Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Greenhouse",
+    "size": {
+      "w": 100,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 0.35,
+        "swamp": 0.9,
+        "rock": 0.3,
+        "snow": 0.3,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 0.5,
+      "materials": [
+        "wood"
+      ]
+    },
+    "nourish": {
+      "rate": 12
+    },
+    "seats": 0,
+    "flavor": "A bubble of warmth, shielding tender shoots from the alien wind. The glass walls are thin enough to let in light but thick enough to stay warm."
+  },
+  "usage": {
+    "inputTokens": 1342,
+    "outputTokens": 165
+  }
+}

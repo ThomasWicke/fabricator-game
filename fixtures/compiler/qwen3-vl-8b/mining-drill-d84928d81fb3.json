@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Mining Drill",
+    "intent": "A handheld drill for extracting ore from rock.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:04:47.664Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Mining Drill",
+    "size": {
+      "w": 36,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.9,
+        "swamp": 0.05,
+        "rock": 0.95,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 1.5,
+      "materials": [
+        "stone"
+      ]
+    },
+    "seats": 0,
+    "flavor": "A sturdy hand-cranked drill for chipping away at rock. The drill head is sharp enough to carve stone, but requires significant effort to operate."
+  },
+  "usage": {
+    "inputTokens": 1345,
+    "outputTokens": 159
+  }
+}

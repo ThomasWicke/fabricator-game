@@ -12,6 +12,7 @@ import {
 import { computeCost } from "./cost";
 import { googleProvider } from "./providers/google";
 import { anthropicProvider } from "./providers/anthropic";
+import { ollamaProvider } from "./providers/ollama";
 import type {
   CompileInput,
   CompilerConfig,
@@ -22,6 +23,7 @@ import type {
 const PROVIDERS: Record<CompilerConfig["provider"], FabricatorProvider> = {
   google: googleProvider,
   anthropic: anthropicProvider,
+  ollama: ollamaProvider,
 };
 
 export type CompileOutcome = {
@@ -30,9 +32,11 @@ export type CompileOutcome = {
   attempts: number;
 };
 
-/** Per-attempt ceiling. The whole pipeline sits behind a ~90s client-side
- *  patience budget, and two 30s attempts plus image generation fit inside it;
- *  an unbounded fetch that never returns does not. */
+/** Per-attempt ceiling (cloud default; a config may override via timeoutMs —
+ *  local inference needs 60s to survive a cold model load). The whole
+ *  pipeline sits behind a ~90s client-side patience budget, and two 30s
+ *  attempts plus image generation fit inside it; an unbounded fetch that
+ *  never returns does not. */
 const ATTEMPT_TIMEOUT_MS = 30_000;
 /** Provider calls across all failure kinds. Bounded, because a retry loop
  *  that mixes two failure budgets can otherwise multiply them. */
@@ -73,9 +77,9 @@ export async function compileSpecWith(
     try {
       result = await provider.compileSpec(
         { ...input, feedback },
-        config.model,
+        config,
         apiKey,
-        AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
+        AbortSignal.timeout(config.timeoutMs ?? ATTEMPT_TIMEOUT_MS),
       );
     } catch (err) {
       // Thrown errors used to escape on attempt 1 with no retry at all —

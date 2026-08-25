@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Scarecrow",
+    "intent": "Keeps the creatures off the crops.",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:01:56.863Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Scarecrow",
+    "size": {
+      "w": 40,
+      "h": 36
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.5,
+        "sand": 0.5,
+        "swamp": 0.5,
+        "rock": 0.5,
+        "snow": 0.5,
+        "water": 0
+      }
+    },
+    "ward": {
+      "radius": 140
+    },
+    "seats": 0,
+    "flavor": "A scarecrow with a hat and a broom. It's not very scary to the creatures, but it's cheap enough that you can just put more on the field."
+  },
+  "usage": {
+    "inputTokens": 1345,
+    "outputTokens": 155
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Mud Raft",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:00:30.947Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Mud Raft",
+    "size": {
+      "w": 110,
+      "h": 40
+    },
+    "locomotion": {
+      "type": "float",
+      "speed": 220,
+      "terrainModifiers": {
+        "grass": 0.25,
+        "sand": 0.3,
+        "swamp": 0.7,
+        "rock": 0.2,
+        "snow": 0.3,
+        "water": 0.85
+      }
+    },
+    "seats": 0,
+    "flavor": "Not a raft you'd want to sail in a storm, but it'll float on the bog's mud just fine."
+  },
+  "usage": {
+    "inputTokens": 1333,
+    "outputTokens": 148
+  }
+}

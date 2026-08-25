@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "All-Terrain Tank",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:04:33.953Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "All-Terrain Tank",
+    "size": {
+      "w": 140,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 320,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.8,
+        "swamp": 0.5,
+        "rock": 0.6,
+        "snow": 0.7,
+        "water": 0
+      }
+    },
+    "seats": 2,
+    "flavor": "The 'All-Terrain' is a marketing term. This tank is stubbornly slow on sand and snow but unstoppable on rock and swamp. It's designed to crush rather than cross. You'll want to keep it in the garage when not fighting."
+  },
+  "usage": {
+    "inputTokens": 1334,
+    "outputTokens": 172
+  }
+}

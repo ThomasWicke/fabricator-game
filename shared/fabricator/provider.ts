@@ -3,12 +3,18 @@
 // today, browser localStorage in the future BYOK milestone). No process.env,
 // no PartyKit imports.
 
-export type ProviderId = "google" | "anthropic";
+export type ProviderId = "google" | "anthropic" | "ollama";
 
 export type CompilerConfig = {
   provider: ProviderId;
   /** Model ID — config string only, never inline in provider code. */
   model: string;
+  /** Server origin for self-hosted providers (Ollama). Cloud providers have
+   *  their endpoint baked into the provider module and leave this unset. */
+  baseUrl?: string;
+  /** Per-attempt timeout override. Local inference needs more than the 30s
+   *  cloud default: a cold model load alone can eat that. */
+  timeoutMs?: number;
 };
 
 /**
@@ -37,6 +43,18 @@ export const ANTHROPIC_COMPILER_CONFIG: CompilerConfig = {
   model: "claude-sonnet-5",
 };
 
+/**
+ * Self-hosted compiler on the Mac mini (Ollama). Vision + native structured
+ * outputs, $0 per call. `baseUrl` is injected at resolve time from env
+ * (LOCAL_AI_URL) — this constant carries only what is config, not deployment.
+ * 60s timeout: one cold model load must not burn all three MAX_CALLS.
+ */
+export const OLLAMA_COMPILER_CONFIG: CompilerConfig = {
+  provider: "ollama",
+  model: "qwen3-vl:8b",
+  timeoutMs: 60_000,
+};
+
 export type CompileInput = {
   name: string;
   intent?: string;
@@ -62,7 +80,8 @@ export interface FabricatorProvider {
   id: ProviderId;
   compileSpec(
     input: CompileInput,
-    model: string,
+    /** Full config, not just the model — self-hosted providers need baseUrl. */
+    config: CompilerConfig,
     apiKey: string,
     /** Per-attempt timeout, owned by the orchestrator. */
     signal?: AbortSignal,

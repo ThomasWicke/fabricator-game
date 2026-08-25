@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Watchtower",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:04:26.436Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Watchtower",
+    "size": {
+      "w": 120,
+      "h": 120
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.8,
+        "sand": 0.6,
+        "swamp": 0.5,
+        "rock": 0.7,
+        "snow": 0.3,
+        "water": 0
+      }
+    },
+    "emission": {
+      "kind": "light",
+      "intensity": 0.7
+    },
+    "ward": {
+      "radius": 180
+    },
+    "seats": 0,
+    "flavor": "It's not a treehouse. It's a tower. And you're supposed to watch from it."
+  },
+  "usage": {
+    "inputTokens": 1331,
+    "outputTokens": 151
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Grain Silo",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:01:41.067Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Grain Silo",
+    "size": {
+      "w": 120,
+      "h": 75
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 1
+      }
+    },
+    "storage": {
+      "capacity": 30
+    },
+    "seats": 0,
+    "flavor": "It's not a silo, it's a fancy grain bin. But it'll hold the bulk of your harvest while you figure out how to eat it."
+  },
+  "usage": {
+    "inputTokens": 1333,
+    "outputTokens": 143
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "name": "Vessel",
+    "hasSketch": true,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:02:53.171Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Vessel",
+    "size": {
+      "w": 120,
+      "h": 50
+    },
+    "locomotion": {
+      "type": "float",
+      "speed": 120,
+      "terrainModifiers": {
+        "grass": 0.25,
+        "sand": 0.28,
+        "swamp": 0.65,
+        "rock": 0.2,
+        "snow": 0.25,
+        "water": 0.9
+      }
+    },
+    "harvest": {
+      "rate": 0.5,
+      "materials": [
+        "wood"
+      ]
+    },
+    "emission": {
+      "kind": "smoke",
+      "intensity": 0.2
+    },
+    "storage": {
+      "capacity": 8
+    },
+    "seats": 1,
+    "flavor": "A boat that’s been around the block — or the sea."
+  },
+  "usage": {
+    "inputTokens": 2361,
+    "outputTokens": 204
+  }
+}
