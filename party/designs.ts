@@ -14,6 +14,7 @@
 //
 // No Workers types in this file: the client imports these types too.
 
+import { computeCost } from "../shared/fabricator/cost";
 import type { MaterialCost, FabricatedSpec } from "../shared/fabricator/schema";
 
 export type Design = {
@@ -102,6 +103,13 @@ export class DesignStore {
         for (const value of all.values()) {
           if (value && typeof value === "object") {
             const d = value as Design;
+            // Reprice on the way in. Cost is a pure function of the spec —
+            // that is the whole point of computing it in code — so what is
+            // stored is a cache, and rebalancing the game has to reprice the
+            // library with it. Otherwise a design compiled last week keeps a
+            // price the rules no longer agree with, and the only way to fix
+            // one is to throw it out and sketch it again.
+            d.spec = { ...d.spec, cost: computeCost(d.spec) };
             this.designs.set(d.id, d);
           }
         }

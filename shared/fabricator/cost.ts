@@ -7,9 +7,17 @@
 // somewhere, rather than a quest marker saying go there.
 //
 //   bogiron  bog     swamp and water movement
-//   basalt   rock    weapons
-//   glass    desert  nourish, and emission
-//   rime     snow    wards
+//   basalt   rock    weapons that beat a sharpened stick
+//   glass    desert  growing food at more than a windowbox scale
+//   rime     snow    wards that cover more than a camp
+//
+// Note what those say. Ore is the price of the STRONG version of a capability,
+// not of the capability existing — a campfire throws light, cooks, and keeps
+// things at bay, and it has to be buildable on the first evening out of wood
+// and stone. It was not: charging for the mere presence of ward and nourish
+// priced a campfire at 6 glass and 8 rime, which is a trek across a desert and
+// a snowfield to light a fire. Emission is not gated at all any more; fire and
+// lamps are the earliest things anyone builds.
 //
 // The one invariant that must hold: a HARVESTER is always buildable from wood
 // and stone alone. Every exotic is gated behind a tool that can dig it, so if
@@ -34,6 +42,21 @@ import {
  *  always wood and stone, so nothing is ever built from exotics alone — and a
  *  machine that wants everything is expensive rather than unbuildable. */
 const EXOTIC_CEILING = 0.6;
+
+/** Below this many units, an ore requirement is dropped entirely. A bill
+ *  asking for one rime is still a trek across a snowfield, and being sent on
+ *  it by a rounding error is worse than the unit being free. */
+const MIN_ORE = 2;
+
+/**
+ * How far a capability reaches past the point where wood and stone stop being
+ * enough: 0 at `free` and below, 1 at `full` and above.
+ *
+ * This is the difference between gating a capability and gating its strength.
+ * Gating the capability is what made a campfire cost two expeditions.
+ */
+const past = (value: number, free: number, full: number): number =>
+  Math.max(0, Math.min(1, (value - free) / (full - free)));
 
 export function computeCost(spec: RawSpec): MaterialCost {
   const area = (spec.size.w * spec.size.h) / 400;
@@ -74,9 +97,14 @@ export function computeCost(spec: RawSpec): MaterialCost {
     (t.swamp > 0.45 || t.water > 0.2 || spec.locomotion.type === "float");
   const share: Record<ExoticMaterial, number> = {
     bogiron: wetCapable ? 0.35 : 0,
-    basalt: spec.weapon ? 0.3 : 0,
-    glass: spec.nourish || spec.emission ? 0.25 : 0,
-    rime: spec.ward ? 0.3 : 0,
+    // Bare hands already do 6 damage, so a crude spear is not an achievement;
+    // basalt is what a real weapon is made of.
+    basalt: spec.weapon ? 0.3 * past(spec.weapon.damage, 12, 34) : 0,
+    // A fire you can cook on is not a farm.
+    glass: spec.nourish ? 0.25 * past(spec.nourish.rate, 4, 12) : 0,
+    // Keeping the animals off one camp is not keeping them off a settlement.
+    // 140px is a bit over two hexes — a fire and the ground you sleep on.
+    rime: spec.ward ? 0.3 * past(spec.ward.radius, 140, 260) : 0,
   };
 
   // A thing can want several at once — a warded greenhouse with a gun on it —
@@ -90,7 +118,7 @@ export function computeCost(spec: RawSpec): MaterialCost {
     // Round each in turn against what is left rather than independently, so
     // the parts always sum to the total exactly.
     const want = Math.round(total * share[m] * scale);
-    const take = Math.min(want, total - spent);
+    const take = want < MIN_ORE ? 0 : Math.min(want, total - spent);
     bill[m] = take;
     spent += take;
   }

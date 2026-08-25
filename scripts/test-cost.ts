@@ -160,6 +160,74 @@ const fence = clampSpec(structure(DRY));
 fence.ward = { radius: 200 };
 check("a ward is priced in rime", computeCost(fence).rime > 0);
 
+// The campfire case, which shipped wrong: a structure that throws light,
+// cooks a little, and keeps animals off the spot you sleep on is the FIRST
+// thing anyone builds. Charging ore for the presence of ward and nourish
+// priced one at 6 glass + 8 rime — a trek across a desert and a snowfield to
+// light a fire. Ore prices the strong version of a capability now, so the
+// whole plausible range of campfires has to come out clean.
+for (const [rate, radius] of [
+  [1, 60],
+  [2, 80],
+  [3, 120],
+  [4, 150],
+] as [number, number][]) {
+  const fire = clampSpec(structure(DRY));
+  fire.emission = { kind: "light", intensity: 0.7 };
+  fire.nourish = { rate };
+  fire.ward = { radius };
+  const c = computeCost(fire);
+  check(
+    `a campfire (cooks ${rate}/min, wards ${radius}px) needs no ore`,
+    c.bogiron + c.basalt + c.glass + c.rime === 0,
+    formatCost(c),
+  );
+}
+
+// Light is never gated at all. Lamps and fires are turn one.
+const beacon = clampSpec(structure(DRY));
+beacon.emission = { kind: "light", intensity: 1 };
+const bc = computeCost(beacon);
+check("emission alone costs no ore", bc.glass === 0 && bc.rime === 0, formatCost(bc));
+
+// …and the strong versions still send you somewhere, which is the whole point
+// of the ores existing. If these ever come out free, the map's edges are
+// scenery again.
+const spear = clampSpec(structure(DRY));
+spear.category = "tool";
+spear.weapon = { damage: 10, reach: 70, cooldown: 0.6 };
+check("a crude spear is free of basalt", computeCost(spear).basalt === 0);
+
+const maul = clampSpec(structure(DRY));
+maul.category = "tool";
+maul.weapon = { damage: 30, reach: 90, cooldown: 0.9 };
+check("a real weapon still costs basalt", computeCost(maul).basalt >= 4, formatCost(computeCost(maul)));
+
+const bigFarm = clampSpec(structure(DRY));
+bigFarm.nourish = { rate: 9 };
+check("a real farm still costs glass", computeCost(bigFarm).glass >= 3, formatCost(computeCost(bigFarm)));
+
+const pylon = clampSpec(structure(DRY));
+pylon.ward = { radius: 240 };
+check("a settlement-sized ward still costs rime", computeCost(pylon).rime >= 4, formatCost(computeCost(pylon)));
+
+// Nothing may ever ask for a single unit of an ore: one rime is still a trek
+// across a snowfield, and being sent on it by a rounding error is worse than
+// the unit being free.
+{
+  let ok = true;
+  for (let dmg = 4; dmg <= 40; dmg++) {
+    for (const radius of [60, 100, 140, 180, 220, 260]) {
+      const spec = clampSpec(structure(DRY));
+      spec.weapon = { damage: dmg, reach: 80, cooldown: 0.7 };
+      spec.ward = { radius };
+      const c = computeCost(spec);
+      if ([c.bogiron, c.basalt, c.glass, c.rime].some((n) => n === 1)) ok = false;
+    }
+  }
+  check("no bill ever asks for exactly one unit of an ore", ok);
+}
+
 // The one that must never break. Every exotic sits behind a harvester that
 // can dig it; if a harvester ever cost an exotic, the first gate would close
 // the door behind it and the world would be unplayable past that point.
