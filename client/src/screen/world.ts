@@ -717,8 +717,15 @@ export class WorldScene extends Phaser.Scene {
     this.buildPointers(cam1, this.cam2);
 
     // ── keyboard dev fallback ───────────────────────────────────
+    // enableCapture: FALSE. Phaser's default is to preventDefault() every key
+    // it watches, which silently eats W/A/S/D before they reach a focused
+    // text field — so naming a blueprint on the screen's own Fabricator pad
+    // produced a name with no W, A, S or D in it. Nothing here needs the
+    // default suppressed: the page has nothing to scroll, and movement is
+    // already held off by uiOpen while an overlay is up.
     this.keys = this.input.keyboard!.addKeys(
       "W,A,S,D,F,G,UP,DOWN,LEFT,RIGHT,K,L",
+      false,
     ) as Record<string, Phaser.Input.Keyboard.Key>;
 
     // Night falls over each viewport separately: one quad per camera, resized

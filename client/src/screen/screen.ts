@@ -655,8 +655,11 @@ export function startScreen(code: string) {
       }
       // Ignore the shortcut while someone is typing into the panel itself.
       if (document.activeElement instanceof HTMLInputElement) return;
-      if (e.key === "1") openFab(1);
-      else if (e.key === "2") openFab(2);
+      if (e.key !== "1" && e.key !== "2") return;
+      // The panel focuses its name field, and this same keystroke would then
+      // land in it — every blueprint opened with 1 was called "1Something".
+      e.preventDefault();
+      openFab(e.key === "1" ? 1 : 2);
     });
 
     // ── minimap ─────────────────────────────────────────────────

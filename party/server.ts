@@ -153,22 +153,21 @@ export class FabricatorServer extends Server<Env> {
   }
 
   onClose(connection: Connection): void {
-    // A touch-host screen is both a screen and a player, so it falls through
-    // to the player cleanup below rather than returning early.
+    // Every connection now carries a playerId, screens included, so this can
+    // no longer branch on "was it a screen" to decide whether to clean up a
+    // seat. It does both, and tells everyone if either changed.
     const wasScreen = this.screenConns.delete(connection.id);
     const playerId = this.connToPlayer.get(connection.id);
-    if (wasScreen && !playerId) {
-      this.broadcastRoster();
-      return;
-    }
-    if (!playerId) return;
     this.connToPlayer.delete(connection.id);
-    const rec = this.players.get(playerId);
+
+    const rec = playerId ? this.players.get(playerId) : undefined;
+    let seatChanged = false;
     if (rec && rec.connectionId === connection.id) {
       rec.connectionId = null; // slot stays reserved for reconnect
       rec.ready = false;
-      this.broadcastRoster();
+      seatChanged = true;
     }
+    if (wasScreen || seatChanged) this.broadcastRoster();
   }
 
   // ── design pipeline ──────────────────────────────────────────
@@ -305,6 +304,11 @@ export class FabricatorServer extends Server<Env> {
   private handleIdentify(msg: IdentifyMsg, conn: Connection) {
     if (msg.role === "screen") {
       this.screenConns.add(conn.id);
+      // A screen has its own identity, and it needs one: it can submit
+      // blueprints from its own Fabricator pad, and draftDesign has to know
+      // who to credit. Without this the message was relayed — so the pad sat
+      // there saying FABRICATING — and then quietly dropped, forever.
+      this.connToPlayer.set(conn.id, msg.playerId);
       if (msg.touchHost) {
         // This screen is playing on its own touch controls, so it holds a
         // seat like any player. freeSlot() then hands a joining phone slot 2
