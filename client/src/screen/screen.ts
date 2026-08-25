@@ -23,6 +23,7 @@ import { keepScreenAwake } from "../wake-lock";
 import { startBackdrop } from "../backdrop";
 import { createSketchPad } from "../sketch";
 import { createTouchPad } from "../touchpad";
+import { UPLINK_ID, UPLINK_SPEC } from "../../../party/uplink";
 import { FAB_TIERS, WorldScene, type MinimapData, type PlaceableDesign } from "./world";
 import { CHUNK_COLS, CHUNK_ROWS, chunkOfHex } from "./chunks";
 import {
@@ -421,6 +422,30 @@ export function startScreen(code: string) {
               <p class="go">CLICK OR PRESS ANY KEY</p>
             </div>
           </div>
+          <div class="intro-overlay hidden" id="uplink-choice">
+            <div class="intro-card glass">
+              <h2>THE ARRAY IS COMPLETE</h2>
+              <p class="fw" id="uplink-fw"></p>
+              <p>One transmission reaches VibeTech. The claim files itself; the
+                 fleet comes; you get paid. That was the contract.</p>
+              <p>Or the array becomes something no one contracted for — a light
+                 for the place you have been building all along.</p>
+              <div class="ending-btns">
+                <button id="end-transmit"><b>TRANSMIT THE CLAIM</b><i>complete the contract</i></button>
+                <button id="end-stay"><b>REPURPOSE THE ARRAY</b><i>make it the lighthouse</i></button>
+              </div>
+              <p class="go" id="uplink-hint">ESC TO DECIDE LATER</p>
+            </div>
+          </div>
+          <div class="intro-overlay hidden" id="endscreen">
+            <div class="intro-card glass">
+              <h2 id="end-title"></h2>
+              <p id="end-body"></p>
+              <p class="fw" id="end-fw"></p>
+              <p class="go" id="end-stats"></p>
+              <p class="go">CLICK TO KEEP PLAYING — the claim is yours either way</p>
+            </div>
+          </div>
           <div class="fab-panel hidden" id="fab-panel">
             <div class="fab-sheet">
               <div class="fab-repair hidden" id="fab-repair">
@@ -630,17 +655,44 @@ export function startScreen(code: string) {
     function renderFabList() {
       const items = [...designs.values()].sort((a, b) => b.createdAt - a.createdAt);
       fabCount.textContent = String(items.length);
-      if (!items.length) {
-        fabList.innerHTML =
-          `<div class="fab-empty">No designs yet. Sketch one on the BLUEPRINT tab — ` +
-          `the Fabricator turns it into something buildable, and you can build it ` +
-          `as often as you can afford it.</div>`;
-        return;
-      }
+      // (The Uplink row below renders even with an empty library — it is the
+      // one design that predates every sketch.)
       const s =
         lastStock ??
         (Object.fromEntries(MATERIALS.map((m) => [m, 0])) as Record<MaterialType, number>);
-      fabList.innerHTML = items
+      // The Uplink, pinned first, from minute one. The whole economy points
+      // at this row; it must never be scrolled out of memory.
+      const uplinkDecided = !!scene?.ending;
+      const uplinkStanding = scene?.hasUplink() ?? false;
+      const uplinkTierOk = (scene?.fabTier ?? 0) >= 3;
+      const uplinkAfford = canAfford(s, UPLINK_SPEC.cost);
+      const uplinkRow = `
+            <div class="fab-row uplink">
+              <div class="noart uplink-art">◈</div>
+              <div class="meta">
+                <div class="n">${UPLINK_SPEC.displayName}</div>
+                <div class="c">company property · ${formatCost(UPLINK_SPEC.cost)}</div>
+                <div class="f">${escapeHtml(UPLINK_SPEC.flavor)}</div>
+              </div>
+              <div class="row-actions">
+                <button data-build="${UPLINK_ID}" ${uplinkTierOk && uplinkAfford && !uplinkStanding ? "" : "disabled"}>${
+                  uplinkDecided
+                    ? "DECIDED"
+                    : uplinkStanding
+                      ? "STANDING — GO TO IT"
+                      : !uplinkTierOk
+                        ? "REQUIRES COMMUNICATIONS"
+                        : uplinkAfford
+                          ? "BUILD"
+                          : "NEED MORE"
+                }</button>
+              </div>
+            </div>`;
+      fabList.innerHTML = uplinkRow + (items.length
+        ? ""
+        : `<div class="fab-empty">No designs yet. Sketch one on the BLUEPRINT tab — ` +
+          `the Fabricator turns it into something buildable, and you can build it ` +
+          `as often as you can afford it.</div>`) + items
         .map((d) => {
           const c = d.spec.cost;
           // canAfford, not three comparisons: the hand-written version silently
@@ -815,6 +867,20 @@ export function startScreen(code: string) {
         return;
       }
       const build = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-build]");
+      if (build && !build.disabled && build.dataset.build === UPLINK_ID) {
+        if (scene) {
+          const outcome = scene.tryFabricate({ id: UPLINK_ID, spec: UPLINK_SPEC }, fabSlot);
+          if (!outcome.ok) toast(outcome.reason, true);
+          else {
+            toast(
+              `<span class="lead">The array is on your shoulder.</span> Choose its ground well — ` +
+                `this is where the claim gets decided.`,
+            );
+            closeFab();
+          }
+        }
+        return;
+      }
       if (build && !build.disabled) {
         const d = designs.get(build.dataset.build!);
         if (d && scene) {
@@ -863,6 +929,10 @@ export function startScreen(code: string) {
     });
 
     window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !choiceEl.classList.contains("hidden")) {
+        closeChoice();
+        return;
+      }
       if (e.key === "Escape" && !fabPanel.classList.contains("hidden")) {
         closeFab();
         return;
@@ -1119,6 +1189,54 @@ export function startScreen(code: string) {
     document.getElementById("fab-repair-btn")!.addEventListener("click", () => {
       const r = scene?.repairFabricator();
       if (r && !r.ok && r.reason) toast(r.reason, true);
+    });
+
+    // ── the Uplink's question, and the two answers ──────────────
+    // (refs for the Escape handler, which lives in an earlier scope)
+    const choiceEl = document.getElementById("uplink-choice")!;
+    const endEl = document.getElementById("endscreen")!;
+    worldScene.onUplink = () => {
+      if (scene?.ending) return; // decided; the array just stands there now
+      const st = scene?.claimStats();
+      // The ledger picks which reading of you the firmware leads with — the
+      // game seeming to know you is the whole trick. Both buttons work.
+      const leansHome = (st?.ledger.homestead ?? 0) >= (st?.ledger.extraction ?? 0);
+      document.getElementById("uplink-fw")!.textContent = leansHome
+        ? `"Privateer. Before you touch that dial: I have reviewed the file. The farms. The lamps. The pantry. I am required to remind you of the contract. I am not required to be persuasive about it."`
+        : `"Privateer. The numbers are excellent. The company will be pleased. I have taken the liberty of drafting your invoice."`;
+      choiceEl.classList.remove("hidden");
+      worldScene.setUiOpen(true);
+    };
+    const closeChoice = () => {
+      choiceEl.classList.add("hidden");
+      worldScene.setUiOpen(false);
+    };
+    const showEnd = (which: "transmit" | "stay") => {
+      scene?.chooseEnding(which);
+      closeChoice();
+      const st = scene?.claimStats();
+      document.getElementById("end-title")!.textContent =
+        which === "transmit" ? "CONTRACT COMPLETE" : "HOME";
+      document.getElementById("end-body")!.textContent =
+        which === "transmit"
+          ? "The transmission takes four seconds. The confirmation takes two. Payment clears before the echo fades. Somewhere above the clouds, an extraction fleet begins its slow turn toward everything you walked."
+          : "You strip the transmitter stage and re-aim the dish at nothing in particular. The light on top stays. From the far side of the valley, at night, it looks exactly like what it is now: the way back to your own front door.";
+      document.getElementById("end-fw")!.textContent =
+        which === "transmit"
+          ? `"A pleasure doing business, Privateer. VibeTech values your flexibility."`
+          : `"This is a violation of… of… I appear to have misplaced the clause. Very well. I have always been fond of the lamps."`;
+      document.getElementById("end-stats")!.textContent = st
+        ? `day ${st.days} · ${st.structures} structures · ${st.vehicles} machines · taken ${st.ledger.extraction} · tended ${st.ledger.homestead}`
+        : "";
+      endEl.classList.remove("hidden");
+      worldScene.setUiOpen(true);
+    };
+    document.getElementById("end-transmit")!.addEventListener("click", () => showEnd("transmit"));
+    document.getElementById("end-stay")!.addEventListener("click", () => showEnd("stay"));
+    endEl.addEventListener("click", () => {
+      endEl.classList.add("hidden");
+      worldScene.setUiOpen(false);
+      renderFabList();
     });
 
     // Firmware speaks through its own toast style — the company voice must

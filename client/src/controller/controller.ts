@@ -26,6 +26,7 @@ import type {
   Slot,
   StickState,
 } from "../../../party/protocol";
+import { UPLINK_ID, UPLINK_SPEC } from "../../../party/uplink";
 import type { DesignSummary } from "../../../party/designs";
 import { MATERIALS, type MaterialType } from "../../../shared/fabricator/schema";
 
@@ -374,6 +375,25 @@ export function startController(code: string) {
         })
         .join(" · ") || "free";
 
+    const uplinkRow = () => {
+      const afford = MATERIALS.every((m) => stock[m] >= (UPLINK_SPEC.cost[m] ?? 0));
+      const tierOk = fabTier >= 3;
+      return `
+        <div class="design-row uplink">
+          <div class="dthumb missing uplink-art">◈</div>
+          <div class="info">
+            <div class="dname">${UPLINK_SPEC.displayName}</div>
+            <div class="dmeta">company property</div>
+            <div class="dcost">${costMarkup(UPLINK_SPEC.cost)}</div>
+          </div>
+          <div class="drow-actions">
+            <button data-build="${UPLINK_ID}" ${
+              afford && tierOk && atFabricator ? "" : "disabled"
+            }>${!tierOk ? "DAMAGED" : afford ? "BUILD" : "NEED MORE"}</button>
+          </div>
+        </div>`;
+    };
+
     renderDesigns = () => {
       designsCount.textContent = String(designs.size);
       // Wood and stone always; an ore once there is any, so the line grows as
@@ -385,6 +405,7 @@ export function startController(code: string) {
         .join(" · ");
       if (designs.size === 0) {
         designsList.innerHTML =
+          uplinkRow() +
           `<div class="designs-empty">No designs yet.<br>Tap ✏️ BLUEPRINT to sketch one —<br>the Fabricator will design it, then you can build it as often as you like.</div>`;
         return;
       }
@@ -429,7 +450,7 @@ export function startController(code: string) {
             </div>`;
         })
         .join("");
-      designsList.innerHTML = rows;
+      designsList.innerHTML = uplinkRow() + rows;
       // A design can have art recorded but the blob still be missing (an
       // upload that failed, an old room). Drop the src so the browser shows
       // the empty plate instead of a broken-image glyph.

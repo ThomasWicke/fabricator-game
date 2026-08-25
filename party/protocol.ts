@@ -300,6 +300,10 @@ export type WorldSnapshot = {
   /** Fabricator repair tier. Absent in pre-tier saves, which restore fully
    *  repaired — those worlds were played with everything unlocked. */
   fabTier?: number;
+  /** The arc, measured: what was taken vs what was tended. */
+  ledger?: { extraction: number; homestead: number };
+  /** The Uplink's decision, once made — asking twice would cheapen it. */
+  ending?: string;
   /** Only nodes that have been touched; remaining 0 = harvested out. */
   harvested: { col: number; row: number; remaining: number }[];
   /** Manufactured objects, at their current position (vehicles get driven). */

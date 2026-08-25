@@ -37,6 +37,7 @@ import {
   type TerrainType,
 } from "../../../shared/fabricator/schema";
 import { canAfford, formatCost } from "../../../shared/fabricator/cost";
+import { UPLINK_ID } from "../../../party/uplink";
 import { BELT_MAX, nextBeltIndex } from "./belt";
 import { HEX_POINTS, HEX_W, ROW_H, hexToWorld, worldToHex } from "./hexgrid";
 import {
@@ -637,6 +638,19 @@ export class WorldScene extends Phaser.Scene {
   pantry = 0;
   /** Repair state of the machine, 0..FAB_TIERS.length-1. */
   fabTier = 0;
+  /**
+   * The ledger — the character arc, measured instead of told. Two tallies
+   * the game keeps and never shows: what you take and what you tend. They
+   * choose which firmware lines land and which ending the Uplink offers as
+   * the default. Both endings stay choosable; the ledger only means the
+   * game seems to know you.
+   */
+  ledger = { extraction: 0, homestead: 0 };
+  /** Whole-unit accumulator for the commons' slow extraction drip. */
+  private commonsBanked = 0;
+  /** The Uplink's decision, once made. Persisted; asking twice would cheapen it. */
+  ending: "transmit" | "stay" | null = null;
+  onUplink: (() => void) | null = null;
   onTier: ((tier: number) => void) | null = null;
   /** Firmware one-liners — the shell renders them however it likes. */
   onFirmware: ((line: string) => void) | null = null;
@@ -730,6 +744,23 @@ export class WorldScene extends Phaser.Scene {
     this.pad = { x: padWorld.x, y: padWorld.y };
 
     // ── terrain streaming ───────────────────────────────────────
+    // The Uplink's body is drawn, not generated — company property has
+    // blueprints. A pylon, a dish, a light.
+    if (!this.textures.exists(`fab-body-${UPLINK_ID}`)) {
+      const g = this.add.graphics();
+      g.fillStyle(0x3a4356, 1);
+      g.fillRect(66, 50, 18, 90); // pylon
+      g.fillStyle(0x2c3344, 1);
+      g.fillRect(40, 130, 70, 10); // base
+      g.fillStyle(0x8fa3c4, 1);
+      g.slice(75, 52, 46, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false);
+      g.fillPath(); // the dish
+      g.fillStyle(0xffe1a6, 1);
+      g.fillCircle(75, 16, 7); // the light
+      g.generateTexture(`fab-body-${UPLINK_ID}`, 150, 145);
+      g.destroy();
+    }
+
     // The ground tiles' edges are antialiased in the source art (alpha 95-223
     // along the diagonals). Tiles are meant to tessellate exactly, and a soft
     // edge over the darker slab of the row beneath blends into a 1-2px dark
@@ -1587,6 +1618,15 @@ export class WorldScene extends Phaser.Scene {
         reason: `The ${FAB_TIERS[this.tierFor(spec.category)].name} subsystem is still damaged — repair the Fabricator first.`,
       };
     }
+    // The array has its own gates: full Communications, and only one of it.
+    if (design.id === UPLINK_ID) {
+      if (this.fabTier < FAB_TIERS.length - 1) {
+        return { ok: false, reason: "The Communications subsystem is still damaged — the array cannot be shaped." };
+      }
+      if (this.hasUplink()) {
+        return { ok: false, reason: "The array already stands. Go to it." };
+      }
+    }
     if (!canAfford(this.stockpile, spec.cost)) {
       return {
         ok: false,
@@ -1703,6 +1743,9 @@ export class WorldScene extends Phaser.Scene {
     let bestD = Infinity;
     for (const v of this.vehicles) {
       if (v.spec.category === "vehicle") continue;
+      // The array is not luggage. It is also the one structure whose A-press
+      // means something else entirely.
+      if (v.designId === UPLINK_ID) continue;
       const reach = Math.max(v.spec.size.w, v.spec.size.h) / 2 + 40;
       const d = Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, v.container.x, v.container.y);
       if (d <= reach && d < bestD) {
@@ -1796,6 +1839,46 @@ export class WorldScene extends Phaser.Scene {
     }
     const centre = hexToWorld(at.col, at.row);
     this.placeDesign(c.design, p.slot, centre.x, centre.y + this.dropAt(at.col, at.row));
+  }
+
+  hasUplink(): boolean {
+    return this.vehicles.some((v) => v.designId === UPLINK_ID);
+  }
+
+  private uplinkInReach(p: PlayerEntity): boolean {
+    for (const v of this.vehicles) {
+      if (v.designId !== UPLINK_ID) continue;
+      const reach = Math.max(v.spec.size.w, v.spec.size.h) / 2 + 50;
+      if (Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, v.container.x, v.container.y) <= reach) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** The decision, made. Reskins the array to what it became. */
+  chooseEnding(which: "transmit" | "stay") {
+    this.ending = which;
+    for (const v of this.vehicles) {
+      if (v.designId !== UPLINK_ID) continue;
+      const label = v.container.list.find(
+        (o): o is Phaser.GameObjects.Text => o instanceof Phaser.GameObjects.Text,
+      );
+      label?.setText(which === "stay" ? "The Lighthouse" : "Quantum Uplink · transmitted");
+      if (which === "stay") v.glow?.setTint(0xffd98a);
+    }
+    this.markDirty();
+  }
+
+  /** Everything the endscreen wants to say about this claim. */
+  claimStats() {
+    return {
+      days: Math.floor(this.time.now / DAY_MS) + 1,
+      structures: this.vehicles.filter((v) => v.spec.category !== "vehicle").length,
+      vehicles: this.vehicles.filter((v) => v.spec.category === "vehicle").length,
+      tier: this.fabTier,
+      ledger: { ...this.ledger },
+    };
   }
 
   /** Can a structure stand on this hex? */
@@ -2095,15 +2178,19 @@ export class WorldScene extends Phaser.Scene {
       this.onFirmware?.(line);
     };
     if (spec.nourish) {
+      this.ledger.homestead += 6;
       say("farm", "A farm, Privateer? The contract specifies extraction, not… agriculture. I will file this under morale.");
     }
     if (spec.production) {
+      this.ledger.extraction += 6;
       say("converter", "Automated conversion online. Quarterly numbers: strong. VibeTech sees you, Privateer.");
     }
     if (spec.ward) {
+      this.ledger.homestead += 5;
       say("ward", "A perimeter. Prudent. Assets that survive the night depreciate slower.");
     }
-    if (spec.emission?.kind === "light" && spec.category === "structure") {
+    if (spec.emission?.kind === "light" && spec.category === "structure" && design.id !== UPLINK_ID) {
+      this.ledger.homestead += 4;
       say("lamp", "Lighting, beyond operational necessity. Noted without comment. Mostly.");
     }
   }
@@ -2803,6 +2890,17 @@ export class WorldScene extends Phaser.Scene {
         this.flyTo(m, top ?? { x: p.sprite.x, y: p.sprite.y + STACK_BASE }, into);
         p.pack[m] -= 1;
         this.stockpile[m] += 1;
+        // The ledger: ore is the contract, and the contract is extraction.
+        // The commons drip in slowly — wood and stone are just living.
+        if (m === "wood" || m === "stone") {
+          this.commonsBanked += 1;
+          if (this.commonsBanked >= 10) {
+            this.commonsBanked -= 10;
+            this.ledger.extraction += 1;
+          }
+        } else {
+          this.ledger.extraction += 1;
+        }
         units -= 1;
         any = true;
       }
@@ -2815,6 +2913,7 @@ export class WorldScene extends Phaser.Scene {
       this.flyTo("food", top ?? { x: p.sprite.x, y: p.sprite.y + STACK_BASE }, into);
       p.pack.food -= 1;
       this.pantry += 1;
+      this.ledger.homestead += 1;
       units -= 1;
       any = true;
       this.onPantry?.(this.pantry);
@@ -2921,6 +3020,8 @@ export class WorldScene extends Phaser.Scene {
       stockpile: { ...this.stockpile },
       pantry: this.pantry,
       fabTier: this.fabTier,
+      ledger: { ...this.ledger },
+      ending: this.ending ?? undefined,
       harvested: [...this.harvestDeltas.values()],
       built: [
         ...this.vehicles.map((v) => ({
@@ -2982,6 +3083,9 @@ export class WorldScene extends Phaser.Scene {
     // already own. They resume fully repaired.
     this.fabTier = snap.fabTier ?? FAB_TIERS.length - 1;
     this.onTier?.(this.fabTier);
+    this.ledger = { extraction: 0, homestead: 0, ...snap.ledger };
+    this.ending = (snap.ending as "transmit" | "stay" | undefined) ?? null;
+    if (this.ending) this.chooseEnding(this.ending);
     this.onStockpile?.(this.stockpile);
 
     for (const h of snap.harvested) {
@@ -3259,6 +3363,9 @@ export class WorldScene extends Phaser.Scene {
           // collected
         } else if (this.trySwing(p, now)) {
           // saw something off
+        } else if (this.uplinkInReach(p)) {
+          // The array is finished and the question is waiting.
+          this.onUplink?.();
         } else {
           const vehicle = this.nearestEnterableVehicle(p);
           if (vehicle) this.enterVehicle(p, vehicle);
