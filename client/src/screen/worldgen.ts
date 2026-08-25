@@ -1,94 +1,70 @@
-// World generation, decoupled from Phaser so the lobby can draw a live
-// minimap preview of exactly the world the expedition will land in.
+// Continuous world generation. Phaser-free and stateless: everything here is
+// a pure function of (col, row, seed), so there is no map array, no bounds,
+// and no "generate the world" step — the world simply *is*, and the renderer
+// asks it about whichever hexes it currently needs.
 //
-// Terrain vocabulary is fixed by the Fabricator schema (grass/sand/swamp) —
-// the generator's job is to lay those three out in a way that makes the
-// "Swamp Buggy ≠ Car" contrast reachable from spawn without being a set of
-// straight bands. Layout: a grass interior with a sand rim (the shore of the
-// landmass), swamp blobs from a moisture field, and a guaranteed grass
-// clearing around the Fabricator pad at the centre.
+// That is what makes the world endless. It also means the lobby's preview,
+// the in-game minimap, and the ground you walk on are literally the same
+// function, so they can never disagree.
+//
+// Three low-frequency noise fields decide everything:
+//   elevation  — sea, shore, lowland, foothill, mountain
+//   temperature— tundra ⇢ temperate ⇢ desert (very low frequency, so climate
+//                bands are big enough to walk across and notice)
+//   moisture   — desert ⇢ steppe ⇢ plain ⇢ woodland ⇢ bog
+//
+// Those pick from all ten biomes in the Kenney hexagon pack. Ten *biomes*,
+// but only six movement classes (schema.ts's TerrainType) — the Fabricator
+// reasons about ground it can cross, not about scenery.
 
 import type { TerrainType } from "../../../shared/fabricator/schema";
-import {
-  DEFAULT_SETTINGS,
-  ROW_RATIO,
-  SIZE_COLS,
-  rowsFor,
-  type Amount,
-  type Density,
-  type WorldSettings,
-  type WorldSize,
-} from "../../../shared/world-settings";
+import { HEX_W, ROW_H } from "./hexgrid";
 
-export {
-  DEFAULT_SETTINGS,
-  SIZE_COLS,
-  rowsFor,
-  type Amount,
-  type Density,
-  type WorldSettings,
-  type WorldSize,
+// ── biomes ──────────────────────────────────────────────────────────────────
+
+export type BiomeType =
+  | "water"
+  | "sand"
+  | "grass"
+  | "autumn"
+  | "dirt"
+  | "magic"
+  | "stone"
+  | "rock"
+  | "snow"
+  | "lava";
+
+export type BiomeInfo = {
+  /** Texture key of the hex tile. */
+  tile: string;
+  /** Movement class the Fabricator's terrainModifiers are keyed by. */
+  terrain: TerrainType;
+  /** Minimap colour. */
+  color: string;
+  /** Nothing on foot crosses this — only a machine designed for it. */
+  liquid?: boolean;
+  /** Human name, for the HUD's "you are here". */
+  label: string;
 };
 
-
-
-/** Fraction of eligible hexes that get a resource node. Retuned upward when
- *  this landed on the hex grid: the original rates were set against a square
- *  tile map and left the hex world about half as dense as the hand-placed
- *  scatter it replaced. "normal" now measures ~130 nodes on a medium world. */
-const SCATTER_RATE: Record<Density, number> = {
-  sparse: 0.025,
-  normal: 0.05,
-  dense: 0.09,
+export const BIOMES: Record<BiomeType, BiomeInfo> = {
+  water: { tile: "tileWater", terrain: "water", color: "#2d5c86", liquid: true, label: "Open water" },
+  sand: { tile: "tileSand", terrain: "sand", color: "#d8c07a", label: "Dunes" },
+  grass: { tile: "tileGrass", terrain: "grass", color: "#4a8b3f", label: "Plains" },
+  autumn: { tile: "tileAutumn", terrain: "grass", color: "#a4762f", label: "Old woodland" },
+  dirt: { tile: "tileDirt", terrain: "sand", color: "#8b6f4c", label: "Steppe" },
+  magic: { tile: "tileMagic", terrain: "swamp", color: "#4d5a3a", label: "The bog" },
+  stone: { tile: "tileStone", terrain: "rock", color: "#7f7e79", label: "Scree" },
+  rock: { tile: "tileRock", terrain: "rock", color: "#5c5a57", label: "Bare rock" },
+  snow: { tile: "tileSnow", terrain: "snow", color: "#e2ebf1", label: "Snowfield" },
+  lava: { tile: "tileLava", terrain: "rock", color: "#c2451c", liquid: true, label: "Lava" },
 };
 
-/** Moisture threshold above which a hex turns to swamp. Higher = less swamp.
- *  Measured on the hex grid: "some" ≈ 10% of the map, "lots" ≈ 20% (lower
- *  than the square-grid figures this was first tuned against, since the
- *  shore and the spawn clearing eat into it). */
-const SWAMP_THRESHOLD: Record<Amount, number> = {
-  none: 2, // unreachable — no swamp at all
-  some: 0.62,
-  lots: 0.55,
-};
+/** Every tile texture the world can ask for — the scene preloads these. */
+export const BIOME_TILE_KEYS = [...new Set(Object.values(BIOMES).map((b) => b.tile))];
 
-/** How far in from the rim the shore reaches, as a fraction of the half-width.
- *  Measured coverage: ~15% / ~28% of the map. */
-const SHORE_WIDTH: Record<Amount, number> = {
-  none: 0,
-  some: 0.05,
-  lots: 0.12,
-};
-
-/** Bogiron density relative to the grass scatter rate. Swamp covers less of
- *  the map than grass, so deposits need a higher rate to stay findable. */
-const BOGIRON_RATIO = 1.6;
-
-/** Hexes of guaranteed clear grass around the spawn/Fabricator pad. */
-export const CLEARING_RADIUS = 7;
-
-export const TERRAIN_COLORS: Record<TerrainType, string> = {
-  grass: "#3f7d3a",
-  sand: "#d8c07a",
-  swamp: "#4a5236",
-};
-
-
-/** Resource nodes the generator places. Bogiron post-dates the original
- *  generator; it only appears in swamp, which is what gates swamp-capable
- *  machines behind a trek. */
-export type NodeKind = "tree" | "rock" | "bogiron";
-
-export type GeneratedWorld = {
-  /** [row][col] */
-  tiles: TerrainType[][];
-  cols: number;
-  rows: number;
-  /** Spawn hex (centre of the clearing). */
-  spawn: { tx: number; ty: number };
-  /** Resource nodes in hex coordinates. */
-  scatter: { tx: number; ty: number; kind: NodeKind }[];
-};
+export const terrainOf = (b: BiomeType): TerrainType => BIOMES[b].terrain;
+export const isLiquid = (b: BiomeType): boolean => !!BIOMES[b].liquid;
 
 // ── noise ───────────────────────────────────────────────────────────────────
 
@@ -149,182 +125,311 @@ function fbm(x: number, y: number, seed: number, octaves = 4): number {
   return sum / norm;
 }
 
-// ── generation ──────────────────────────────────────────────────────────────
+// ── the field ───────────────────────────────────────────────────────────────
 
-export function generateWorld(settings: WorldSettings): GeneratedWorld {
-  const cols = SIZE_COLS[settings.size];
-  const rows = rowsFor(settings.size);
-  const seed = hashString(`${settings.seed}|${settings.size}`);
-  const rng = mulberry32(`${settings.seed}|scatter`);
+/** Hex rows sit closer together than columns and odd rows are staggered, so
+ *  noise sampled straight off (col,row) would come out sheared and squashed.
+ *  Sampling in this space keeps continents round. */
+const ROW_SQUASH = ROW_H / HEX_W; // ≈ 0.738
 
-  const cx = (cols - 1) / 2;
-  const cy = (rows - 1) / 2;
-  const shoreWidth = SHORE_WIDTH[settings.shore];
-  const swampAt = SWAMP_THRESHOLD[settings.swamp];
-  // Noise sampled in world-relative units so the same seed reads as the same
-  // landscape at every world size, just with more or less of it visible.
-  const scale = 7 / Math.max(cols, rows);
-  // Hex rows sit closer together than columns, so distance measured in hexes
-  // is squashed vertically; correcting keeps the clearing round on screen.
-  const rowAspect = 1 / ROW_RATIO;
-  const fromCentre = (x: number, y: number) =>
-    Math.hypot(x - cx, (y - cy) * rowAspect);
-
-  const tiles: TerrainType[][] = [];
-  for (let y = 0; y < rows; y++) {
-    const row: TerrainType[] = [];
-    for (let x = 0; x < cols; x++) {
-      // Distance to the rim: mostly square (so the shore frames the map
-      // evenly instead of eating the corners) with a touch of radial to round
-      // the corners off, plus noise so the coastline isn't a clean edge.
-      const dx = Math.abs(x - cx) / (cols / 2);
-      const dy = Math.abs(y - cy) / (rows / 2);
-      const dist = 0.75 * Math.max(dx, dy) + 0.25 * Math.hypot(dx, dy);
-      const coast = dist + (fbm(x * scale * 1.6, y * scale * 1.6, seed + 101) - 0.5) * 0.16;
-
-      let terrain: TerrainType = "grass";
-      if (shoreWidth > 0 && coast > 1 - shoreWidth) {
-        terrain = "sand";
-      } else {
-        const moisture = fbm(x * scale, y * scale, seed);
-        if (moisture > swampAt) terrain = "swamp";
-      }
-
-      // The pad and the first few steps out of it are always walkable grass.
-      if (fromCentre(x, y) < CLEARING_RADIUS) terrain = "grass";
-      row.push(terrain);
-    }
-    tiles.push(row);
-  }
-
-  // Resource nodes, never in the clearing: trees and rocks on grass, bogiron
-  // in the swamp.
-  const scatter: GeneratedWorld["scatter"] = [];
-  const rate = SCATTER_RATE[settings.scatter];
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const t = tiles[y][x];
-      if (fromCentre(x, y) < CLEARING_RADIUS + 1) continue;
-      if (t === "grass") {
-        if (rng() > rate) continue;
-        scatter.push({ tx: x, ty: y, kind: rng() < 0.7 ? "tree" : "rock" });
-      } else if (t === "swamp") {
-        if (rng() > rate * BOGIRON_RATIO) continue;
-        scatter.push({ tx: x, ty: y, kind: "bogiron" });
-      }
-    }
-  }
-
-  return {
-    tiles,
-    cols,
-    rows,
-    spawn: { tx: Math.round(cx), ty: Math.round(cy) },
-    scatter,
-  };
+function geo(col: number, row: number): { gx: number; gy: number } {
+  return { gx: col + (row % 2 !== 0 ? 0.5 : 0), gy: row * ROW_SQUASH };
 }
 
-/** Terrain mix, for the lobby to describe a world in words. */
-export function terrainMix(world: GeneratedWorld): Record<TerrainType, number> {
-  const counts: Record<TerrainType, number> = { grass: 0, sand: 0, swamp: 0 };
-  for (const row of world.tiles) {
-    for (const t of row) counts[t]++;
-  }
-  const total = world.cols * world.rows;
-  return {
-    grass: counts.grass / total,
-    sand: counts.sand / total,
-    swamp: counts.swamp / total,
-  };
+/** Feature sizes, in hexes-per-cycle. Climate is deliberately the coarsest:
+ *  a snowfield you can see the far side of doesn't read as a climate. */
+const F_CONTINENT = 1 / 62;
+const F_RELIEF = 1 / 17;
+const F_TEMP = 1 / 95;
+const F_MOISTURE = 1 / 34;
+
+export type WorldSample = {
+  biome: BiomeType;
+  terrain: TerrainType;
+  elevation: number;
+  temperature: number;
+  moisture: number;
+};
+
+/** Seeds derived once per world, so callers pass a number not a string. */
+export function worldSeed(seedStr: string): number {
+  return hashString(seedStr);
 }
 
-/** Draw a world to a canvas at whatever resolution it currently has. */
-export function drawWorldPreview(
+/** The whole world, at one hex. Pure, and cheap enough to call per tile. */
+export function sample(col: number, row: number, seed: number): WorldSample {
+  const { gx, gy } = geo(col, row);
+
+  // Continent shape, roughened by a higher-frequency relief field so coasts
+  // are ragged and mountains form ridges rather than domes.
+  const base = fbm(gx * F_CONTINENT, gy * F_CONTINENT, seed, 5);
+  const relief = fbm(gx * F_RELIEF, gy * F_RELIEF, seed + 7717, 3);
+  const elevation = base * 0.76 + relief * 0.24;
+
+  const temperature = fbm(gx * F_TEMP, gy * F_TEMP, seed + 3313, 3);
+  const moisture = fbm(gx * F_MOISTURE, gy * F_MOISTURE, seed + 5591, 4);
+
+  const biome = classify(elevation, temperature, moisture);
+  return { biome, terrain: terrainOf(biome), elevation, temperature, moisture };
+}
+
+// Thresholds are tuned against measured coverage, not guessed: fbm clusters
+// hard around 0.5, so a band that reads as "a bit cold" on paper turns a
+// quarter of the planet into tundra. scripts/test-worldgen.ts prints the mix.
+function classify(elev: number, temp: number, moist: number): BiomeType {
+  if (elev < 0.418) return "water";
+  if (elev < 0.446) return "sand"; // beach
+
+  // High ground overrides climate — you get the mountain, not the biome.
+  if (elev > 0.635) {
+    if (elev > 0.72 && temp > 0.63) return "lava";
+    if (temp < 0.44 || elev > 0.715) return "snow";
+    return elev > 0.675 ? "rock" : "stone";
+  }
+
+  if (temp < 0.375) return "snow"; // tundra
+  if (temp > 0.625 && moist < 0.46) return "sand"; // desert
+  if (moist > 0.62) return "magic"; // bog
+  if (moist < 0.42) return "dirt"; // steppe
+  return moist > 0.54 ? "autumn" : "grass";
+}
+
+/** Just the biome — the hot path, called once per tile per chunk build. */
+export function biomeAt(col: number, row: number, seed: number): BiomeType {
+  const { gx, gy } = geo(col, row);
+  const base = fbm(gx * F_CONTINENT, gy * F_CONTINENT, seed, 5);
+  const relief = fbm(gx * F_RELIEF, gy * F_RELIEF, seed + 7717, 3);
+  return classify(
+    base * 0.76 + relief * 0.24,
+    fbm(gx * F_TEMP, gy * F_TEMP, seed + 3313, 3),
+    fbm(gx * F_MOISTURE, gy * F_MOISTURE, seed + 5591, 4),
+  );
+}
+
+export function terrainAtHex(col: number, row: number, seed: number): TerrainType {
+  return terrainOf(biomeAt(col, row, seed));
+}
+
+// ── scatter: resource nodes ─────────────────────────────────────────────────
+
+export type NodeKind = "tree" | "rock" | "bogiron";
+
+export type ScatterEntry = {
+  kind: NodeKind;
+  /** Texture key for the prop. */
+  texture: string;
+  /** Two art conventions in the pack; they anchor differently. */
+  art: "boulder" | "pine";
+  /** Units of material in the node. */
+  units: number;
+  tint?: number;
+};
+
+/** Per-biome scatter tables. Weights are absolute probabilities per hex, so
+ *  the totals here are also the density of the biome — bare rock is littered
+ *  with stone, the steppe is nearly empty. */
+type ScatterRule = { p: number; make: (r: number) => ScatterEntry };
+
+const pine = (t: string, units = 5): ScatterEntry => ({
+  kind: "tree",
+  texture: t,
+  art: "pine",
+  units,
+});
+const boulder = (t: string, units = 4): ScatterEntry => ({
+  kind: "rock",
+  texture: t,
+  art: "boulder",
+  units,
+});
+const pick = <T>(r: number, xs: T[]): T => xs[Math.min(xs.length - 1, Math.floor(r * xs.length))];
+
+const SCATTER: Record<BiomeType, ScatterRule[]> = {
+  grass: [
+    { p: 0.1, make: (r) => pine(pick(r, ["pineGreen_low", "pineGreen_mid", "pineGreen_high"])) },
+    { p: 0.04, make: (r) => boulder(pick(r, ["rockStone", "rockStone_moss1", "rockStone_moss2"])) },
+  ],
+  autumn: [
+    { p: 0.15, make: (r) => pine(pick(r, ["treeAutumn_low", "treeAutumn_mid", "treeAutumn_high"]), 6) },
+    { p: 0.03, make: (r) => boulder(pick(r, ["rockDirt_moss1", "rockDirt_moss3"])) },
+  ],
+  magic: [
+    {
+      p: 0.085,
+      make: (r) => ({ ...boulder(pick(r, ["rockStone", "rockStone_moss3"]), 3), kind: "bogiron", tint: 0xd9813f }),
+    },
+    { p: 0.05, make: (r) => pine(pick(r, ["pineBlue_low", "pineBlue_mid"]), 4) },
+  ],
+  dirt: [
+    { p: 0.05, make: (r) => boulder(pick(r, ["rockDirt", "rockDirt_moss2"])) },
+    { p: 0.02, make: (r) => pine(pick(r, ["treeBlue_low", "treeBlue_mid"]), 3) },
+  ],
+  sand: [
+    { p: 0.045, make: (r) => pine(pick(r, ["treeCactus_1", "treeCactus_2", "treeCactus_3"]), 3) },
+    { p: 0.015, make: () => boulder("rockDirt", 3) },
+  ],
+  stone: [{ p: 0.11, make: (r) => boulder(pick(r, ["rockStone", "rockStone_moss1"]), 5) }],
+  rock: [{ p: 0.13, make: () => boulder("rockStone", 6) }],
+  snow: [
+    { p: 0.06, make: (r) => pine(pick(r, ["pineBlue_low", "pineBlue_mid", "pineBlue_high"]), 4) },
+    { p: 0.055, make: (r) => boulder(pick(r, ["rockSnow_1", "rockSnow_2", "rockSnow_3"]), 5) },
+  ],
+  water: [],
+  lava: [],
+};
+
+/** Resource node at this hex, or null. Deterministic and independent of every
+ *  other hex, so a chunk can be built (and rebuilt) in isolation. */
+export function scatterAt(
+  col: number,
+  row: number,
+  seed: number,
+  biome: BiomeType,
+): ScatterEntry | null {
+  const rules = SCATTER[biome];
+  if (!rules.length) return null;
+  const roll = hash2(col, row, seed ^ 0x9e3779b9);
+  let acc = 0;
+  for (const rule of rules) {
+    acc += rule.p;
+    if (roll < acc) {
+      // A second, independent hash picks the variant, so raising a rule's
+      // probability doesn't reshuffle which trees the earlier rules chose.
+      return rule.make(hash2(col, row, seed ^ 0x85ebca6b));
+    }
+  }
+  return null;
+}
+
+// ── decoration: flat props stamped into the ground ──────────────────────────
+
+const DECOR: Record<BiomeType, string[]> = {
+  grass: ["bushGrass", "flowerRed", "flowerBlue", "flowerWhite", "hillGrass", "smallRockGrass"],
+  autumn: ["bushAutumn", "flowerYellow", "hillAutumn"],
+  magic: ["bushMagic", "hillMagic", "flowerGreen"],
+  dirt: ["bushDirt", "hillDirt", "smallRockDirt"],
+  sand: ["bushSand", "hillSand"],
+  stone: ["smallRockStone", "hillDirt"],
+  rock: ["smallRockStone"],
+  snow: ["bushSnow", "hillSnow", "smallRockSnow"],
+  water: ["waveWater"],
+  lava: ["waveLava"],
+};
+
+/** Every decor texture, for preloading. */
+export const DECOR_KEYS = [...new Set(Object.values(DECOR).flat())];
+
+/** Every scatter prop texture, for preloading. Enumerated by running each
+ *  biome's rules rather than hand-listing, so the two can't drift apart. */
+export const SCATTER_KEYS = [
+  ...new Set(
+    Object.values(SCATTER).flatMap((rules) =>
+      rules.flatMap((rule) => [0, 0.34, 0.67, 0.99].map((r) => rule.make(r).texture)),
+    ),
+  ),
+];
+
+const DECOR_CHANCE = 0.14;
+
+/** Flat prop for this hex, or null. Water and lava get their wave trim at a
+ *  higher rate — a still sea looks dead. */
+export function decorAt(col: number, row: number, seed: number, biome: BiomeType): string | null {
+  const options = DECOR[biome];
+  if (!options.length) return null;
+  const roll = hash2(col, row, seed ^ 0xc2b2ae35);
+  const chance = biome === "water" || biome === "lava" ? 0.3 : DECOR_CHANCE;
+  if (roll > chance) return null;
+  return options[Math.floor((roll / chance) * options.length) % options.length];
+}
+
+// ── spawn ───────────────────────────────────────────────────────────────────
+
+/** Hexes around the Fabricator kept clear of resource nodes, so the landing
+ *  site is always walkable and the pad is always visible. */
+export const CLEARING_RADIUS = 5;
+
+/**
+ * Where the expedition lands. Spirals out from the origin for the first hex
+ * whose whole two-hex neighbourhood is dry, walkable, temperate ground — so
+ * you never wake up on a one-tile island or halfway up a mountain.
+ */
+export function findSpawn(seed: number): { col: number; row: number } {
+  const good = (c: number, r: number) => {
+    const b = biomeAt(c, r, seed);
+    return b === "grass" || b === "autumn" || b === "dirt";
+  };
+  const clear = (c: number, r: number) => {
+    if (!good(c, r)) return false;
+    for (let dr = -2; dr <= 2; dr++) {
+      for (let dc = -2; dc <= 2; dc++) {
+        if (isLiquid(biomeAt(c + dc, r + dr, seed))) return false;
+      }
+    }
+    return true;
+  };
+  // Square rings outward: guaranteed to terminate on any seed, since land is
+  // ~70% of the field and this walks arbitrarily far.
+  for (let ring = 0; ring < 400; ring++) {
+    for (let dr = -ring; dr <= ring; dr++) {
+      for (let dc = -ring; dc <= ring; dc++) {
+        if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
+        if (clear(dc, dr)) return { col: dc, row: dr };
+      }
+    }
+  }
+  return { col: 0, row: 0 };
+}
+
+/** True inside the landing clearing, where scatter is suppressed. */
+export function inClearing(
+  col: number,
+  row: number,
+  spawn: { col: number; row: number },
+): boolean {
+  const dc = col - spawn.col;
+  const dr = row - spawn.row;
+  return Math.hypot(dc, dr * ROW_SQUASH) < CLEARING_RADIUS;
+}
+
+// ── preview / minimap ───────────────────────────────────────────────────────
+
+/**
+ * Paint the biome field around a hex onto a canvas — used by the lobby to
+ * show the landing region and by the in-game minimap. `hexPerPixel` trades
+ * detail for coverage; both callers want a wide view, not a sharp one.
+ */
+export function drawBiomeMap(
   canvas: HTMLCanvasElement,
-  world: GeneratedWorld,
+  seed: number,
+  centre: { col: number; row: number },
+  hexPerPixel: number,
 ): void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  const px = canvas.width / world.cols;
-  const py = canvas.height / world.rows;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  for (let y = 0; y < world.rows; y++) {
-    for (let x = 0; x < world.cols; x++) {
-      ctx.fillStyle = TERRAIN_COLORS[world.tiles[y][x]];
-      ctx.fillRect(
-        Math.floor(x * px),
-        Math.floor(y * py),
-        Math.ceil(px),
-        Math.ceil(py),
-      );
+  const w = canvas.width;
+  const h = canvas.height;
+  const img = ctx.createImageData(w, h);
+  const data = img.data;
+
+  // Cache parsed colours — biomeAt is the expensive part, but re-parsing a hex
+  // string per pixel is a pointless second cost.
+  const rgb = new Map<BiomeType, [number, number, number]>();
+  for (const [name, info] of Object.entries(BIOMES)) {
+    const n = parseInt(info.color.slice(1), 16);
+    rgb.set(name as BiomeType, [(n >> 16) & 255, (n >> 8) & 255, n & 255]);
+  }
+
+  for (let py = 0; py < h; py++) {
+    const row = Math.round(centre.row + (py - h / 2) * hexPerPixel / ROW_SQUASH);
+    for (let px = 0; px < w; px++) {
+      const col = Math.round(centre.col + (px - w / 2) * hexPerPixel);
+      const [r, g, b] = rgb.get(biomeAt(col, row, seed))!;
+      const i = (py * w + px) * 4;
+      data[i] = r;
+      data[i + 1] = g;
+      data[i + 2] = b;
+      data[i + 3] = 255;
     }
   }
-
-  // Obstacles as darker flecks, so density is legible at a glance.
-  ctx.fillStyle = "rgba(20, 40, 20, 0.65)";
-  for (const s of world.scatter) {
-    ctx.fillRect(Math.floor(s.tx * px), Math.floor(s.ty * py), Math.ceil(px), Math.ceil(py));
-  }
-
-  // Spawn marker: the Fabricator pad.
-  const cx = (world.spawn.tx + 0.5) * px;
-  const cy = (world.spawn.ty + 0.5) * py;
-  ctx.strokeStyle = "#6c9ef8";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(cx, cy, Math.max(4, canvas.width * 0.022), 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fillStyle = "#8fc1ff";
-  ctx.beginPath();
-  ctx.arc(cx, cy, Math.max(1.5, canvas.width * 0.008), 0, Math.PI * 2);
-  ctx.fill();
-}
-
-// ── settings persistence ────────────────────────────────────────────────────
-
-const SETTINGS_KEY = "fab.world";
-
-const isOneOf = <T extends string>(v: unknown, opts: readonly T[]): v is T =>
-  typeof v === "string" && (opts as readonly string[]).includes(v);
-
-export function loadSettings(fallbackSeed: string): WorldSettings {
-  const base: WorldSettings = { ...DEFAULT_SETTINGS, seed: fallbackSeed };
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return base;
-    const p = JSON.parse(raw) as Partial<WorldSettings>;
-    return {
-      // The seed defaults to the room code so a fresh room is a fresh world;
-      // only the knobs are remembered between sessions.
-      seed: fallbackSeed,
-      size: isOneOf(p.size, ["small", "medium", "large"] as const) ? p.size : base.size,
-      swamp: isOneOf(p.swamp, ["none", "some", "lots"] as const) ? p.swamp : base.swamp,
-      shore: isOneOf(p.shore, ["none", "some", "lots"] as const) ? p.shore : base.shore,
-      scatter: isOneOf(p.scatter, ["sparse", "normal", "dense"] as const)
-        ? p.scatter
-        : base.scatter,
-    };
-  } catch {
-    return base;
-  }
-}
-
-export function saveSettings(s: WorldSettings): void {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-  } catch {
-    // storage disabled — settings just won't persist
-  }
-}
-
-const SEED_WORDS = [
-  "amber", "basalt", "cinder", "delta", "ember", "fern", "glade", "hollow",
-  "iris", "jetty", "kelp", "loam", "marsh", "nettle", "onyx", "pollen",
-  "quarry", "reed", "silt", "thicket", "umber", "verge", "willow", "zephyr",
-];
-
-/** Human-readable random seed — nicer to read back to a friend than hex. */
-export function randomSeed(): string {
-  const pick = () => SEED_WORDS[Math.floor(Math.random() * SEED_WORDS.length)];
-  return `${pick()}-${pick()}`;
+  ctx.putImageData(img, 0, 0);
 }

@@ -14,8 +14,22 @@
 // no PartyKit imports, no Node APIs.
 
 export type LocomotionType = "none" | "wheels" | "tracks" | "legs" | "float";
-export type TerrainType = "grass" | "sand" | "swamp";
+/** Movement classes, not biomes. The world paints ten Kenney biomes; they all
+ *  collapse into these six for the purposes of "can this machine cross it, and
+ *  how fast" — which is the only terrain question the Fabricator answers. */
+export type TerrainType = "grass" | "sand" | "swamp" | "rock" | "snow" | "water";
 export type MaterialType = "wood" | "stone" | "bogiron";
+
+export const TERRAINS: readonly TerrainType[] = [
+  "grass",
+  "sand",
+  "swamp",
+  "rock",
+  "snow",
+  "water",
+];
+
+export type TerrainModifiers = Record<TerrainType, number>;
 export type PartKind =
   | "wheel"
   | "leg"
@@ -40,8 +54,9 @@ export type FabricatedSpec = {
     /** Base speed in px/s on ideal terrain. 0 for structures/tools. */
     speed: number;
     /** Speed multipliers per terrain, 0..1. This is where "Swamp Buggy ≠
-     *  Car" lives. */
-    terrainModifiers: Record<TerrainType, number>;
+     *  Car" lives — and, since water is in here, where a raft becomes the
+     *  only way across the sea. 0 means "cannot enter at all". */
+    terrainModifiers: TerrainModifiers;
   };
   /** Resource gathering. On a tool: boosts the carrying player. On a
    *  vehicle: harvests nodes it touches while driven. */
@@ -95,8 +110,11 @@ export const SPEC_JSON_SCHEMA = {
             grass: { type: "number" },
             sand: { type: "number" },
             swamp: { type: "number" },
+            rock: { type: "number" },
+            snow: { type: "number" },
+            water: { type: "number" },
           },
-          required: ["grass", "sand", "swamp"],
+          required: ["grass", "sand", "swamp", "rock", "snow", "water"],
           additionalProperties: false,
         },
       },
@@ -171,7 +189,7 @@ export function validateSpec(raw: unknown): string[] {
   }
   if (typeof loco?.speed !== "number") errs.push("bad locomotion.speed");
   const mods = loco?.terrainModifiers as Record<string, unknown> | undefined;
-  for (const t of ["grass", "sand", "swamp"]) {
+  for (const t of TERRAINS) {
     if (typeof mods?.[t] !== "number") errs.push(`bad terrainModifiers.${t}`);
   }
   if (o.harvest !== undefined && o.harvest !== null) {
@@ -215,9 +233,46 @@ export function validateSpec(raw: unknown): string[] {
 const clamp = (n: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, Number.isFinite(n) ? n : lo));
 
+export const NO_TERRAIN: TerrainModifiers = {
+  grass: 0,
+  sand: 0,
+  swamp: 0,
+  rock: 0,
+  snow: 0,
+  water: 0,
+};
+
+/**
+ * Fill in modifiers a spec doesn't carry. Designs compiled before rock/snow/
+ * water existed are stored permanently and still have to drive, so the missing
+ * classes are inferred from the ones they do have rather than defaulting to
+ * zero — which would strand every pre-existing machine the moment it left the
+ * grass. Water is the exception: crossing it is a capability you have to have
+ * been designed for, so only a float hull gets it by default.
+ */
+export function normalizeModifiers(
+  mods: Partial<TerrainModifiers> | undefined,
+  locomotionType: LocomotionType,
+): TerrainModifiers {
+  const m = mods ?? {};
+  const grass = m.grass ?? 0;
+  const sand = m.sand ?? 0;
+  const swamp = m.swamp ?? 0;
+  return {
+    grass,
+    sand,
+    swamp,
+    // Bare rock rewards whatever copes with rough ground.
+    rock: m.rock ?? Math.min(sand, grass) * 0.7,
+    // Snow is soft going: closer to the bog than to the plain.
+    snow: m.snow ?? (grass + swamp) / 2 * 0.8,
+    water: m.water ?? (locomotionType === "float" ? 0.9 : 0),
+  };
+}
+
 /** Enforce simulation-safe bounds no matter what the compiler returns. */
 export function clampSpec(raw: RawSpec): RawSpec {
-  const t = raw.locomotion.terrainModifiers;
+  const t = normalizeModifiers(raw.locomotion.terrainModifiers, raw.locomotion.type);
   // Anything that can't move has no meaningful terrain modifiers. Compilers
   // fill that dead field arbitrarily (observed: one structure at 1/1/1,
   // another at 0/0/0), which would otherwise leak into computeCost as
@@ -234,12 +289,10 @@ export function clampSpec(raw: RawSpec): RawSpec {
       type: raw.locomotion.type,
       speed: immobile ? 0 : clamp(raw.locomotion.speed, 40, 360),
       terrainModifiers: immobile
-        ? { grass: 0, sand: 0, swamp: 0 }
-        : {
-            grass: clamp(t.grass, 0, 1),
-            sand: clamp(t.sand, 0, 1),
-            swamp: clamp(t.swamp, 0, 1),
-          },
+        ? { ...NO_TERRAIN }
+        : (Object.fromEntries(
+            TERRAINS.map((k) => [k, clamp(t[k], 0, 1)]),
+          ) as TerrainModifiers),
     },
     harvest: raw.harvest
       ? {

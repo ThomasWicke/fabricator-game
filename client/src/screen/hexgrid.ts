@@ -37,17 +37,18 @@ export function hexImageTopLeft(col: number, row: number): { x: number; y: numbe
  * Nearest hex to a world point. Uses the row/col estimate then checks the
  * neighborhood by true distance — robust at the staggered edges without
  * cube-coordinate rounding.
+ *
+ * The world is unbounded in both axes (negative coordinates are ordinary), so
+ * this never clamps: there is no edge of the map to fall off.
  */
-export function worldToHex(x: number, y: number, cols: number, rows: number): HexCoord {
+export function worldToHex(x: number, y: number): HexCoord {
   const rowGuess = Math.round((y - HEX_TOP_H / 2) / ROW_H);
   let best: HexCoord = { col: 0, row: 0 };
   let bestDist = Infinity;
   for (let row = rowGuess - 1; row <= rowGuess + 1; row++) {
-    if (row < 0 || row >= rows) continue;
     const offset = row % 2 !== 0 ? HEX_W / 2 : 0;
     const colGuess = Math.round((x - offset - HEX_W / 2) / HEX_W);
     for (let col = colGuess - 1; col <= colGuess + 1; col++) {
-      if (col < 0 || col >= cols) continue;
       const c = hexToWorld(col, row);
       const d = (c.x - x) ** 2 + (c.y - y) ** 2;
       if (d < bestDist) {

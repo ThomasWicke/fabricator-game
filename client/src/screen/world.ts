@@ -5,16 +5,16 @@
 // Split-screen: two cameras over one world, one per player (DST-couch-co-op
 // style), fixed vertical split for now.
 //
-// Terrain is a hexagonal grid (Kenney iso-hex tiles, CC0) stamped once into
-// a static RenderTexture. Play is continuous — entities move freely in
-// pixels — but terrain lookup and structure placement are hexagonal, and
-// hexgrid.ts already knows each hex's 6 neighbors: the foundation for
-// connecting fabricated structures into production lines later.
+// The world is ENDLESS. Terrain is a pure function of (hex, seed) in
+// worldgen.ts; chunks.ts streams it in and out around the two cameras as
+// RenderTextures. Nothing here holds a map — there is no map to hold, and no
+// edge to reach. Resource nodes live and die with their chunk; the only thing
+// that persists is the set of hexes players have actually worked.
 //
-// Terrain comes from worldgen.ts — a seeded, Phaser-free generator: a grass
-// interior with a sand shore around the rim, swamp blobs from a noise
-// moisture field, and a guaranteed clearing at the Fabricator pad. Bogiron
-// only spawns in swamp, which is what gates swamp-capable machines.
+// Play is continuous — entities move freely in pixels — but terrain lookup and
+// structure placement are hexagonal, and hexgrid.ts knows each hex's 6
+// neighbours: the foundation for connecting fabricated structures into
+// production lines later.
 //
 // v1 economy: trees/rocks/bogiron deposits are harvestable nodes feeding a
 // shared team stockpile; fabrication charges a per-material bill computed
@@ -33,33 +33,46 @@ import type {
   MaterialType,
   TerrainType,
 } from "../../../shared/fabricator/schema";
+import { normalizeModifiers } from "../../../shared/fabricator/schema";
 import { canAfford, formatCost } from "../../../shared/fabricator/cost";
+import { HEX_W, ROW_H, hexToWorld, worldToHex } from "./hexgrid";
 import {
-  HEX_IMG_H,
-  HEX_W,
-  ROW_H,
-  hexImageTopLeft,
-  hexToWorld,
-  worldToHex,
-} from "./hexgrid";
+  CHUNK_COLS,
+  CHUNK_ROWS,
+  ChunkField,
+  chunkKey,
+  chunkOfHex,
+  dropFor,
+  type ChunkKey,
+} from "./chunks";
+import { makePadTexture, makePartTextures, makeParticleTextures } from "./textures";
 import {
-  makePadTexture,
-  makePartTextures,
-  makeParticleTextures,
-  mulberry32,
-} from "./textures";
-import {
-  DEFAULT_SETTINGS,
-  generateWorld,
-  type WorldSettings,
+  BIOMES,
+  BIOME_TILE_KEYS,
+  DECOR_KEYS,
+  SCATTER_KEYS,
+  type BiomeType,
+  biomeAt,
+  findSpawn,
+  inClearing,
+  isLiquid,
+  scatterAt,
+  terrainOf,
+  worldSeed,
 } from "./worldgen";
 
-// World dimensions come from the generator now (they follow the world-size
-// setting), so they live on the scene rather than as module constants.
 const WALK_SPEED = 220;
 const SPRINT_MULT = 1.65;
-/** On-foot terrain penalties — the bog is miserable without a machine. */
-const WALK_MODS: Record<TerrainType, number> = { grass: 1, sand: 0.85, swamp: 0.35 };
+/** On-foot terrain penalties. Water and lava aren't slow, they're closed —
+ *  crossing them is what a fabricated hull is for. */
+const WALK_MODS: Record<TerrainType, number> = {
+  grass: 1,
+  sand: 0.85,
+  swamp: 0.35,
+  rock: 0.7,
+  snow: 0.55,
+  water: 0,
+};
 const ENTER_RANGE = 70;
 const HARVEST_RANGE = 56;
 /** Both split-screen viewports are half-width, so the world needs magnifying
@@ -70,10 +83,6 @@ const HAND_RATE = 0.8;
 const HAND_MATERIALS: MaterialType[] = ["wood", "stone"];
 const STARTING_STOCK: Record<MaterialType, number> = { wood: 25, stone: 15, bogiron: 0 };
 const PLAYER_SCALE = 0.45;
-/** The bog surface sits this many px below the surrounding ground, so the
- *  biome border reads as a step down (and back up). Small enough that the
- *  tile above still covers the gap with its slab side. */
-const SWAMP_DROP = 6;
 /** Pines carry 8px of transparent padding below the trunk in every size
  *  variant, so origin(0.5,1) alone would bury them. */
 const PINE_PAD = 8;
@@ -93,21 +102,33 @@ const NIGHT_ALPHA = 0.74;
  *  through it with additive blending. */
 const DEPTH_DARKNESS = 900_000;
 const DEPTH_LIGHT = 900_001;
+const DEPTH_POINTER = 950_000;
+/**
+ * How far ahead of itself a walker checks for water, in pixels. Roughly the
+ * half-depth of the body: enough that you stop at the water's edge rather
+ * than in it, and no more.
+ *
+ * Bigger is NOT safer here. Hexes tile diagonally, so a long axis-aligned
+ * probe from the southern lip of a hex reaches into the *south-east*
+ * neighbour — and on a diagonal coastline that neighbour is sea while the
+ * hex due east is dry sand. An over-long probe therefore refuses moves that
+ * are plainly fine, and you get stuck walking the shore. A frame of movement
+ * is only ~6px even at a sprint, so this stays well ahead of the body.
+ */
+const WALK_PROBE = 10;
+/** Headings tried when the way ahead is water, in order of preference:
+ *  straight on, then bending either way. Stops at ±75° — past that you're
+ *  no longer going where you asked to go. */
+const SHORE_FAN = [0, 0.4, -0.4, 0.8, -0.8, 1.3, -1.3];
+/** Below this multiplier a machine simply cannot enter the ground at all. */
+const IMPASSABLE = 0.03;
 
-const HEX_ASSETS = [
-  "tileGrass",
-  "tileSand",
-  "tileMagic",
-  "pineGreen_low",
-  "pineGreen_mid",
-  "pineGreen_high",
-  "rockStone",
-  "bushGrass",
-  "bushMagic",
-  "flowerRed",
-  "flowerBlue",
-  "flowerWhite",
-];
+/** The partner arrow appears only inside this range — beyond it you're on
+ *  your own expedition and an arrow is just clutter. */
+const POINTER_RANGE = 1300;
+/** Margin from the viewport edge the arrow rides at, in screen pixels. */
+const POINTER_INSET = 52;
+
 const ALIEN_SKINS = { 1: "alienPink", 2: "alienYellow" } as const;
 const ALIEN_FRAMES = ["stand", "walk1", "walk2", "climb1", "climb2"];
 
@@ -153,6 +174,9 @@ type VehicleEntity = {
   bodyImg: Phaser.GameObjects.Image;
   parts: { img: Phaser.GameObjects.Image; kind: string; baseY: number }[];
   spec: FabricatedSpec;
+  /** terrainModifiers with the newer movement classes filled in — designs
+   *  compiled before rock/snow/water existed still have to drive. */
+  mods: Record<TerrainType, number>;
   driver: Slot | null;
   /** Second rider, when the spec has the seats for one. */
   passenger: Slot | null;
@@ -166,7 +190,7 @@ type VehicleEntity = {
 };
 
 type ResourceNode = {
-  sprite: Phaser.GameObjects.GameObject & { x: number; y: number };
+  sprite: Phaser.GameObjects.Image;
   /** Invisible static body at the hex center — collision is decoupled from
    *  the visual so tall sprites with shifted origins can't desync it. */
   blocker: Phaser.GameObjects.Rectangle;
@@ -183,30 +207,50 @@ type ResourceNode = {
   remaining: number;
 };
 
+/** What the minimap needs. Sampled on demand rather than pushed, because it
+ *  redraws far more slowly than the world ticks. */
+export type MinimapData = {
+  seed: number;
+  spawn: { col: number; row: number };
+  centre: { col: number; row: number };
+  players: { slot: Slot; col: number; row: number; color: number }[];
+  built: { col: number; row: number }[];
+  biome: BiomeType;
+};
+
 export class WorldScene extends Phaser.Scene {
-  private seed = "fabricator";
+  private seedText = "fabricator";
+  private seed = 0;
   private players = new Map<Slot, PlayerEntity>();
   private vehicles: VehicleEntity[] = [];
-  private nodes: ResourceNode[] = [];
-  /** biome[row][col] */
-  private biome: TerrainType[][] = [];
   private obstacles!: Phaser.Physics.Arcade.StaticGroup;
   private cam2!: Phaser.Cameras.Scene2D.Camera;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private pad!: { x: number; y: number };
+  private spawn = { col: 0, row: 0 };
   private fabFx: Phaser.GameObjects.GameObject[] = [];
-  private darkness!: Phaser.GameObjects.Rectangle;
+  /** One night overlay per viewport: an endless world has no rectangle a
+   *  single quad could cover, and the two cameras can be anywhere. */
+  private darkness: Phaser.GameObjects.Rectangle[] = [];
   private spawnCount = 0;
+  private field!: ChunkField;
 
-  private settings: WorldSettings = DEFAULT_SETTINGS;
-  private cols = 0;
-  private rows = 0;
-  private worldW = 0;
-  private worldH = 0;
+  /** Arrow pointing at the other player, one per viewport. */
+  private pointers = new Map<Slot, {
+    container: Phaser.GameObjects.Container;
+    arrow: Phaser.GameObjects.Triangle;
+    label: Phaser.GameObjects.Text;
+  }>();
+
   private nodeByHex = new Map<string, ResourceNode>();
+  private nodesByChunk = new Map<ChunkKey, ResourceNode[]>();
   /** Nodes whose remaining count differs from the deterministic baseline —
-   *  the only node state a save needs to carry. */
+   *  the only node state a save needs to carry. Survives chunk unload, which
+   *  is what makes a worked-out grove stay worked out when you walk back. */
   private harvestDeltas = new Map<string, { col: number; row: number; remaining: number }>();
+  /** biomeAt is pure but not free, and the sim asks about the same few hexes
+   *  every frame. Bounded so an endless world can't grow an endless cache. */
+  private biomeCache = new Map<string, BiomeType>();
 
   stockpile: Stockpile = { ...STARTING_STOCK };
   /** Screen shell subscribes for the HUD. */
@@ -228,15 +272,16 @@ export class WorldScene extends Phaser.Scene {
     super("world");
   }
 
-  init(data: { seed?: string; settings?: WorldSettings }) {
-    if (data.seed) this.seed = data.seed;
-    // The room code seeds the world unless the lobby picked its own seed.
-    this.settings = data.settings ?? { ...DEFAULT_SETTINGS, seed: this.seed };
+  init(data: { seed?: string }) {
+    if (data.seed) this.seedText = data.seed;
+    this.seed = worldSeed(this.seedText);
   }
 
   preload() {
     this.load.setPath("/assets/hex");
-    for (const key of HEX_ASSETS) this.load.image(key, `${key}.png`);
+    for (const key of new Set([...BIOME_TILE_KEYS, ...DECOR_KEYS, ...SCATTER_KEYS])) {
+      this.load.image(key, `${key}.png`);
+    }
     this.load.setPath("/assets/aliens");
     for (const skin of Object.values(ALIEN_SKINS)) {
       for (const f of ALIEN_FRAMES) this.load.image(`${skin}_${f}`, `${skin}_${f}.png`);
@@ -252,147 +297,22 @@ export class WorldScene extends Phaser.Scene {
     makePartTextures(this);
     makeParticleTextures(this);
 
-    const rng = mulberry32(this.seed);
-
-    // ── terrain, from the seeded generator ─────────────────────
-    // worldgen is deliberately Phaser-free: the same call produces the
-    // minimap the lobby will preview, so what you pick is what you land in.
-    const generated = generateWorld(this.settings);
-    this.cols = generated.cols;
-    this.rows = generated.rows;
-    this.worldW = this.cols * HEX_W + HEX_W / 2;
-    // last row's slab side must fit: (rows-1)·ROW_H + full image height
-    this.worldH = (this.rows - 1) * ROW_H + HEX_IMG_H;
-    this.biome = generated.tiles;
-
-    const tileFor: Record<TerrainType, string> = {
-      grass: "tileGrass",
-      sand: "tileSand",
-      swamp: "tileMagic",
-    };
-
-    // Full 3D tiles, rows drawn top→bottom: with ROW_H matched to the art
-    // (see hexgrid.ts) each row's top faces cover the slab sides of the row
-    // above, so the interior reads flat and only the southern edge shows
-    // depth. Bog tiles are stamped SWAMP_DROP lower, which uncovers that
-    // much of the neighbouring tile's slab — the step down into the bog.
-    const ground = this.add.renderTexture(0, 0, this.worldW, this.worldH).setOrigin(0, 0);
-    ground.setDepth(-10);
-    ground.beginDraw();
-    for (let row = 0; row < this.rows; row++) {
-      for (let col = 0; col < this.cols; col++) {
-        const t = this.biome[row][col];
-        const tl = hexImageTopLeft(col, row);
-        ground.batchDraw(tileFor[t], tl.x, tl.y + this.dropAt(col, row));
-      }
-    }
-    // decorations are static → stamp them into the ground texture too
-    const decoCount = Math.round(this.cols * this.rows * 0.08);
-    for (let i = 0; i < decoCount; i++) {
-      const col = Math.floor(rng() * this.cols);
-      const row = Math.floor(rng() * this.rows);
-      const t = this.biome[row][col];
-      if (t === "sand") continue;
-      const c = hexToWorld(col, row);
-      const deco =
-        t === "swamp"
-          ? "bushMagic"
-          : ["bushGrass", "flowerRed", "flowerBlue", "flowerWhite"][Math.floor(rng() * 4)];
-      const img = this.textures.get(deco).getSourceImage();
-      ground.batchDraw(
-        deco,
-        c.x - img.width / 2,
-        c.y - img.height + 4 + this.dropAt(col, row),
-      );
-    }
-    ground.endDraw();
-
-    // ── resource nodes on hex centers (double as obstacles) ─────
     this.obstacles = this.physics.add.staticGroup();
-    const spawnHex = { col: generated.spawn.tx, row: generated.spawn.ty };
 
-    /**
-     * Two art conventions in the pack, and they need different anchoring:
-     *  • "boulder" (rockStone) is 65px wide — a full hex's worth of art,
-     *    authored to be stamped at the tile's own top-left.
-     *  • "pine" is a narrow prop that stands on the tile, with 8px of
-     *    transparent padding below its trunk.
-     * Collision is a separate invisible rect matched to the ground
-     * footprint, so it can never drift from the art the way a body derived
-     * from a shifted sprite origin does.
-     */
-    const addNode = (
-      col: number,
-      row: number,
-      texture: string,
-      material: MaterialType,
-      units: number,
-      art: "boulder" | "pine",
-      tint?: number,
-    ) => {
-      const c = hexToWorld(col, row);
-      const drop = this.dropAt(col, row);
-      const cy = c.y + drop;
+    // ── the landing site ────────────────────────────────────────
+    // Nothing is carved or cleared: findSpawn walks the field until it finds
+    // ground that was already good, which is the endless world's version of
+    // "generate a starting area".
+    this.spawn = findSpawn(this.seed);
+    const padWorld = hexToWorld(this.spawn.col, this.spawn.row);
+    this.pad = { x: padWorld.x, y: padWorld.y };
 
-      let s: Phaser.GameObjects.Image;
-      let bodyW: number;
-      let bodyH: number;
-      let bodyDY: number;
-      if (art === "boulder") {
-        // Boulders are raised blocks. Sunk along with the bog surface they
-        // cut into the higher grass hexes at the biome step, so they sit at
-        // un-dropped height — resting on the bog rather than in it.
-        const tl = hexImageTopLeft(col, row);
-        s = this.add.image(tl.x, tl.y, texture).setOrigin(0, 0);
-        bodyW = 44;
-        bodyH = 24;
-        bodyDY = 6; // the boulder meets the ground just below hex center
-      } else {
-        s = this.add.image(c.x, cy + PINE_PAD, texture).setOrigin(0.5, 1);
-        bodyW = 18;
-        bodyH = 13; // trunk only — you can brush past the canopy
-        bodyDY = 2;
-      }
-      s.setDepth(cy);
-      if (tint) s.setTint(tint);
+    // ── terrain streaming ───────────────────────────────────────
+    this.field = new ChunkField(this, this.seed, {
+      onLoad: (cx, cy) => this.loadChunkNodes(cx, cy),
+      onUnload: (cx, cy) => this.unloadChunkNodes(cx, cy),
+    });
 
-      const blocker = this.add.rectangle(c.x, cy + bodyDY, bodyW, bodyH).setVisible(false);
-      this.physics.add.existing(blocker, true);
-      this.obstacles.add(blocker);
-      const node: ResourceNode = {
-        sprite: s,
-        blocker,
-        cx: c.x,
-        cy,
-        col,
-        row,
-        material,
-        remaining: units,
-      };
-      this.nodes.push(node);
-      this.nodeByHex.set(`${col},${row}`, node);
-    };
-
-    // The generator decides what goes where; this just gives each kind its
-    // art and yield.
-    const pines = ["pineGreen_low", "pineGreen_mid", "pineGreen_high"];
-    for (const s of generated.scatter) {
-      switch (s.kind) {
-        case "tree":
-          addNode(s.tx, s.ty, pines[Math.floor(rng() * 3)], "wood", 5, "pine");
-          break;
-        case "rock":
-          addNode(s.tx, s.ty, "rockStone", "stone", 4, "boulder");
-          break;
-        case "bogiron":
-          addNode(s.tx, s.ty, "rockStone", "bogiron", 3, "boulder", 0xd9813f);
-          break;
-      }
-    }
-
-    // ── the Universal Fabricator pad ────────────────────────────
-    const padHex = hexToWorld(spawnHex.col, spawnHex.row - 2);
-    this.pad = { x: padHex.x, y: padHex.y };
     this.add.image(this.pad.x, this.pad.y, "pad").setDepth(this.pad.y);
 
     // ── players (aliens: stand=down, walk=side, climb=up) ───────
@@ -410,25 +330,25 @@ export class WorldScene extends Phaser.Scene {
         repeat: -1,
       });
     }
-    const cx = this.worldW / 2;
-    const cy = this.worldH / 2;
-    const p1 = this.spawnPlayer(1, cx - 40, cy, 0xf06eaa);
-    const p2 = this.spawnPlayer(2, cx + 40, cy, 0xffcf4d);
+    const p1 = this.spawnPlayer(1, this.pad.x - 44, this.pad.y + 52, 0xf06eaa);
+    const p2 = this.spawnPlayer(2, this.pad.x + 44, this.pad.y + 52, 0xffcf4d);
     this.physics.add.collider(p1.sprite, this.obstacles);
     this.physics.add.collider(p2.sprite, this.obstacles);
     this.physics.add.collider(p1.sprite, p2.sprite);
 
-    this.physics.world.setBounds(0, 0, this.worldW, this.worldH);
+    // No edges to fall off. The bounds exist only because Arcade wants some,
+    // and they sit far enough out that float precision gives up first.
+    this.physics.world.setBounds(-2e6, -2e6, 4e6, 4e6);
 
     // ── split-screen cameras ────────────────────────────────────
+    // Deliberately unbounded: setBounds would clamp scrolling to a rectangle,
+    // which is exactly the thing this world no longer has.
     const cam1 = this.cameras.main;
-    cam1.setBounds(0, 0, this.worldW, this.worldH);
     cam1.setZoom(CAMERA_ZOOM);
     cam1.startFollow(p1.sprite, true, 0.12, 0.12);
     cam1.setRoundPixels(true);
 
     this.cam2 = this.cameras.add();
-    this.cam2.setBounds(0, 0, this.worldW, this.worldH);
     this.cam2.setZoom(CAMERA_ZOOM);
     this.cam2.startFollow(p2.sprite, true, 0.12, 0.12);
     this.cam2.setRoundPixels(true);
@@ -436,31 +356,162 @@ export class WorldScene extends Phaser.Scene {
     this.layoutCameras();
     this.scale.on("resize", () => this.layoutCameras());
 
+    this.buildPointers(cam1, this.cam2);
+
     // ── keyboard dev fallback ───────────────────────────────────
     this.keys = this.input.keyboard!.addKeys(
       "W,A,S,D,F,G,UP,DOWN,LEFT,RIGHT,K,L",
     ) as Record<string, Phaser.Input.Keyboard.Key>;
 
-    // Night falls over the whole world; lights are drawn above it.
-    this.darkness = this.add
-      .rectangle(this.worldW / 2, this.worldH / 2, this.worldW, this.worldH, 0x0a1024)
-      .setDepth(DEPTH_DARKNESS)
-      .setAlpha(0);
+    // Night falls over each viewport separately: one quad per camera, resized
+    // and repositioned to that camera's view every frame. A single world-space
+    // rectangle can't work when the two players may be a continent apart.
+    for (const slot of [1, 2] as const) {
+      const quad = this.add
+        .rectangle(0, 0, 10, 10, 0x0a1024)
+        .setDepth(DEPTH_DARKNESS)
+        .setAlpha(0);
+      (slot === 1 ? this.cam2 : cam1).ignore(quad);
+      this.darkness.push(quad);
+    }
+
+    // Prime the ground before the first frame so the world isn't empty on
+    // arrival. startFollow doesn't move a camera until its first update, so
+    // the cameras are pointed by hand first — otherwise both would still be
+    // looking at the origin, and we'd stream in chunks nobody will see.
+    cam1.centerOn(p1.sprite.x, p1.sprite.y);
+    this.cam2.centerOn(p2.sprite.x, p2.sprite.y);
+    cam1.preRender();
+    this.cam2.preRender();
+    for (let i = 0; i < 12; i++) this.field.update([cam1, this.cam2]);
 
     this.onStockpile?.(this.stockpile);
     this.onReady?.();
   }
 
+  // ── terrain queries ───────────────────────────────────────────
+
+  private biomeAtHex(col: number, row: number): BiomeType {
+    const key = `${col},${row}`;
+    let b = this.biomeCache.get(key);
+    if (b === undefined) {
+      b = biomeAt(col, row, this.seed);
+      if (this.biomeCache.size > 4096) this.biomeCache.clear();
+      this.biomeCache.set(key, b);
+    }
+    return b;
+  }
+
+  private biomeAtPoint(x: number, y: number): BiomeType {
+    const h = worldToHex(x, y);
+    return this.biomeAtHex(h.col, h.row);
+  }
+
   private terrainAt(x: number, y: number): TerrainType {
-    const h = worldToHex(x, y, this.cols, this.rows);
-    return this.biome[h.row]?.[h.col] ?? "grass";
+    return terrainOf(this.biomeAtPoint(x, y));
   }
 
-  /** Vertical offset of a hex's surface — bog hexes sit a step lower. */
+  /** Vertical offset of a hex's surface. Relief is per biome now: the sea
+   *  sits in a basin, the bog a step down, bare rock a step up. */
   private dropAt(col: number, row: number): number {
-    return this.biome[row]?.[col] === "swamp" ? SWAMP_DROP : 0;
+    return dropFor(this.biomeAtHex(col, row));
   }
 
+  // ── resource nodes, streamed with their chunk ─────────────────
+
+  /**
+   * Two art conventions in the pack, and they need different anchoring:
+   *  • "boulder" is 65px wide — a full hex's worth of art, authored to be
+   *    stamped at the tile's own top-left.
+   *  • "pine" is a narrow prop that stands on the tile, with 8px of
+   *    transparent padding below its trunk.
+   * Collision is a separate invisible rect matched to the ground footprint,
+   * so it can never drift from the art the way a body derived from a shifted
+   * sprite origin does.
+   */
+  private loadChunkNodes(cx: number, cy: number): void {
+    const key = chunkKey(cx, cy);
+    if (this.nodesByChunk.has(key)) return;
+    const list: ResourceNode[] = [];
+
+    for (let row = cy * CHUNK_ROWS; row < (cy + 1) * CHUNK_ROWS; row++) {
+      for (let col = cx * CHUNK_COLS; col < (cx + 1) * CHUNK_COLS; col++) {
+        if (inClearing(col, row, this.spawn)) continue;
+        const biome = this.biomeAtHex(col, row);
+        const entry = scatterAt(col, row, this.seed, biome);
+        if (!entry) continue;
+
+        const hex = `${col},${row}`;
+        const delta = this.harvestDeltas.get(hex);
+        if (delta && delta.remaining <= 0) continue; // worked out; stays gone
+        const remaining = delta ? delta.remaining : entry.units;
+
+        const c = hexToWorld(col, row);
+        // Boulders are raised blocks. Sunk along with a lowered biome surface
+        // they cut into the higher hexes at the border, so they sit at
+        // un-dropped height — resting on the bog rather than in it.
+        const drop = dropFor(biome);
+        const cy2 = c.y + drop;
+
+        let sprite: Phaser.GameObjects.Image;
+        let bodyW: number;
+        let bodyH: number;
+        let bodyDY: number;
+        if (entry.art === "boulder") {
+          sprite = this.add
+            .image(c.x - HEX_W / 2, c.y - 32, entry.texture)
+            .setOrigin(0, 0);
+          bodyW = 44;
+          bodyH = 24;
+          bodyDY = 6; // the boulder meets the ground just below hex center
+        } else {
+          sprite = this.add
+            .image(c.x, cy2 + PINE_PAD, entry.texture)
+            .setOrigin(0.5, 1);
+          bodyW = 18;
+          bodyH = 13; // trunk only — you can brush past the canopy
+          bodyDY = 2;
+        }
+        sprite.setDepth(cy2);
+        if (entry.tint) sprite.setTint(entry.tint);
+
+        const blocker = this.add
+          .rectangle(c.x, cy2 + bodyDY, bodyW, bodyH)
+          .setVisible(false);
+        this.physics.add.existing(blocker, true);
+        this.obstacles.add(blocker);
+
+        const material: MaterialType =
+          entry.kind === "tree" ? "wood" : entry.kind === "rock" ? "stone" : "bogiron";
+        const node: ResourceNode = {
+          sprite,
+          blocker,
+          cx: c.x,
+          cy: cy2,
+          col,
+          row,
+          material,
+          remaining,
+        };
+        list.push(node);
+        this.nodeByHex.set(hex, node);
+      }
+    }
+    this.nodesByChunk.set(key, list);
+  }
+
+  private unloadChunkNodes(cx: number, cy: number): void {
+    const key = chunkKey(cx, cy);
+    const list = this.nodesByChunk.get(key);
+    if (!list) return;
+    for (const node of list) {
+      this.nodeByHex.delete(`${node.col},${node.row}`);
+      this.tweens.killTweensOf(node.sprite);
+      node.sprite.destroy();
+      node.blocker.destroy();
+    }
+    this.nodesByChunk.delete(key);
+  }
 
   private spawnPlayer(slot: Slot, x: number, y: number, color: number): PlayerEntity {
     const skin = ALIEN_SKINS[slot];
@@ -499,6 +550,42 @@ export class WorldScene extends Phaser.Scene {
     return entity;
   }
 
+  /**
+   * One arrow per viewport, pointing at the *other* player. Each is hidden
+   * from the camera it isn't for — otherwise both would appear in both halves
+   * of the split screen, each pointing at the wrong person.
+   */
+  private buildPointers(
+    cam1: Phaser.Cameras.Scene2D.Camera,
+    cam2: Phaser.Cameras.Scene2D.Camera,
+  ): void {
+    for (const slot of [1, 2] as const) {
+      const other = slot === 1 ? 2 : 1;
+      const color = other === 1 ? 0xf06eaa : 0xffcf4d;
+      const arrow = this.add
+        .triangle(0, 0, 0, -13, 12, 11, -12, 11, color)
+        .setStrokeStyle(2, 0x0d1420, 0.85);
+      const label = this.add
+        .text(0, 20, "", {
+          fontFamily: "system-ui, sans-serif",
+          fontSize: "10px",
+          fontStyle: "bold",
+          color: "#e8f0fb",
+          backgroundColor: "rgba(8,14,26,0.6)",
+          padding: { x: 4, y: 1 },
+        })
+        .setOrigin(0.5, 0.5);
+      const container = this.add
+        .container(0, 0, [arrow, label])
+        .setDepth(DEPTH_POINTER)
+        .setVisible(false);
+      // Constant on-screen size regardless of camera zoom.
+      container.setScale(1 / CAMERA_ZOOM);
+      (slot === 1 ? cam2 : cam1).ignore(container);
+      this.pointers.set(slot, { container, arrow, label });
+    }
+  }
+
   private layoutCameras() {
     const w = this.scale.width;
     const h = this.scale.height;
@@ -527,21 +614,24 @@ export class WorldScene extends Phaser.Scene {
 
   /** Remove a node from the world (harvested out, or restored as gone). */
   private removeNode(node: ResourceNode, animate: boolean) {
-    const i = this.nodes.indexOf(node);
-    if (i >= 0) this.nodes.splice(i, 1);
     this.nodeByHex.delete(`${node.col},${node.row}`);
+    const { cx, cy } = chunkOfHex(node.col, node.row);
+    const list = this.nodesByChunk.get(chunkKey(cx, cy));
+    if (list) {
+      const i = list.indexOf(node);
+      if (i >= 0) list.splice(i, 1);
+    }
     node.blocker.destroy(); // frees the hex for walking immediately
-    const s = node.sprite as unknown as Phaser.GameObjects.Sprite;
     if (!animate) {
-      s.destroy();
+      node.sprite.destroy();
       return;
     }
     this.tweens.add({
-      targets: s,
+      targets: node.sprite,
       alpha: 0,
       scale: 0.6,
       duration: 250,
-      onComplete: () => s.destroy(),
+      onComplete: () => node.sprite.destroy(),
     });
   }
 
@@ -587,8 +677,6 @@ export class WorldScene extends Phaser.Scene {
   /**
    * Manufacture a Design: charge the bill and materialize it. Returns an
    * error string if the team can't afford it (nothing spawned or charged).
-   * `artDataUrl` is already display-ready — the screen shell chroma-keys
-   * generated art once, when the design is created.
    */
   tryFabricate(design: PlaceableDesign, bySlot: Slot): string | null {
     this.clearFabricating();
@@ -678,10 +766,10 @@ export class WorldScene extends Phaser.Scene {
     let x = atX ?? this.pad.x + 110 + (this.spawnCount % 3) * 30;
     let y = atY ?? this.pad.y + 60 + Math.floor(this.spawnCount / 3) * 30;
     if (atX === undefined) this.spawnCount++;
-    // Structures live on the hex grid — snap to the nearest free-ish hex
-    // center. (Future: 6-edge connections to neighboring structures.)
+    // Structures live on the hex grid — snap to the nearest hex center.
+    // (Future: 6-edge connections to neighboring structures.)
     if (spec.category !== "vehicle" && atX === undefined) {
-      const hex = worldToHex(x, y, this.cols, this.rows);
+      const hex = worldToHex(x, y);
       const c = hexToWorld(hex.col, hex.row);
       x = c.x;
       y = c.y + this.dropAt(hex.col, hex.row);
@@ -714,7 +802,6 @@ export class WorldScene extends Phaser.Scene {
       .setOrigin(0.5, 1);
 
     const children: Phaser.GameObjects.GameObject[] = [body, ...parts.map((p) => p.img)];
-
     children.push(label);
 
     const container = this.add.container(x, y, children);
@@ -733,6 +820,7 @@ export class WorldScene extends Phaser.Scene {
       bodyImg: body,
       parts,
       spec,
+      mods: normalizeModifiers(spec.locomotion.terrainModifiers, spec.locomotion.type),
       driver: null,
       passenger: null,
       nextHarvestAt: 0,
@@ -793,14 +881,26 @@ export class WorldScene extends Phaser.Scene {
 
   // ── harvesting ────────────────────────────────────────────────
 
+  /**
+   * Nearest node within range. Looks up the hexes around the point rather
+   * than scanning every node: in an endless world the resident node count
+   * grows with view distance, and this has to stay O(1).
+   */
   private nearestNode(x: number, y: number, range: number): ResourceNode | null {
+    const h = worldToHex(x, y);
+    const spanCol = Math.ceil(range / HEX_W) + 1;
+    const spanRow = Math.ceil(range / ROW_H) + 1;
     let best: ResourceNode | null = null;
     let bestDist = Infinity;
-    for (const n of this.nodes) {
-      const d = Phaser.Math.Distance.Between(x, y, n.cx, n.cy);
-      if (d < range && d < bestDist) {
-        best = n;
-        bestDist = d;
+    for (let dr = -spanRow; dr <= spanRow; dr++) {
+      for (let dc = -spanCol; dc <= spanCol; dc++) {
+        const node = this.nodeByHex.get(`${h.col + dc},${h.row + dr}`);
+        if (!node) continue;
+        const d = Phaser.Math.Distance.Between(x, y, node.cx, node.cy);
+        if (d < range && d < bestDist) {
+          best = node;
+          bestDist = d;
+        }
       }
     }
     return best;
@@ -817,8 +917,7 @@ export class WorldScene extends Phaser.Scene {
     });
     this.addStock(node.material, 1);
 
-    const s = node.sprite as unknown as Phaser.GameObjects.Sprite;
-    this.tweens.add({ targets: s, scale: { from: 1.12, to: 1 }, duration: 120 });
+    this.tweens.add({ targets: node.sprite, scale: { from: 1.12, to: 1 }, duration: 120 });
     this.floatText(node.cx, node.cy - 40, `+1 ${node.material}`, "#c9e77f");
 
     if (node.remaining <= 0) this.removeNode(node, true);
@@ -827,13 +926,14 @@ export class WorldScene extends Phaser.Scene {
 
   // ── save / restore ────────────────────────────────────────────
   //
-  // Terrain regenerates deterministically from the room code, so a save
-  // carries only what diverges from it.
+  // Terrain is a pure function of the room code, so a save carries only what
+  // diverges from it: the stockpile, the hexes that have been worked, and
+  // what has been built.
 
   snapshot(): WorldSnapshot {
     return {
-      v: 1,
-      settings: this.settings,
+      v: 2,
+      seed: this.seedText,
       stockpile: { ...this.stockpile },
       harvested: [...this.harvestDeltas.values()],
       built: this.vehicles.map((v) => ({
@@ -847,8 +947,8 @@ export class WorldScene extends Phaser.Scene {
     };
   }
 
-  /** Apply a saved world over the freshly generated terrain. `resolve` looks
-   *  up a Design by id (the catalog arrives on the same socket). */
+  /** Apply a saved world over the generated terrain. `resolve` looks up a
+   *  Design by id (the catalog arrives on the same socket). */
   applySnapshot(
     snap: WorldSnapshot,
     resolve: (designId: string) => PlaceableDesign | null,
@@ -859,6 +959,8 @@ export class WorldScene extends Phaser.Scene {
     for (const h of snap.harvested) {
       const key = `${h.col},${h.row}`;
       this.harvestDeltas.set(key, h);
+      // Only chunks currently resident have a node to correct; the rest is
+      // applied by loadChunkNodes when they stream in.
       const node = this.nodeByHex.get(key);
       if (!node) continue;
       if (h.remaining <= 0) this.removeNode(node, false);
@@ -946,7 +1048,17 @@ export class WorldScene extends Phaser.Scene {
     // as a sunset rather than a light switch.
     const t = (now % DAY_MS) / DAY_MS; // 0 = dawn, 0.5 = dusk
     const night = (1 - Math.cos(t * Math.PI * 2)) / 2; // 0 at noon, 1 at midnight
-    this.darkness.setAlpha(night * night * NIGHT_ALPHA);
+    const gloom = night * night * NIGHT_ALPHA;
+    const cams = [this.cameras.main, this.cam2];
+    for (let i = 0; i < this.darkness.length; i++) {
+      const v = cams[i].worldView;
+      // A hair oversized: rounding at the viewport edge otherwise leaves a
+      // bright one-pixel seam along the split.
+      this.darkness[i]
+        .setPosition(v.centerX, v.centerY)
+        .setSize(v.width + 4, v.height + 4)
+        .setAlpha(gloom);
+    }
 
     for (const v of this.vehicles) {
       if (!v.glow || !v.glowOffset) continue;
@@ -972,9 +1084,17 @@ export class WorldScene extends Phaser.Scene {
       }
 
       // on foot
-      const mod = WALK_MODS[this.terrainAt(p.sprite.x, p.sprite.y)];
+      const feet = (p.sprite.body as Phaser.Physics.Arcade.Body).center;
+      // Stranded = standing somewhere nothing on foot belongs (stepped off a
+      // raft, or the ground changed under a restored save). Then every
+      // direction stays open at a wading pace, so you can never be trapped.
+      const stranded = !this.walkable(feet.x, feet.y);
+      const mod = stranded ? 0.5 : WALK_MODS[this.terrainAt(feet.x, feet.y)];
       const speed = WALK_SPEED * mod * (input.buttons.b ? SPRINT_MULT : 1);
-      p.sprite.setVelocity(input.stick.x * speed, input.stick.y * speed);
+      const [vx, vy] = stranded
+        ? [input.stick.x * speed, input.stick.y * speed]
+        : this.slideAlongShore(feet, input.stick, speed);
+      p.sprite.setVelocity(vx, vy);
 
       const moving = Math.hypot(input.stick.x, input.stick.y) > 0.1;
       this.animatePlayer(p, input.stick.x, input.stick.y, moving);
@@ -1010,6 +1130,107 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.runAutomation(now);
+    this.updatePointers();
+    // Last: the cameras have finished following by now, so the chunks we
+    // stream are the ones about to be on screen rather than last frame's.
+    this.field.update(cams);
+  }
+
+  /** Can a walker stand here? */
+  private walkable(x: number, y: number): boolean {
+    return !isLiquid(this.biomeAtPoint(x, y));
+  }
+
+  /**
+   * Turn a stick direction into a velocity that follows the water's edge.
+   *
+   * Gating each axis independently is the obvious approach and it doesn't
+   * work: hexes tile diagonally, so on a diagonal coastline the hex due east
+   * can be dry while the one to the south-east is sea, and an axis gate
+   * refuses the move entirely. You end up glued to the beach, shuffling.
+   *
+   * Instead: if the way you're pointing is blocked, try a fan of nearby
+   * headings and take the open one closest to your intent, at the cosine of
+   * how far it had to bend. That reads as sliding along the shore, which is
+   * what a person walking a beach actually does.
+   */
+  private slideAlongShore(
+    feet: Phaser.Math.Vector2,
+    stick: StickState,
+    speed: number,
+  ): [number, number] {
+    const len = Math.hypot(stick.x, stick.y);
+    if (len < 0.05) return [0, 0];
+
+    const base = Math.atan2(stick.y, stick.x);
+    const open = (angle: number) =>
+      this.walkable(
+        feet.x + Math.cos(angle) * WALK_PROBE,
+        feet.y + Math.sin(angle) * WALK_PROBE,
+      );
+
+    // 0 first, so unobstructed walking costs exactly one lookup.
+    for (const bend of SHORE_FAN) {
+      const angle = base + bend;
+      if (!open(angle)) continue;
+      const v = speed * len * Math.cos(bend);
+      return [Math.cos(angle) * v, Math.sin(angle) * v];
+    }
+    return [0, 0]; // hemmed in on every side — the shore wins
+  }
+
+  /**
+   * The partner arrow: only when they're close enough to be worth walking to,
+   * and only when they aren't already on screen. Both conditions matter —
+   * an arrow that's always up stops being information.
+   */
+  private updatePointers(): void {
+    const cams: Record<Slot, Phaser.Cameras.Scene2D.Camera> = {
+      1: this.cameras.main,
+      2: this.cam2,
+    };
+    for (const slot of [1, 2] as const) {
+      const ui = this.pointers.get(slot)!;
+      const self = this.players.get(slot);
+      const other = this.players.get(slot === 1 ? 2 : 1);
+      if (!self || !other) {
+        ui.container.setVisible(false);
+        continue;
+      }
+      const cam = cams[slot];
+      const v = cam.worldView;
+      const d = Phaser.Math.Distance.Between(
+        self.sprite.x,
+        self.sprite.y,
+        other.sprite.x,
+        other.sprite.y,
+      );
+      const onScreen = v.contains(other.sprite.x, other.sprite.y);
+      if (d > POINTER_RANGE || onScreen) {
+        ui.container.setVisible(false);
+        continue;
+      }
+
+      // Ride the inside edge of the viewport, on the ray from the centre of
+      // this camera's view toward the other player.
+      const inset = POINTER_INSET / cam.zoom;
+      const cx = v.centerX;
+      const cy = v.centerY;
+      const dx = other.sprite.x - cx;
+      const dy = other.sprite.y - cy;
+      const halfW = Math.max(1, v.width / 2 - inset);
+      const halfH = Math.max(1, v.height / 2 - inset);
+      const k = Math.min(
+        dx === 0 ? Infinity : halfW / Math.abs(dx),
+        dy === 0 ? Infinity : halfH / Math.abs(dy),
+      );
+      ui.container.setPosition(cx + dx * k, cy + dy * k);
+      ui.arrow.setRotation(Math.atan2(dy, dx) + Math.PI / 2);
+      ui.label.setText(`${Math.round(d / HEX_W)}`);
+      // Fade with distance: a faint arrow means "far", without a number.
+      ui.container.setAlpha(1 - (d / POINTER_RANGE) * 0.45);
+      ui.container.setVisible(true);
+    }
   }
 
   /**
@@ -1098,12 +1319,26 @@ export class WorldScene extends Phaser.Scene {
     }
     p.driving = null;
     this.onRideChanged?.(p.slot, null, false);
-    // step out to the side a passenger vacates, so the two don't stack
-    const side = wasDriver ? 1 : -1;
-    p.sprite.setPosition(
-      v.container.x + side * (v.spec.size.w / 2 + 16),
-      v.container.y + v.spec.size.h / 2 + 12,
-    );
+
+    // Step out to the side a passenger vacates, so the two don't stack — but
+    // never step out into the sea. If both sides are wet you stay aboard the
+    // hull that got you there.
+    const prefer = wasDriver ? 1 : -1;
+    const candidates = [prefer, -prefer].map((side) => ({
+      x: v.container.x + side * (v.spec.size.w / 2 + 16),
+      y: v.container.y + v.spec.size.h / 2 + 12,
+    }));
+    const spot = candidates.find((c) => this.walkable(c.x, c.y));
+    if (!spot) {
+      // Nowhere dry alongside: stay in the seat rather than drown.
+      p.driving = v;
+      if (wasDriver) v.driver = p.slot;
+      else v.passenger = p.slot;
+      this.onRideChanged?.(p.slot, v.spec.displayName, v.driver === p.slot);
+      this.floatText(v.container.x, v.container.y - 30, "no dry ground", "#ff9f9f");
+      return;
+    }
+    p.sprite.setPosition(spot.x, spot.y);
     p.sprite.setVisible(true);
     p.label.setVisible(true);
     if (p.tool) {
@@ -1116,9 +1351,25 @@ export class WorldScene extends Phaser.Scene {
   private driveVehicle(p: PlayerEntity, v: VehicleEntity, input: PlayerInput, now: number) {
     const body = v.container.body as Phaser.Physics.Arcade.Body;
     const terrain = this.terrainAt(v.container.x, v.container.y);
-    const mod = v.spec.locomotion.terrainModifiers[terrain];
+    const mod = v.mods[terrain] ?? 0;
     const speed = v.spec.locomotion.speed * mod;
-    body.setVelocity(input.stick.x * speed, input.stick.y * speed);
+    let vx = input.stick.x * speed;
+    let vy = input.stick.y * speed;
+
+    // A machine can't enter ground its spec rates at zero — that's what makes
+    // a raft the only way across the water, and a wheeled buggy stop at it.
+    // Probed per axis at that axis's own half-extent: using max(w,h) for both
+    // would have a long vehicle refusing to drive within half its *length* of
+    // a shoreline it is nowhere near touching.
+    const canEnter = (x: number, y: number) =>
+      (v.mods[this.terrainAt(x, y)] ?? 0) > IMPASSABLE;
+    if (mod > IMPASSABLE) {
+      const aheadX = v.spec.size.w / 2 + 4;
+      const aheadY = v.spec.size.h / 2 + 4;
+      if (vx && !canEnter(v.container.x + Math.sign(vx) * aheadX, v.container.y)) vx = 0;
+      if (vy && !canEnter(v.container.x, v.container.y + Math.sign(vy) * aheadY)) vy = 0;
+    }
+    body.setVelocity(vx, vy);
     v.container.setDepth(v.container.y);
 
     // keep the (hidden) player and their camera glued to the vehicle
@@ -1128,8 +1379,11 @@ export class WorldScene extends Phaser.Scene {
     const hv = v.spec.harvest;
     let harvesting = false;
     if (hv) {
-      const reach = Math.max(v.spec.size.w, v.spec.size.h) / 2 + 26;
-      const node = this.nearestNode(v.container.x, v.container.y, reach);
+      const node = this.nearestNode(
+        v.container.x,
+        v.container.y,
+        Math.max(v.spec.size.w, v.spec.size.h) / 2 + 26,
+      );
       if (node && hv.materials.includes(node.material)) {
         harvesting = true;
         if (now >= v.nextHarvestAt) {
@@ -1190,5 +1444,38 @@ export class WorldScene extends Phaser.Scene {
       ease: "Cubic.easeOut",
       onComplete: () => circle.destroy(),
     });
+  }
+
+  // ── minimap ───────────────────────────────────────────────────
+
+  /** Sampled by the HUD a few times a second — cheap, and never allocates
+   *  anything the scene keeps. */
+  minimapData(): MinimapData {
+    const players = [...this.players.values()].map((p) => {
+      const h = worldToHex(p.sprite.x, p.sprite.y);
+      return { slot: p.slot, col: h.col, row: h.row, color: p.color };
+    });
+    const midX = players.reduce((s, p) => s + p.col, 0) / (players.length || 1);
+    const midY = players.reduce((s, p) => s + p.row, 0) / (players.length || 1);
+    const first = this.players.get(1);
+    return {
+      seed: this.seed,
+      spawn: this.spawn,
+      centre: { col: Math.round(midX), row: Math.round(midY) },
+      players,
+      built: this.vehicles
+        .filter((v) => v.spec.category !== "vehicle")
+        .map((v) => worldToHex(v.container.x, v.container.y)),
+      biome: first
+        ? this.biomeAtPoint(first.sprite.x, first.sprite.y)
+        : "grass",
+    };
+  }
+
+  /** Human name of the ground a player is standing on, for the HUD. */
+  biomeLabel(slot: Slot): string {
+    const p = this.players.get(slot);
+    if (!p) return "";
+    return BIOMES[this.biomeAtPoint(p.sprite.x, p.sprite.y)].label;
   }
 }

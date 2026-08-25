@@ -10,13 +10,16 @@
 //
 // ISOMORPHIC — no env access, no platform imports.
 
-import type { MaterialCost, RawSpec } from "./schema";
+import { TERRAINS, normalizeModifiers, type MaterialCost, type RawSpec } from "./schema";
 
 export function computeCost(spec: RawSpec): MaterialCost {
   const area = (spec.size.w * spec.size.h) / 400;
   const mobility = spec.locomotion.speed / 20;
-  const t = spec.locomotion.terrainModifiers;
-  const versatility = (t.grass + t.sand + t.swamp) * 4;
+  const t = normalizeModifiers(spec.locomotion.terrainModifiers, spec.locomotion.type);
+  // Averaged, not summed: adding rock/snow/water as movement classes must not
+  // silently double the price of every machine that already existed.
+  const versatility =
+    (TERRAINS.reduce((sum, k) => sum + t[k], 0) / TERRAINS.length) * 12;
   const parts = spec.anchors.length * 2;
   const harvest = spec.harvest
     ? spec.harvest.rate * 3 + spec.harvest.materials.length * 2
@@ -27,11 +30,12 @@ export function computeCost(spec: RawSpec): MaterialCost {
     Math.round(area + mobility + versatility + parts + harvest + emission),
   );
 
-  // Material split. Swamp-capable locomotion is the bogiron sink.
-  const swampCapable =
+  // Material split. Going where bare legs can't is the bogiron sink: the bog
+  // and the sea are both gated behind a trek into the bog for the iron.
+  const wetCapable =
     spec.category === "vehicle" &&
-    (t.swamp > 0.45 || spec.locomotion.type === "float");
-  const bogiron = swampCapable ? Math.round(total * 0.35) : 0;
+    (t.swamp > 0.45 || t.water > 0.2 || spec.locomotion.type === "float");
+  const bogiron = wetCapable ? Math.round(total * 0.35) : 0;
   const stone = Math.round((total - bogiron) * 0.4);
   const wood = total - bogiron - stone;
   return { wood, stone, bogiron, total };

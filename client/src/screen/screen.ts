@@ -20,22 +20,17 @@ import { formatCost } from "../../../shared/fabricator/cost";
 import { resolveIdentity } from "../identity";
 import { RoomConnection } from "../socket";
 import { keepScreenAwake } from "../wake-lock";
-import { WorldScene, type PlaceableDesign } from "./world";
+import { WorldScene, type MinimapData, type PlaceableDesign } from "./world";
 import {
-  drawWorldPreview,
-  generateWorld,
-  loadSettings,
-  randomSeed,
-  saveSettings,
-  terrainMix,
+  BIOMES,
+  type BiomeType,
+  biomeAt,
+  drawBiomeMap,
+  findSpawn,
+  worldSeed,
 } from "./worldgen";
-import {
-  AMOUNTS,
-  DENSITIES,
-  WORLD_SIZES,
-  type WorldSettings,
-} from "../../../shared/world-settings";
 import { chromaKeyBodySprite } from "./chroma";
+import { SNAPSHOT_VERSION } from "../../../party/protocol";
 import type {
   DesignAddedMsg,
   DesignBodyMsg,
@@ -77,12 +72,9 @@ export function startScreen(code: string) {
   const slotByPlayerId = new Map<string, Slot>();
   let lastStock: Record<MaterialType, number> | null = null;
   let pendingSnapshot: WorldSnapshot | null | undefined;
-  // Settings persist between sessions; the seed defaults to the room code so
-  // a fresh room is a fresh island.
-  const settings: WorldSettings = loadSettings(code);
-  /** A saved world pins its own settings — regenerating different terrain
-   *  under restored objects would put them on the wrong ground. */
-  let worldLocked = false;
+  // The room code IS the world. There is nothing to configure: a new code is
+  // a new planet, and the same code always regenerates the same one.
+  const seed = worldSeed(upperCode);
   let roster: PublicPlayer[] = [];
   let phase: Phase = "lobby";
   let scene: WorldScene | null = null;
@@ -132,19 +124,10 @@ export function startScreen(code: string) {
           </section>
 
           <section class="lobby-panel">
-            <div class="panel-title"><span class="step">2</span> The world</div>
+            <div class="panel-title"><span class="step">2</span> The landing site</div>
             <div class="world-preview">
               <canvas id="world-map" width="300" height="300"></canvas>
-              <div class="world-mix" id="world-mix"></div>
-            </div>
-            <div class="world-controls" id="world-controls">
-              <label class="seed-row">
-                <span>Seed</span>
-                <input id="seed-input" type="text" maxlength="24" spellcheck="false"
-                       autocomplete="off" />
-                <button type="button" id="seed-roll" title="New random seed">⟳</button>
-              </label>
-              <div class="knobs" id="knobs"></div>
+              <div class="world-legend" id="world-legend"></div>
             </div>
             <div class="lobby-note" id="world-note">Checking for a saved world…</div>
           </section>
@@ -173,88 +156,40 @@ export function startScreen(code: string) {
     const spectatorsEl = document.getElementById("spectators")!;
     const noteEl = document.getElementById("world-note")!;
 
-    // ── world settings + live minimap ─────────────────────────
+    // ── landing site preview ──────────────────────────────────
     // The generator is Phaser-free precisely so this preview is the same
-    // code the expedition lands in — what you see here is what generates.
+    // function the expedition lands in — what you see here is the ground you
+    // will actually be standing on. There is nothing to tune: the room code
+    // is the world, and the map simply extends past the edges of this frame
+    // in every direction, for as far as anyone cares to walk.
     const mapEl = document.getElementById("world-map") as HTMLCanvasElement;
-    const mixEl = document.getElementById("world-mix")!;
-    const seedInput = document.getElementById("seed-input") as HTMLInputElement;
-    const knobsEl = document.getElementById("knobs")!;
-    const controlsEl = document.getElementById("world-controls")!;
+    const legendEl = document.getElementById("world-legend")!;
+    const spawn = findSpawn(seed);
 
-    const KNOBS: {
-      key: "size" | "swamp" | "shore" | "scatter";
-      label: string;
-      options: readonly string[];
-    }[] = [
-      { key: "size", label: "Size", options: WORLD_SIZES },
-      { key: "swamp", label: "Bog", options: AMOUNTS },
-      { key: "shore", label: "Shore", options: AMOUNTS },
-      { key: "scatter", label: "Resources", options: DENSITIES },
-    ];
+    drawBiomeMap(mapEl, seed, spawn, 0.55);
+    drawSpawnMarker(mapEl);
 
-    const drawPreview = () => {
-      const world = generateWorld(settings);
-      drawWorldPreview(mapEl, world);
-      const mix = terrainMix(world);
-      mixEl.textContent =
-        `${world.cols}×${world.rows} hexes · ` +
-        `${Math.round(mix.grass * 100)}% grass · ` +
-        `${Math.round(mix.sand * 100)}% shore · ` +
-        `${Math.round(mix.swamp * 100)}% bog · ` +
-        `${world.scatter.length} resource nodes`;
-    };
+    // Which biomes are actually within reach of the landing site, in order of
+    // how much of the neighbourhood they cover. A legend of the whole palette
+    // would advertise ground you'd have to cross a sea to reach.
+    {
+      const seen = new Map<BiomeType, number>();
+      for (let dr = -80; dr <= 80; dr += 2) {
+        for (let dc = -80; dc <= 80; dc += 2) {
+          const b = biomeAt(spawn.col + dc, spawn.row + dr, seed);
+          seen.set(b, (seen.get(b) ?? 0) + 1);
+        }
+      }
+      legendEl.innerHTML = [...seen]
+        .filter(([, n]) => n > 20) // ignore a stray hex of something exotic
+        .sort((a, b) => b[1] - a[1])
+        .map(
+          ([b]) =>
+            `<span class="biome"><i style="background:${BIOMES[b].color}"></i>${BIOMES[b].label}</span>`,
+        )
+        .join("");
+    }
 
-    const renderKnobs = () => {
-      knobsEl.innerHTML = KNOBS.map(
-        (k) => `
-        <div class="knob">
-          <span class="knob-label">${k.label}</span>
-          <div class="knob-opts" data-knob="${k.key}">
-            ${k.options
-              .map(
-                (o) =>
-                  `<button type="button" data-val="${o}"${
-                    settings[k.key] === o ? ' class="on"' : ""
-                  }>${o}</button>`,
-              )
-              .join("")}
-          </div>
-        </div>`,
-      ).join("");
-    };
-
-    const settingsChanged = () => {
-      saveSettings(settings);
-      renderKnobs();
-      drawPreview();
-    };
-
-    knobsEl.addEventListener("click", (e) => {
-      const btn = (e.target as HTMLElement).closest("[data-val]") as HTMLElement | null;
-      if (!btn || worldLocked) return;
-      const key = btn.parentElement?.dataset.knob as keyof typeof settings | undefined;
-      if (!key || key === "seed") return;
-      (settings as Record<string, string>)[key] = btn.dataset.val!;
-      settingsChanged();
-    });
-
-    seedInput.value = settings.seed;
-    seedInput.addEventListener("input", () => {
-      if (worldLocked) return;
-      settings.seed = seedInput.value;
-      saveSettings(settings);
-      drawPreview();
-    });
-    document.getElementById("seed-roll")!.addEventListener("click", () => {
-      if (worldLocked) return;
-      settings.seed = randomSeed();
-      seedInput.value = settings.seed;
-      settingsChanged();
-    });
-
-    renderKnobs();
-    drawPreview();
     const startHint = document.getElementById("start-hint")!;
     const startBtn = document.getElementById("start-btn") as HTMLButtonElement;
 
@@ -262,29 +197,21 @@ export function startScreen(code: string) {
       if (pendingSnapshot === undefined) return; // still waiting on the server
       if (!pendingSnapshot) {
         noteEl.innerHTML =
-          "<b>A fresh world.</b> Tune it below — the map is exactly what " +
-          "you'll land in. Settings lock once the expedition starts.";
+          "<b>Untouched ground.</b> This is where you come down — and the map " +
+          "keeps going in every direction, as far as you care to walk. " +
+          `Room <b>${upperCode}</b> always leads back to this same planet.`;
         startBtn.textContent = "START EXPEDITION";
         return;
       }
       const snap = pendingSnapshot;
-      // Adopt and freeze the saved world's settings.
-      if (snap.settings) {
-        Object.assign(settings, snap.settings);
-        seedInput.value = settings.seed;
-      }
-      worldLocked = true;
-      controlsEl.classList.add("locked");
-      renderKnobs();
-      drawPreview();
       const stock = snap.stockpile;
       noteEl.innerHTML =
-        `<b>Saved world found.</b> ${snap.built.length} object` +
+        `<b>Saved expedition found.</b> ${snap.built.length} object` +
         `${snap.built.length === 1 ? "" : "s"} built, ` +
         `${snap.harvested.length} resource node` +
         `${snap.harvested.length === 1 ? "" : "s"} worked, ` +
         `stockpile ${Math.floor(stock.wood)} wood · ${Math.floor(stock.stone)} stone · ` +
-        `${Math.floor(stock.bogiron)} bogiron. Settings are locked to this world.`;
+        `${Math.floor(stock.bogiron)} bogiron.`;
       startBtn.textContent = "RESUME EXPEDITION";
     };
     onSnapshot();
@@ -382,6 +309,11 @@ export function startScreen(code: string) {
               </div>
             </div>
 
+            <div class="hud-map glass" id="hud-map">
+              <canvas id="minimap" width="150" height="150"></canvas>
+              <div class="map-where" id="map-where"></div>
+            </div>
+
             <div class="hud-bottom">
               <div class="chip-mini glass">ROOM ${upperCode}</div>
               <div class="toast glass" id="toast"></div>
@@ -439,7 +371,9 @@ export function startScreen(code: string) {
         scene: [],
         callbacks: {
           postBoot: (g) => {
-            g.scene.add("world", worldScene, true, { seed: code, settings });
+            // upperCode, not code: the lobby preview seeds from the same
+            // string, and "abcd" and "ABCD" are different worlds.
+            g.scene.add("world", worldScene, true, { seed: upperCode });
           },
         },
       });
@@ -490,8 +424,74 @@ export function startScreen(code: string) {
       }, 3000);
     };
 
+    // ── minimap ─────────────────────────────────────────────────
+    // Redrawn a few times a second, not per frame: the biome field is a pure
+    // function and re-sampling 150×150 hexes is the expensive part, so the
+    // terrain layer is cached and only rebuilt once the view has actually
+    // travelled. Markers are cheap and repaint every tick.
+    const mapCanvas = document.getElementById("minimap") as HTMLCanvasElement;
+    const whereEl = document.getElementById("map-where")!;
+    const mapCtx = mapCanvas.getContext("2d")!;
+    const terrainLayer = document.createElement("canvas");
+    terrainLayer.width = mapCanvas.width;
+    terrainLayer.height = mapCanvas.height;
+    /** Hexes per minimap pixel. Wide enough to show where you're heading. */
+    const MAP_SCALE = 1.1;
+    let drawnAt: { col: number; row: number } | null = null;
+
+    const paintMinimap = () => {
+      if (!sceneReady) return;
+      const d = worldScene.minimapData();
+      if (
+        !drawnAt ||
+        Math.abs(d.centre.col - drawnAt.col) > 3 ||
+        Math.abs(d.centre.row - drawnAt.row) > 3
+      ) {
+        drawBiomeMap(terrainLayer, d.seed, d.centre, MAP_SCALE);
+        drawnAt = { ...d.centre };
+      }
+      mapCtx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+      mapCtx.drawImage(terrainLayer, 0, 0);
+
+      // Everything is placed against the cached layer's centre, not the live
+      // one, or the markers would slide against the terrain between redraws.
+      const at = (col: number, row: number) => ({
+        x: mapCanvas.width / 2 + (col - drawnAt!.col) / MAP_SCALE,
+        y: mapCanvas.height / 2 + ((row - drawnAt!.row) * 0.738) / MAP_SCALE,
+      });
+
+      const fab = at(d.spawn.col, d.spawn.row);
+      mapCtx.strokeStyle = "#8fc1ff";
+      mapCtx.lineWidth = 2;
+      mapCtx.beginPath();
+      mapCtx.arc(fab.x, fab.y, 4.5, 0, Math.PI * 2);
+      mapCtx.stroke();
+
+      mapCtx.fillStyle = "rgba(232,240,251,0.85)";
+      for (const b of d.built) {
+        const p = at(b.col, b.row);
+        mapCtx.fillRect(p.x - 2, p.y - 2, 4, 4);
+      }
+
+      for (const p of d.players) {
+        const pt = at(p.col, p.row);
+        mapCtx.fillStyle = `#${p.color.toString(16).padStart(6, "0")}`;
+        mapCtx.strokeStyle = "rgba(8,14,26,0.8)";
+        mapCtx.lineWidth = 1.5;
+        mapCtx.beginPath();
+        mapCtx.arc(pt.x, pt.y, 3.5, 0, Math.PI * 2);
+        mapCtx.fill();
+        mapCtx.stroke();
+      }
+
+      whereEl.textContent = describeWhere(d);
+    };
+    const mapTimer = setInterval(paintMinimap, 250);
+    window.addEventListener("beforeunload", () => clearInterval(mapTimer));
+
     worldScene.onReady = () => {
       sceneReady = true;
+      paintMinimap();
       tryRestore();
       // The roster arrived while the lobby was up, so the scene missed it —
       // replay it now that the players exist and can take their names.
@@ -640,7 +640,15 @@ export function startScreen(code: string) {
           const d = designs.get((msg as unknown as DesignBodyMsg).designId);
           if (d) d.hasBody = true;
         } else if (msg.type === "world-state") {
-          pendingSnapshot = (msg as unknown as WorldStateMsg).snapshot;
+          const saved = (msg as unknown as WorldStateMsg).snapshot;
+          // v1 saves describe the old bounded island: their hex addresses and
+          // build positions point at ground that no longer exists anywhere on
+          // the continuous map. Better a fresh start than objects scattered
+          // into the sea.
+          pendingSnapshot = saved && saved.v === SNAPSHOT_VERSION ? saved : null;
+          if (saved && saved.v !== SNAPSHOT_VERSION) {
+            console.info(`discarding world save v${saved.v}: pre-dates the continuous world`);
+          }
           onSnapshot(); // lobby: offer RESUME instead of START
           tryRestore();
         } else if (msg.type === "manufacture") {
@@ -700,6 +708,37 @@ function toast(html: string, isError = false) {
   el.classList.add("show");
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove("show"), 6500);
+}
+
+/** Ring the middle of the lobby preview: that is where you come down. */
+function drawSpawnMarker(canvas: HTMLCanvasElement): void {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const x = canvas.width / 2;
+  const y = canvas.height / 2;
+  ctx.strokeStyle = "#8fc1ff";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, y, 9, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = "#8fc1ff";
+  ctx.beginPath();
+  ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** One line under the minimap: what you're standing on, and how far you've
+ *  strayed. In a world with no edges, distance from the Fabricator is the
+ *  only bearing that means anything. */
+function describeWhere(d: MinimapData): string {
+  const p = d.players[0];
+  if (!p) return BIOMES[d.biome].label;
+  const dist = Math.round(
+    Math.hypot(p.col - d.spawn.col, (p.row - d.spawn.row) * 0.738),
+  );
+  return dist < 6
+    ? `${BIOMES[d.biome].label} · at the Fabricator`
+    : `${BIOMES[d.biome].label} · ${dist} hexes out`;
 }
 
 function escapeHtml(s: string): string {

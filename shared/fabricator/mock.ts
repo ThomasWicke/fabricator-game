@@ -4,7 +4,14 @@
 // tracked vehicles, structures.
 // ISOMORPHIC — no env access, no platform imports.
 
-import { clampSpec, type FabricatedSpec, type MaterialType, type RawSpec } from "./schema";
+import {
+  NO_TERRAIN,
+  clampSpec,
+  type FabricatedSpec,
+  type MaterialType,
+  type RawSpec,
+  type TerrainModifiers,
+} from "./schema";
 import { computeCost } from "./cost";
 import type { CompileInput } from "./provider";
 
@@ -12,7 +19,7 @@ export function mockCompile(input: CompileInput): FabricatedSpec {
   const text = `${input.name} ${input.intent ?? ""}`.toLowerCase();
   const has = (...words: string[]) => words.some((w) => text.includes(w));
 
-  const noLoco = { type: "none" as const, speed: 0, terrainModifiers: { grass: 0, sand: 0, swamp: 0 } };
+  const noLoco = { type: "none" as const, speed: 0, terrainModifiers: { ...NO_TERRAIN } };
 
   // hand tools
   const isTool = has("axe", "saw", "pick", "pickaxe", "hammer", "torch") ||
@@ -58,19 +65,23 @@ export function mockCompile(input: CompileInput): FabricatedSpec {
 
   // vehicles
   let locoType: RawSpec["locomotion"]["type"] = "wheels";
-  let mods = { grass: 0.95, sand: 0.85, swamp: 0.1 };
-  if (has("boat", "float", "raft", "hover")) {
+  let mods: TerrainModifiers =
+    { grass: 0.95, sand: 0.85, swamp: 0.1, rock: 0.3, snow: 0.2, water: 0 };
+  if (has("boat", "float", "raft", "hover", "ship", "ferry")) {
     locoType = "float";
-    mods = { grass: 0.25, sand: 0.3, swamp: 0.9 };
+    mods = { grass: 0.25, sand: 0.3, swamp: 0.9, rock: 0.15, snow: 0.3, water: 0.95 };
   } else if (has("swamp", "bog", "mud")) {
     locoType = "wheels";
-    mods = { grass: 0.7, sand: 0.6, swamp: 0.65 };
+    mods = { grass: 0.7, sand: 0.6, swamp: 0.65, rock: 0.35, snow: 0.5, water: 0 };
   } else if (has("walker", "legs", "spider", "mech")) {
     locoType = "legs";
-    mods = { grass: 0.6, sand: 0.6, swamp: 0.55 };
+    mods = { grass: 0.6, sand: 0.6, swamp: 0.55, rock: 0.7, snow: 0.5, water: 0 };
   } else if (has("tank", "tracks", "tractor", "excavator", "digger")) {
     locoType = "tracks";
-    mods = { grass: 0.7, sand: 0.7, swamp: 0.45 };
+    mods = { grass: 0.7, sand: 0.7, swamp: 0.45, rock: 0.65, snow: 0.6, water: 0 };
+  } else if (has("snow", "ice", "sled", "ski")) {
+    locoType = "tracks";
+    mods = { grass: 0.6, sand: 0.4, swamp: 0.3, rock: 0.4, snow: 0.95, water: 0 };
   }
 
   const harvester = has("mining", "miner", "excavator", "digger", "harvester", "logging", "logger", "drill");

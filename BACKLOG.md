@@ -1,0 +1,110 @@
+# Universal Fabricator — backlog
+
+The Fabrication pipeline works as a PoC. This backlog is about the **game around
+it**: a world worth exploring, survival stakes, and an interface that feels like
+a game rather than a test harness.
+
+Status: `[ ]` open · `[~]` in progress · `[x]` done
+
+---
+
+## World — continuous, deterministic, efficient
+
+The island is gone. The world is unbounded and generated on demand from the room
+code, using every biome in the Kenney hexagon pack.
+
+- [x] **W1 · Ditch world configuration.** Remove the lobby size/bog/shore/scatter
+      knobs, `shared/world-settings.ts`, and the settings carried in world saves.
+      The room code is the seed; there is nothing to tune.
+- [x] **W2 · Continuous biome generation.** Unbounded hex coordinates. Three
+      low-frequency noise fields (elevation, moisture, temperature) select from
+      all ten Kenney biomes: water, sand, grass, autumn, dirt, magic (bog),
+      stone, rock, snow, lava. Pure function of `(col, row, seed)` — no map array,
+      no bounds.
+- [x] **W3 · Chunked rendering.** Terrain streams as per-chunk RenderTextures
+      around the two cameras, with an LRU cap. Resource nodes and their collision
+      bodies spawn and despawn with their chunk. Seam-free: each chunk redraws the
+      one row and column that bleed into it, so chunk quads tile exactly and
+      depth ordering never has to arbitrate.
+- [x] **W4 · Minimap.** In-HUD canvas showing the biome field around the players,
+      both players, the Fabricator, and built structures.
+- [x] **W5 · Partner pointer.** An arrow at the edge of each viewport pointing at
+      the other player — only when they are close enough to matter but not
+      already on screen.
+- [x] **W6 · Water and impassable ground.** Water blocks walking; `float`
+      locomotion crosses it. Lava is impassable. Shorelines get wave trim.
+- [x] **W7 · Biome-appropriate props.** Cactus in the desert, autumn trees in the
+      woodland, snow rocks in the tundra, mossy boulders in the wet, hills as
+      relief — instead of one pine and one boulder everywhere.
+- [ ] **W8 · Landmarks.** Rare hand-authored set pieces (ruins, groves, bog
+      hollows) placed deterministically, so exploring has destinations.
+
+## Presentation
+
+- [ ] **P1 · Start screen.** A real title screen with an animated background loop,
+      not a form. Thematic: the Fabricator, its light, drifting particles.
+- [ ] **P2 · Lobby redesign.** Same treatment as the title: joining should feel
+      like boarding an expedition.
+- [ ] **P3 · Controller theming.** The phone should look like a device from the
+      same world as the screen — plated panels, indicator lights, the Fabricator's
+      blue.
+- [ ] **P4 · Joystick polish.** Centre it on first touch (already the behaviour;
+      make it read that way), with a visible ring, dead-zone, and travel feedback.
+- [ ] **P5 · Design thumbnails.** Show the fabricated sprite in the design library
+      on the phone, so you can see what you are about to pay for.
+- [ ] **P6 · Survival HUD.** Health and hunger in the in-frame HUD, plus the
+      carried-inventory strip.
+
+## Fabrication
+
+- [ ] **F1 · The Fabricator is a place.** BLUEPRINT and DESIGNS only open when
+      you are standing at the machine. Walking up to it is what starts a design.
+- [ ] **F2 · Structure placement.** Carry a fabricated structure as a translucent
+      ghost, highlight the hex under it, place it centred on that hex with the
+      action button.
+- [ ] **F3 · Extend the capability matrix.** New primitives beyond
+      locomotion/harvest/emission: `weapon` (damage, reach, cooldown), `storage`
+      (inventory capacity), `nourish` (food value), `defense`, `production`
+      (converts materials over time).
+- [x] **F4 · Terrain classes in the spec.** `terrainModifiers` grows to cover the
+      new movement classes (rock, snow, water) so vehicles can be built for the
+      new biomes. `float` becomes the water unlock.
+- [ ] **F5 · Emission rewrite.** Drop the chimney/wheel/lamp anchor parts
+      entirely. Exhaust emits *behind* the machine relative to travel; light emits
+      *around* it. Smoke, steam, sparks, dust as a shared trail system.
+- [ ] **F6 · Modification loop.** Feed an existing design back into the Fabricator
+      with a new sketch to produce a variant.
+
+## Player systems
+
+- [ ] **S1 · Inventory.** Per-player carried items with capacity, distinct from
+      the shared stockpile. Picking up, dropping, and depositing at the Fabricator.
+- [ ] **S2 · Tools.** Equip, swap, and holster fabricated tools from the inventory
+      instead of one permanently-attached tool per player.
+- [ ] **S3 · Weapons.** Fabricated weapons with a swing arc, damage, and cooldown,
+      driven by the `weapon` primitive.
+- [ ] **S4 · Health.** Damage, regeneration when fed and rested.
+- [ ] **S5 · Hunger.** Drains with time and effort; low hunger slows you before it
+      hurts you.
+- [ ] **S6 · Food.** Berry bushes and fruit trees per biome, cooking at a
+      fabricated fire, food as an inventory item.
+- [ ] **S7 · Death and respawn.** Stress-free: you wake up at the Fabricator, your
+      carried inventory stays where you fell. The shared stockpile is never lost.
+
+## Enemies — stress-free by design
+
+- [ ] **E1 · Dwellings.** Enemies belong to a nest placed deterministically in
+      hostile biomes, and spawn from it.
+- [ ] **E2 · Chase AI with a leash.** Always slower than a running player. Aggro
+      drops after a threshold of time out of reach, or distance from the nest.
+- [ ] **E3 · Combat.** Contact damage both ways, knockback, hit flashes.
+- [ ] **E4 · Enemy art.** Kenney enemy pack, mapped to biomes (slimes in the bog,
+      spiders in the woods, snakes in the desert).
+
+---
+
+## Known bugs carried over
+
+- [ ] **ART-1 · Chroma key assumes magenta.** When the model returns a different
+      background the sprite renders fully opaque. Fix: sample the actual corner
+      colour, flood-fill from the edges, sanity-check the result before using it.

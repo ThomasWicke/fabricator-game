@@ -121,7 +121,6 @@ export type UiMsg = {
 // ─── fabricator ────────────────────────────────────────────────────────────
 
 import type { Design, DesignSummary } from "./designs";
-import type { WorldSettings } from "../shared/world-settings";
 
 /** Controller → server: a blueprint submission. Relayed to screens too so
  *  the world can show the Fabricator working while the compile runs. */
@@ -206,17 +205,21 @@ export type FabricateErrorMsg = {
 
 // ─── world persistence ─────────────────────────────────────────────────────
 //
-// Terrain is deterministic from the room code (it seeds the world RNG), so a
-// save is only the DELTAS from that baseline — a few KB even for a long
-// game, instead of a serialized map.
+// Terrain is a pure function of the room code, so a save is only the DELTAS
+// from that baseline — a few KB even for a long game, and a constant size no
+// matter how far the expedition has walked.
+
+/** Bump when a snapshot stops being readable. v1 belonged to the old bounded
+ *  island world; its coordinates mean nothing on the continuous map, so those
+ *  saves are dropped rather than misapplied. */
+export const SNAPSHOT_VERSION = 2;
 
 export type WorldSnapshot = {
-  v: 1;
-  /** The settings the terrain was generated from. Carried so resuming
-   *  regenerates the same ground — without it, restored objects and worked
-   *  nodes would land on a different map. Absent on saves written before
-   *  world settings existed; those fall back to the defaults. */
-  settings?: WorldSettings;
+  v: 2;
+  /** The seed the terrain came from — the room code, unless a future lobby
+   *  lets you type one. Stored so a save can be recognised as belonging to
+   *  the world it describes. */
+  seed: string;
   stockpile: { wood: number; stone: number; bogiron: number };
   /** Only nodes that have been touched; remaining 0 = harvested out. */
   harvested: { col: number; row: number; remaining: number }[];
