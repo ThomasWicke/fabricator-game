@@ -366,15 +366,25 @@ export function scatterAt(
 
 // ── decoration: flat props stamped into the ground ──────────────────────────
 
+/**
+ * Flat props scattered on the ground.
+ *
+ * NOT the pack's `hill*` sprites, which look like they belong here and don't:
+ * they are flat-bottomed silhouettes with a hard straight edge, meant to sit
+ * BEHIND a tile as the far side of rising ground. Dropped onto open ground
+ * they read as a hard triangular spike sitting on nothing — and at 27% of all
+ * decor, one every twenty-five hexes, they were everywhere. Everything below
+ * is a real prop: shaded, with a base that meets the ground.
+ */
 const DECOR: Record<BiomeType, string[]> = {
-  grass: ["bushGrass", "flowerRed", "flowerBlue", "flowerWhite", "hillGrass", "smallRockGrass"],
-  autumn: ["bushAutumn", "flowerYellow", "hillAutumn"],
-  magic: ["bushMagic", "hillMagic", "flowerGreen"],
-  dirt: ["bushDirt", "hillDirt", "smallRockDirt"],
-  sand: ["bushSand", "hillSand"],
-  stone: ["smallRockStone", "hillDirt"],
+  grass: ["bushGrass", "flowerRed", "flowerBlue", "flowerWhite", "smallRockGrass"],
+  autumn: ["bushAutumn", "flowerYellow", "smallRockDirt"],
+  magic: ["bushMagic", "flowerGreen"],
+  dirt: ["bushDirt", "smallRockDirt"],
+  sand: ["bushSand", "smallRockDirt"],
+  stone: ["smallRockStone"],
   rock: ["smallRockStone"],
-  snow: ["bushSnow", "hillSnow", "smallRockSnow"],
+  snow: ["bushSnow", "smallRockSnow"],
   water: ["waveWater"],
   lava: ["waveLava"],
 };
