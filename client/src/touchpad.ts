@@ -136,6 +136,9 @@ export function createTouchPad(
 
   for (const el of btns.querySelectorAll<HTMLElement>("[data-btn]")) {
     const key = el.dataset.btn as "a" | "b";
+    /** The pointer currently holding this button, so a second finger's
+     *  release can't let go on its behalf. */
+    let owner: number | null = null;
     const set = (down: boolean) => {
       if (state.buttons[key] === down) return;
       state.buttons[key] = down;
@@ -145,16 +148,44 @@ export function createTouchPad(
     };
     el.addEventListener("pointerdown", (e) => {
       e.preventDefault();
+      // A release can go missing — the same failure the stick guards against,
+      // where iOS hands the touch to a system gesture and nothing further
+      // arrives, not even lostpointercapture. A button that doesn't recover
+      // from it dies quietly: what the game acts on is the moment this level
+      // goes false to true, so a button stuck true never fires again, and the
+      // next press reports "no change" and says nothing at all.
+      //
+      // The cure has to be visible to the reader on the other side, which
+      // samples this once a frame. Releasing and re-pressing in the same
+      // handler would be sampled once, as a press that never began — so the
+      // release goes out now and the press waits for the next frame. That
+      // costs a frame, but only on a path that is already broken.
+      const stale = state.buttons[key] && owner !== null && !el.hasPointerCapture(owner);
+      owner = e.pointerId;
       try {
         el.setPointerCapture(e.pointerId);
       } catch {
-        // synthetic events (test harness)
+        // synthetic events (test harness) have no active pointer to capture
       }
-      set(true);
+      if (!stale) {
+        set(true);
+        return;
+      }
+      set(false);
+      const press = () => {
+        if (owner === e.pointerId) set(true);
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(press);
+      else setTimeout(press, 16);
     });
-    el.addEventListener("pointerup", () => set(false));
-    el.addEventListener("pointercancel", () => set(false));
-    el.addEventListener("lostpointercapture", () => set(false));
+    const up = (e: PointerEvent) => {
+      if (owner !== null && e.pointerId !== owner) return;
+      owner = null;
+      set(false);
+    };
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+    el.addEventListener("lostpointercapture", up);
   }
 
   return {

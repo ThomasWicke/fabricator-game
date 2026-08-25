@@ -763,6 +763,19 @@
       .screen-stage.solo .player-card.p2 {
         display: none;
       }
+      /* The map is centred because that is the one strip of screen neither
+         camera keeps a player in — a reason that only exists when there are
+         two of them. Solo, one camera fills the frame and dead centre is
+         exactly where you are looking, so it goes to the corner instead.
+         Declared BEFORE the touch rule below, which is equally specific and
+         has to win on a phone: there the map stacks under the Fabricator
+         button rather than sitting beside it. */
+      .screen-stage.solo .hud-map {
+        left: auto;
+        right: 0.6em;
+        top: 4.4em;
+        transform: none;
+      }
 
       /* ── one device: the pad drawn over the game ─────────────── */
       /* The zones sit above the canvas but below the HUD, and only they take
