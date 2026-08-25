@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "name": "Beach Cruiser",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:04:20.805Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Beach Cruiser",
+    "size": {
+      "w": 82,
+      "h": 46
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 190,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 1,
+        "swamp": 0.1,
+        "rock": 0.35,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 2,
+    "flavor": "Fat tires make coastal shores a breeze, but don't try taking it into the deep mud.",
+    "storage": {
+      "capacity": 12
+    }
+  },
+  "usage": {
+    "inputTokens": 1316,
+    "outputTokens": 110
+  }
+}

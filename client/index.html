@@ -2060,6 +2060,21 @@
       .fab-btn.hidden {
         display: none;
       }
+      /* A modification's parent art, ghosted under the ink as a guide. On the
+         element's background, never on the canvas itself — the export crops
+         to drawn pixels, and an underlay drawn onto the canvas would ship
+         inside every sketch. */
+      canvas.underlay {
+        background-repeat: no-repeat !important;
+        background-position: center !important;
+        background-size: contain !important;
+        opacity: 1;
+      }
+      .lineage {
+        font-family: var(--mono);
+        font-size: 0.85em;
+        color: var(--muted);
+      }
       /* Discard sits beside BUILD but must never be mistaken for it: no fill,
          no border, and it only takes its warning colour under the pointer. */
       .row-actions,

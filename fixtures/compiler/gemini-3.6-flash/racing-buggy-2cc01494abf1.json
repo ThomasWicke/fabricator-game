@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Racing Buggy",
+    "intent": "As fast as possible on firm ground.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:03:42.880Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Racing Buggy",
+    "size": {
+      "w": 72,
+      "h": 42
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 320,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 0.95,
+        "swamp": 0.05,
+        "rock": 0.4,
+        "snow": 0.15,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Sacrifices chassis integrity and dampening for frightening top speeds on flat ground."
+  },
+  "usage": {
+    "inputTokens": 1331,
+    "outputTokens": 100
+  }
+}

@@ -22,6 +22,9 @@ export type Design = {
   /** Schema generation this spec was last migrated to. Absent on designs
    *  stored before versioning existed — treated as "old", migrated on load. */
   specVersion?: number;
+  /** The design this one was modified from. Dangling after the parent is
+   *  deleted, which is fine — lineage is a breadcrumb, not a dependency. */
+  parentId?: string;
   id: string;
   spec: FabricatedSpec;
   createdBy: string;
@@ -52,6 +55,8 @@ export type DesignSummary = {
   hasArt: boolean;
   /** Which player slot drew it, when that was known. */
   createdBySlot?: 1 | 2;
+  /** The design this one was modified from, if any. */
+  parentId?: string;
   /** Where the art actually lives. Resolved server-side, where the body/sketch
    *  distinction is still known — a phone holding only a summary would have to
    *  guess, and guess wrong for a design that never got a generated body. */
@@ -71,6 +76,7 @@ export function summarize(d: Design): DesignSummary {
     hasArt: d.hasBody || d.hasSketch,
     createdBySlot: d.createdBySlot,
     artUrl: designArtUrl(d),
+    parentId: d.parentId,
   };
 }
 

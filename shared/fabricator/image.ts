@@ -11,6 +11,7 @@
 //
 // ISOMORPHIC — fetch-only, caller supplies the key. No env access.
 
+import { STYLE_PALETTE, STYLE_REFS } from "./style-refs";
 import type { FabricatedSpec } from "./schema";
 
 /**
@@ -34,7 +35,7 @@ export type BodySprite = {
   mimeType: string;
 };
 
-function buildImagePrompt(spec: FabricatedSpec, hasSketch: boolean): string {
+function buildImagePrompt(spec: FabricatedSpec, _hasSketch: boolean, _hasStyleRef = false): string {
   const aspect =
     spec.size.w > spec.size.h * 1.4
       ? "wide, elongated"
@@ -79,10 +80,12 @@ function buildImagePrompt(spec: FabricatedSpec, hasSketch: boolean): string {
     view +
     `${aspect} proportions.` +
     parts +
-    (hasSketch
-      ? " Use the attached rough player sketch as the shape reference — follow its silhouette and layout, but render it properly."
-      : "") +
+    // The attached images carry their own labels; the style tail below only
+    // needs to hold when there is no reference at all.
     " Style: flat cel-shaded colors, chunky simplified toy-like shapes, bold readable silhouette, matching the look of Kenney game assets. " +
+    (STYLE_PALETTE.length
+      ? `Work from this palette where it fits: ${STYLE_PALETTE.join(", ")}. `
+      : "") +
     "One object only, centered, filling most of the frame, isolated on a SOLID PURE MAGENTA background (#FF00FF). " +
     "Do not draw a driver, pilot or any person — the players have their own characters. " +
     "No shadows, no ground, no text, no border."
@@ -136,17 +139,48 @@ async function callImageModel(
 /** Capacity errors — worth another go, or the other model. */
 const TRANSIENT = new Set([429, 500, 502, 503, 504]);
 
+export type ArtReferences = {
+  /** The player's rough sketch — shape only. */
+  sketch?: string;
+  /** The parent design's body, when this is a modification — the new art
+   *  should be recognisably the same machine. */
+  parent?: string;
+};
+
 export async function generateBodySprite(
   spec: FabricatedSpec,
-  sketchBase64: string | undefined,
+  refs: ArtReferences,
   apiKey: string,
   model: string = IMAGE_MODEL,
 ): Promise<BodySprite & { usage: ImageUsage }> {
+  // Each image is preceded by a text part saying what it IS. Naming them by
+  // position ("the first image…") breaks the moment an optional one is
+  // absent, and there are three optional images now.
   const parts: Record<string, unknown>[] = [];
-  if (sketchBase64) {
-    parts.push({ inlineData: { mimeType: "image/png", data: sketchBase64 } });
+  const attach = (label: string, base64: string) => {
+    parts.push({ text: label });
+    parts.push({ inlineData: { mimeType: "image/png", data: base64 } });
+  };
+  const styleRef = STYLE_REFS[spec.category];
+  if (styleRef) {
+    attach(
+      "Style reference from this game — match its exact rendering style: same shading, line treatment, saturation and level of detail:",
+      styleRef.base64,
+    );
   }
-  parts.push({ text: buildImagePrompt(spec, !!sketchBase64) });
+  if (refs.parent) {
+    attach(
+      "The PREVIOUS VERSION of this machine. The new image must read as the same machine, modified — keep its overall shape, colours and character:",
+      refs.parent,
+    );
+  }
+  if (refs.sketch) {
+    attach(
+      "The player's rough shape sketch — follow its silhouette and layout, but render it properly:",
+      refs.sketch,
+    );
+  }
+  parts.push({ text: buildImagePrompt(spec, !!refs.sketch, !!styleRef) });
 
   // Lite is the default and occasionally reports "high demand". A failed call
   // isn't billed, so one retry then the heavier model is cheap insurance

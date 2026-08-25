@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "name": "Mud Raft",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:04:02.913Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Mud Raft",
+    "size": {
+      "w": 72,
+      "h": 48
+    },
+    "locomotion": {
+      "type": "float",
+      "speed": 100,
+      "terrainModifiers": {
+        "grass": 0.15,
+        "sand": 0.25,
+        "swamp": 0.9,
+        "rock": 0,
+        "snow": 0.1,
+        "water": 0.95
+      }
+    },
+    "seats": 2,
+    "flavor": "Held together by dried mud and desperation, it glides remarkably well over bogs.",
+    "storage": {
+      "capacity": 10
+    }
+  },
+  "usage": {
+    "inputTokens": 1317,
+    "outputTokens": 197
+  }
+}

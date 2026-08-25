@@ -70,13 +70,13 @@ export class FabricatorEndpoint {
    */
   async bodySprite(
     spec: FabricatedSpec,
-    sketchBase64: string | undefined,
+    refs: { sketch?: string; parent?: string },
   ): Promise<string | null> {
     const googleKey = this.env.GOOGLE_API_KEY as string | undefined;
     if (!googleKey) return null;
     try {
       const t0 = Date.now();
-      const sprite = await generateBodySprite(spec, sketchBase64, googleKey);
+      const sprite = await generateBodySprite(spec, refs, googleKey);
       // Log usage per fabrication: image output bills at a flat token count,
       // so counting these lines is counting the spend.
       console.log(

@@ -140,6 +140,9 @@ export type BlueprintMsg = {
   intent?: string;
   /** data:image/png;base64,... downscaled sketch (≤256px). */
   image?: string;
+  /** Modifying an existing design: its id. The compiler receives the parent
+   *  spec and is asked to change only what the new blueprint implies. */
+  parentId?: string;
 };
 
 // ─── designs ───────────────────────────────────────────────────────────────

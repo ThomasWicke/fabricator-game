@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "name": "All-Terrain Tank",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:04:57.405Z",
+    "attempts": 0
+  },
+  "error": "The operation was aborted due to timeout"
+}

@@ -45,6 +45,9 @@ export type CompileInput = {
   /** Validation errors from a failed previous attempt, fed back so the retry
    *  is a correction rather than a blind re-roll. */
   feedback?: string;
+  /** The spec being modified, when this blueprint is a variant of an
+   *  existing design rather than a fresh invention. */
+  parentSpec?: object;
 };
 
 export type TokenUsage = { inputTokens: number; outputTokens: number };

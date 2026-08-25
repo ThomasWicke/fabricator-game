@@ -78,6 +78,8 @@ export function computeCost(spec: RawSpec): MaterialCost {
     : 0;
   const storage = spec.storage ? spec.storage.capacity * 0.5 : 0;
   const nourish = spec.nourish ? spec.nourish.rate * 2.5 : 0;
+  // A converter is priced on its throughput: it is the trek it replaces.
+  const production = spec.production ? spec.production.rate * 9 : 0;
   const ward = spec.ward ? spec.ward.radius / 12 : 0;
   // Seats are the one thing left that scales with "how much machine is this":
   // the parts list used to carry that weight, and dropping it without a
@@ -86,7 +88,7 @@ export function computeCost(spec: RawSpec): MaterialCost {
   const total = Math.max(
     1,
     Math.round(
-      area + mobility + versatility + chassis + harvest + emission + weapon + storage + nourish + ward,
+      area + mobility + versatility + chassis + harvest + emission + weapon + storage + nourish + ward + production,
     ),
   );
 
@@ -106,7 +108,6 @@ export function computeCost(spec: RawSpec): MaterialCost {
     // 140px is a bit over two hexes — a fire and the ground you sleep on.
     rime: spec.ward ? 0.3 * past(spec.ward.radius, 140, 260) : 0,
   };
-
   // NOTHING EVER COSTS WHAT IT DIGS.
   //
   // This is the rule the whole progression rests on, and it has to be
@@ -121,6 +122,16 @@ export function computeCost(spec: RawSpec): MaterialCost {
   // "the model usually does not do that".
   const digs = new Set<string>(spec.harvest?.materials ?? []);
   for (const m of EXOTICS) if (digs.has(m)) share[m] = 0;
+
+  // A converter is gated by being EXPENSIVE IN ITS TARGET: one big trek buys
+  // permanent local supply — the trade the user chose. Applied AFTER the
+  // digs-zero rule on purpose: digs-zero prevents a harvest deadlock, but a
+  // converter's target cost is a deliberate gate, and wording a kiln as
+  // also-a-glass-miner must not talk its way out of paying it.
+  if (spec.production) {
+    const to = spec.production.to;
+    if (to !== "wood" && to !== "stone") share[to] += 0.45;
+  }
 
   // A thing can want several at once — a warded greenhouse with a gun on it —
   // and the shares must not add up to the whole bill.

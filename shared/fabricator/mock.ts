@@ -63,6 +63,30 @@ export function mockCompile(input: CompileInput): FabricatedSpec {
   }
 
   // structures
+  if (has("kiln", "smelter", "refinery", "forge", "bloomery", "press")) {
+    // A converter: which ore it makes is read from the words, defaulting to
+    // the glass kiln — the archetype the prompt names.
+    const to = has("smelter", "bloomery")
+      ? ("bogiron" as const)
+      : has("forge")
+        ? ("basalt" as const)
+        : has("rime", "frost", "ice")
+          ? ("rime" as const)
+          : ("glass" as const);
+    const raw: RawSpec = {
+      category: "structure",
+      displayName: input.name.slice(0, 32) || "Kiln",
+      size: { w: 90, h: 100 },
+      locomotion: noLoco,
+      production: { from: "stone", to, rate: 1.5 },
+      emission: { kind: "smoke", intensity: 0.5 },
+      seats: 0,
+      flavor: "[offline mock] Compiled by keyword heuristics.",
+    };
+    const clamped = clampSpec(raw);
+    return { ...clamped, cost: computeCost(clamped) };
+  }
+
   if (has("farm", "greenhouse", "garden", "plot")) {
     const raw: RawSpec = {
       category: "structure",

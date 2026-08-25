@@ -31,6 +31,32 @@
  *  normalizeModifiers absorb them. */
 export const SPEC_VERSION = 1;
 
+/**
+ * Every numeric range in the vocabulary, as [min, max] — the single source.
+ *
+ * clampSpec enforces these; the system prompt in prompt.ts interpolates the
+ * very same values into its prose. They used to be written out twice, once
+ * as numbers here and once as English there, and a range change meant
+ * editing both files and hoping. The materials enum already taught us how
+ * that ends.
+ */
+export const RANGES = {
+  sizeW: [32, 180],
+  sizeH: [24, 140],
+  speed: [40, 360],
+  harvestRate: [0.4, 4],
+  weaponDamage: [4, 40],
+  weaponReach: [40, 150],
+  weaponCooldown: [0.25, 2],
+  storageCapacity: [4, 40],
+  nourishRate: [1, 12],
+  wardRadius: [60, 260],
+  productionRate: [0.5, 3],
+  seats: [0, 2],
+} as const satisfies Record<string, readonly [number, number]>;
+
+const r = (k: keyof typeof RANGES, v: number) => clamp(v, RANGES[k][0], RANGES[k][1]);
+
 export type LocomotionType = "none" | "wheels" | "tracks" | "legs" | "float";
 /** Movement classes, not biomes. The world paints ten Kenney biomes; they all
  *  collapse into these six for the purposes of "can this machine cross it, and
@@ -145,6 +171,15 @@ export type FabricatedSpec = {
     /** Radius in world pixels, 60..260. */
     radius: number;
   };
+  /** Converts one material into another against the shared stockpile.
+   *  Structures only — a kiln, a smelter, a press. The automation half of
+   *  the economy: a slow local alternative to trekking for more. */
+  production?: {
+    from: MaterialType;
+    to: MaterialType;
+    /** Units of `to` per minute, 0.5..3. */
+    rate: number;
+  };
   seats: number;
   /** One in-world line from the Fabricator about its interpretation. */
   flavor: string;
@@ -245,6 +280,16 @@ export const SPEC_JSON_SCHEMA = {
       required: ["radius"],
       additionalProperties: false,
     },
+    production: {
+      type: "object",
+      properties: {
+        from: { type: "string", enum: [...MATERIALS] },
+        to: { type: "string", enum: [...MATERIALS] },
+        rate: { type: "number" },
+      },
+      required: ["from", "to", "rate"],
+      additionalProperties: false,
+    },
     seats: { type: "number" },
     flavor: { type: "string" },
   },
@@ -306,6 +351,13 @@ export function validateSpec(raw: unknown): string[] {
   num(o.storage, "capacity", "bad storage.capacity");
   num(o.nourish, "rate", "bad nourish.rate");
   num(o.ward, "radius", "bad ward.radius");
+  if (o.production !== undefined && o.production !== null) {
+    const pr = o.production as Record<string, unknown>;
+    if (!MATERIALS.includes(pr.from as MaterialType)) errs.push("bad production.from");
+    if (!MATERIALS.includes(pr.to as MaterialType)) errs.push("bad production.to");
+    if (pr.from === pr.to) errs.push("production.from equals production.to");
+    if (typeof pr.rate !== "number") errs.push("bad production.rate");
+  }
   if (typeof o.seats !== "number") errs.push("bad seats");
   if (typeof o.flavor !== "string") errs.push("bad flavor");
   return errs;
@@ -363,12 +415,12 @@ export function clampSpec(raw: RawSpec): RawSpec {
     ...raw,
     displayName: raw.displayName.slice(0, 32),
     size: {
-      w: clamp(raw.size.w, 32, 180),
-      h: clamp(raw.size.h, 24, 140),
+      w: r("sizeW", raw.size.w),
+      h: r("sizeH", raw.size.h),
     },
     locomotion: {
       type: raw.locomotion.type,
-      speed: immobile ? 0 : clamp(raw.locomotion.speed, 40, 360),
+      speed: immobile ? 0 : r("speed", raw.locomotion.speed),
       terrainModifiers: immobile
         ? { ...NO_TERRAIN }
         : (Object.fromEntries(
@@ -377,7 +429,7 @@ export function clampSpec(raw: RawSpec): RawSpec {
     },
     harvest: raw.harvest
       ? {
-          rate: clamp(raw.harvest.rate, 0.4, 4),
+          rate: r("harvestRate", raw.harvest.rate),
           materials: [...new Set(raw.harvest.materials)],
         }
       : undefined,
@@ -386,25 +438,35 @@ export function clampSpec(raw: RawSpec): RawSpec {
       : undefined,
     weapon: raw.weapon
       ? {
-          damage: clamp(raw.weapon.damage, 4, 40),
-          reach: clamp(raw.weapon.reach, 40, 150),
-          cooldown: clamp(raw.weapon.cooldown, 0.25, 2),
+          damage: r("weaponDamage", raw.weapon.damage),
+          reach: r("weaponReach", raw.weapon.reach),
+          cooldown: r("weaponCooldown", raw.weapon.cooldown),
         }
       : undefined,
     storage: raw.storage
-      ? { capacity: Math.round(clamp(raw.storage.capacity, 4, 40)) }
+      ? { capacity: Math.round(r("storageCapacity", raw.storage.capacity)) }
       : undefined,
     // Only a building can farm or ward: both are things that sit somewhere and
     // work on the ground around them, which is what a structure IS.
     nourish:
       raw.nourish && raw.category === "structure"
-        ? { rate: clamp(raw.nourish.rate, 1, 12) }
+        ? { rate: r("nourishRate", raw.nourish.rate) }
         : undefined,
     ward:
       raw.ward && raw.category === "structure"
-        ? { radius: clamp(raw.ward.radius, 60, 260) }
+        ? { radius: r("wardRadius", raw.ward.radius) }
         : undefined,
-    seats: clamp(Math.round(raw.seats), 0, 2),
+    production:
+      raw.production &&
+      raw.category === "structure" &&
+      raw.production.from !== raw.production.to
+        ? {
+            from: raw.production.from,
+            to: raw.production.to,
+            rate: r("productionRate", raw.production.rate),
+          }
+        : undefined,
+    seats: r("seats", Math.round(raw.seats)),
     flavor: raw.flavor.slice(0, 120),
   };
 }

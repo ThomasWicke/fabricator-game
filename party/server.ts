@@ -213,10 +213,21 @@ export class FabricatorServer extends Server<Env> {
       if (msg.image && !sketch) {
         throw new Error("That sketch is too large for the Fabricator's scanner.");
       }
+      // A modification carries its parent: the compiler gets the spec to
+      // iterate on, the artist gets the old body to keep recognisable. A
+      // parent that has since been discarded degrades to a fresh compile.
+      const parent = msg.parentId ? await this.designs.get(msg.parentId) : null;
+      const parentArt = parent
+        ? await this.env.SPRITES.get(`body/${parent.id}.png`)
+            .then((o) => o?.arrayBuffer())
+            .then((b) => (b ? bytesToBase64(new Uint8Array(b)) : undefined))
+            .catch(() => undefined)
+        : undefined;
       const spec = await this.fabricator.compile({
         name: msg.name,
         intent: msg.intent,
         imageBase64: sketch?.base64,
+        parentSpec: parent?.spec,
       });
       // The spec exists; the remaining wait is all image generation. Telling
       // the room turns a 40-second silence into two legible stages.
@@ -229,7 +240,10 @@ export class FabricatorServer extends Server<Env> {
       };
       this.sendToScreens(JSON.stringify(progress));
       this.sendToControllers(JSON.stringify(progress), byPlayerId);
-      const rawBody = await this.fabricator.bodySprite(spec, sketch?.base64);
+      const rawBody = await this.fabricator.bodySprite(spec, {
+        sketch: sketch?.base64,
+        parent: parentArt,
+      });
 
       const id = crypto.randomUUID();
       if (sketch) {
@@ -246,6 +260,7 @@ export class FabricatorServer extends Server<Env> {
         timesBuilt: 0,
         hasBody: false,
         hasSketch: !!sketch,
+        parentId: parent?.id,
       };
       await this.designs.add(design);
 
@@ -510,6 +525,16 @@ export class FabricatorServer extends Server<Env> {
 const MAX_SKETCH_BYTES = 400_000;
 /** Generated body art runs bigger, but not megabytes bigger. */
 const MAX_BODY_BYTES = 2_000_000;
+
+function bytesToBase64(bytes: Uint8Array): string {
+  // btoa takes a binary STRING; chunked so a big sprite doesn't blow the
+  // argument limit of String.fromCharCode.
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
 
 function decodeDataUrl(
   dataUrl: string | undefined,

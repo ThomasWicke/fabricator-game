@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "name": "Stone Hut",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:03:37.249Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Stone Hut",
+    "size": {
+      "w": 96,
+      "h": 84
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0,
+        "sand": 0,
+        "swamp": 0,
+        "rock": 0,
+        "snow": 0,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "Thick masonry offers rudimentary safety and a dry floor to stack your haul.",
+    "storage": {
+      "capacity": 20
+    },
+    "ward": {
+      "radius": 120
+    }
+  },
+  "usage": {
+    "inputTokens": 1316,
+    "outputTokens": 100
+  }
+}

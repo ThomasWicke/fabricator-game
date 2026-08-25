@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "Swamp Buggy",
+    "intent": "A vehicle for crossing swamps.",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:03:27.196Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Swamp Buggy",
+    "size": {
+      "w": 92,
+      "h": 58
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 130,
+      "terrainModifiers": {
+        "grass": 0.85,
+        "sand": 0.8,
+        "swamp": 0.75,
+        "rock": 0.35,
+        "snow": 0.5,
+        "water": 0
+      }
+    },
+    "seats": 2,
+    "flavor": "Over-inflated balloon tires keep you riding high above the stagnant muck.",
+    "storage": {
+      "capacity": 12
+    }
+  },
+  "usage": {
+    "inputTokens": 1330,
+    "outputTokens": 111
+  }
+}

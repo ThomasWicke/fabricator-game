@@ -5,8 +5,10 @@
 // on meaningful capability, never on fields the compiler fills in
 // arbitrarily — and the material split must never deadlock progression.
 
+import { SYSTEM_PROMPT } from "../shared/fabricator/prompt";
 import {
   EMISSION_KINDS,
+  RANGES,
   LOCOMOTION_TYPES,
   MATERIALS,
   SPEC_JSON_SCHEMA,
@@ -237,6 +239,57 @@ check("a settlement-sized ward still costs rime", computeCost(pylon).rime >= 4, 
   check("no bill ever asks for exactly one unit of an ore", ok);
 }
 
+// ── production: expensive in the target ore, by design ─────────────
+//
+// The user's chosen gate for automation: one big trek buys permanent local
+// supply. A converter must always cost a serious amount of what it makes —
+// and no wording may talk it out of paying.
+{
+  const kiln = clampSpec(structure(DRY));
+  kiln.production = { from: "stone", to: "glass", rate: 1.5 };
+  const c = computeCost(kiln);
+  check("a glass kiln costs glass, heavily", c.glass >= Math.round(c.total * 0.3), formatCost(c));
+  check("…and no other ore", c.rime === 0 && c.basalt === 0 && c.bogiron === 0);
+
+  // The collision with the digs-zero rule, pinned: digs-zero prevents a
+  // harvest deadlock, but the converter gate is deliberate — a kiln that
+  // claims to also MINE glass must still pay the production share.
+  const sly = clampSpec(structure(DRY));
+  sly.production = { from: "stone", to: "glass", rate: 1.5 };
+  sly.harvest = { rate: 2, materials: ["glass"] };
+  check(
+    "wording a kiln as also-a-glass-miner does not dodge the gate",
+    computeCost(sly).glass >= Math.round(computeCost(sly).total * 0.25),
+    formatCost(computeCost(sly)),
+  );
+
+  // Converting to a common is legal and needs no ore — a charcoal-style
+  // wood-maker is gated by its own throughput cost alone.
+  const chipper = clampSpec(structure(DRY));
+  chipper.production = { from: "stone", to: "wood", rate: 1 };
+  const cc = computeCost(chipper);
+  check("a to-commons converter needs no ore", cc.glass + cc.rime + cc.basalt + cc.bogiron === 0, formatCost(cc));
+
+  // Category discipline, same as nourish/ward: a "mobile refinery" vehicle
+  // does not get the primitive.
+  const truck = clampSpec({
+    ...structure(DRY),
+    category: "vehicle",
+    locomotion: {
+      type: "wheels",
+      speed: 100,
+      terrainModifiers: { grass: 0.9, sand: 0.8, swamp: 0.1, rock: 0.3, snow: 0.2, water: 0 },
+    },
+  });
+  truck.production = { from: "stone", to: "glass", rate: 2 };
+  check("production is clamp-dropped off vehicles", clampSpec(truck).production === undefined);
+
+  // from === to is refused at clamp time too, not just validation.
+  const loop = clampSpec(structure(DRY));
+  loop.production = { from: "glass", to: "glass", rate: 2 };
+  check("a from==to converter is dropped", clampSpec(loop).production === undefined);
+}
+
 // The one that must never break. Every exotic sits behind a harvester that
 // can dig it; if a harvester ever cost an exotic, the first gate would close
 // the door behind it and the world would be unplayable past that point.
@@ -343,6 +396,13 @@ for (const spec of [harvester, glowing, weaponised, farm, fence, everything]) {
   // Every primitive the game simulates must be reachable from the grammar.
   for (const key of ["harvest", "emission", "weapon", "storage", "nourish", "ward"]) {
     check(`the grammar has a '${key}'`, key in props);
+  }
+
+  // The prose the model reads and the clamps the code enforces are built
+  // from the same RANGES table — this asserts nobody re-hardcodes a number
+  // into the prompt and lets the two drift apart again.
+  for (const [k, [lo, hi]] of Object.entries(RANGES)) {
+    check(`the prompt states the ${k} range`, SYSTEM_PROMPT.includes(`${lo}-${hi}`));
   }
 }
 

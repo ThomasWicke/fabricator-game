@@ -467,6 +467,8 @@ type VehicleEntity = {
   driver: Slot | null;
   /** Second rider, when the spec has the seats for one. */
   passenger: Slot | null;
+  /** Converter's fractional progress toward the next whole unit. */
+  prodCarry?: number;
   nextHarvestAt: number;
   /** Fractional progress toward the next unit of food a farm hands out. */
   farmCarry?: number;
@@ -2894,6 +2896,23 @@ export class WorldScene extends Phaser.Scene {
     for (const v of this.vehicles) {
       if (v.spec.category !== "structure") continue;
       const reach = Math.max(v.spec.size.w, v.spec.size.h) / 2 + 46;
+
+      // A converter chews the shared stockpile while it stands — nobody has
+      // to attend it, that is the point of building one. Same whole-unit
+      // accumulator as the farm: fractions are banked, the stockpile only
+      // ever moves in integers, and it visibly idles when the source is dry.
+      const prod = v.spec.production;
+      if (prod && this.stockpile[prod.from] >= 1) {
+        v.prodCarry = (v.prodCarry ?? 0) + (prod.rate * dtMs) / 60_000;
+        if (v.prodCarry >= 1) {
+          v.prodCarry -= 1;
+          this.stockpile[prod.from] -= 1;
+          this.stockpile[prod.to] += 1;
+          this.onStockpile?.(this.stockpile);
+          this.floatText(v.container.x, v.container.y - 40, `+1 ${prod.to}`, "#c9e77f");
+          this.markDirty();
+        }
+      }
 
       for (const p of this.players.values()) {
         if (!this.activeSlots.has(p.slot) || p.driving) continue;

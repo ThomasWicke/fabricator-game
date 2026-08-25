@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "name": "Spider Walker",
+    "hasSketch": false,
+    "model": "gemini-3.6-flash",
+    "recordedAt": "2026-08-25T17:04:08.313Z",
+    "attempts": 1
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Spider Walker",
+    "size": {
+      "w": 80,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "legs",
+      "speed": 130,
+      "terrainModifiers": {
+        "grass": 0.6,
+        "sand": 0.6,
+        "swamp": 0.75,
+        "rock": 0.85,
+        "snow": 0.5,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Eight articulated legs guarantee supreme stability over jagged peaks and bogs, if you can stomach the chittering movement."
+  },
+  "usage": {
+    "inputTokens": 1316,
+    "outputTokens": 107
+  }
+}

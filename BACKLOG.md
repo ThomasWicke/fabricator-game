@@ -116,8 +116,20 @@ likely way somebody tries it for the first time.
 - [x] **F5 · Emission rewrite.** Drop the chimney/wheel/lamp anchor parts
       entirely. Exhaust emits *behind* the machine relative to travel; light emits
       *around* it. Smoke, steam, sparks, dust as a shared trail system.
-- [ ] **F6 · Modification loop.** Feed an existing design back into the Fabricator
-      with a new sketch to produce a variant.
+- [x] **F6 · Modification loop.** Feed an existing design back into the Fabricator
+      with a new sketch to produce a variant. The parent spec rides along and the
+      model is told to change only what the new blueprint implies; the old body
+      art anchors the new art; lineage is shown in the library.
+- [x] **F7 · Production.** `production` primitive: structures that convert one
+      material into another against the shared stockpile (kiln, smelter, forge).
+      Gated by being expensive in the TARGET ore — one big trek buys permanent
+      local supply. Left out of F3 on purpose "until it has a reason to exist";
+      six materials is the reason.
+- [x] **F8 · QA harness.** Fixture record/replay so `npm test` runs the whole
+      compile pipeline against real recorded model output for free; sketch and
+      modification eval pairs; art eval with keyability metrics and a contact
+      sheet; style-reference few-shot for consistent art; ranges single-sourced
+      between prompt and clamp.
 
 ## Player systems
 

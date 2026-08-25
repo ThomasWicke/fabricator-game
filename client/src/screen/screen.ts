@@ -611,13 +611,18 @@ export function startScreen(code: string) {
                 <div class="n">${escapeHtml(d.spec.displayName)}</div>
                 <div class="c">${d.spec.category}${
                   d.timesBuilt ? ` · built ${d.timesBuilt}×` : ""
-                } · ${formatCost(c)}</div>
+                } · ${formatCost(c)}${
+                  d.parentId && designs.has(d.parentId)
+                    ? ` <span class="lineage">↳ from ${escapeHtml(designs.get(d.parentId)!.spec.displayName)}</span>`
+                    : ""
+                }</div>
                 <div class="f">${escapeHtml(d.spec.flavor)}</div>
               </div>
               <div class="row-actions">
                 <button data-build="${d.id}" ${afford ? "" : "disabled"}>${
                   afford ? "BUILD" : "NEED MORE"
                 }</button>
+                <button class="discard" data-modify="${d.id}" title="Modify this design">✎</button>
                 <button class="discard" data-discard="${d.id}" title="Throw this design away">✕</button>
               </div>
             </div>`;
@@ -633,6 +638,33 @@ export function startScreen(code: string) {
      * deleting it would not remove the building now; it would remove it the
      * next time the save was loaded, which is a far worse way to find out.
      */
+    /** The design being modified, carried through to the blueprint submit. */
+    let fabParentId: string | null = null;
+    const fabSketchEl = document.getElementById("fab-sketch") as HTMLCanvasElement;
+    const clearModify = () => {
+      fabParentId = null;
+      fabSketchEl.classList.remove("underlay");
+      fabSketchEl.style.backgroundImage = "";
+    };
+    const startModify = (designId: string) => {
+      const d = designs.get(designId);
+      if (!d) return;
+      fabParentId = designId;
+      showPane("blueprint");
+      fabName.value = `${d.spec.displayName} Mk II`.slice(0, 32);
+      fabIntent.value = "";
+      pad.clear();
+      // The parent's art as a ghost under the ink — a guide to draw over.
+      const art = designArtUrl(d);
+      if (art) {
+        fabSketchEl.classList.add("underlay");
+        fabSketchEl.style.backgroundImage =
+          `linear-gradient(rgba(244,241,232,0.72), rgba(244,241,232,0.72)), url("${art}")`;
+      }
+      fabName.focus();
+      fabName.select();
+    };
+
     const requestDiscard = (designId: string) => {
       const d = designs.get(designId);
       if (!d) return;
@@ -672,11 +704,19 @@ export function startScreen(code: string) {
     const closeFab = () => {
       fabPanel.classList.add("hidden");
       worldScene.setUiOpen(false);
+      // Escape or a plain close abandons the modification — a later fresh
+      // blueprint must not silently inherit a parent.
+      clearModify();
     };
 
     fabPanel.addEventListener("click", (e) => {
       const tab = (e.target as HTMLElement).closest<HTMLElement>("[data-tab]");
       if (tab) showPane(tab.dataset.tab!);
+      const modify = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-modify]");
+      if (modify) {
+        startModify(modify.dataset.modify!);
+        return;
+      }
       const discard = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-discard]");
       if (discard) {
         requestDiscard(discard.dataset.discard!);
@@ -720,11 +760,13 @@ export function startScreen(code: string) {
         slot: fabSlot,
         intent: fabIntent.value.trim() || undefined,
         image: pad.toDataUrl(256, 8),
+        parentId: fabParentId ?? undefined,
       });
       scene?.setFabricating(name);
       fabName.value = "";
       fabIntent.value = "";
       pad.clear();
+      clearModify();
       closeFab();
     });
 

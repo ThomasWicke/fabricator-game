@@ -398,13 +398,20 @@ export function startController(code: string) {
               ${thumb}
               <div class="info">
                 <div class="dname">${esc(d.displayName)}</div>
-                <div class="dmeta">${d.category}${built}</div>
+                <div class="dmeta">${d.category}${built}${
+                  d.parentId && designs.has(d.parentId)
+                    ? ` · ↳ ${esc(designs.get(d.parentId)!.displayName)}`
+                    : ""
+                }</div>
                 <div class="dcost">${costMarkup(d.cost)}</div>
               </div>
               <div class="drow-actions">
                 <button data-build="${d.id}" ${
                   affordable && atFabricator ? "" : "disabled"
                 }>${label}</button>
+                <button class="ddiscard" data-modify="${d.id}" aria-label="Modify" ${
+                  atFabricator ? "" : "disabled"
+                }>✎</button>
                 <button class="ddiscard" data-discard="${d.id}" aria-label="Discard">✕</button>
               </div>
             </div>`;
@@ -431,6 +438,23 @@ export function startController(code: string) {
     };
 
     designsList.addEventListener("click", (e) => {
+      const mod = (e.target as HTMLElement).closest("[data-modify]") as HTMLElement | null;
+      if (mod && !(mod as HTMLButtonElement).disabled) {
+        const d = designs.get(mod.dataset.modify!);
+        if (!d) return;
+        sketchParentId = d.id;
+        nameInput.value = `${d.displayName} Mk II`.slice(0, 32);
+        intentInput.value = "";
+        pad.clear();
+        if (d.artUrl) {
+          sketchCanvas.classList.add("underlay");
+          sketchCanvas.style.backgroundImage =
+            `linear-gradient(rgba(244,241,232,0.72), rgba(244,241,232,0.72)), url("${d.artUrl}")`;
+        }
+        designsOverlay.classList.add("hidden");
+        openSketchPad();
+        return;
+      }
       const drop = (e.target as HTMLElement).closest("[data-discard]") as HTMLElement | null;
       if (drop) {
         // A request, not an order: the screen holds the world and is the only
@@ -488,13 +512,29 @@ export function startController(code: string) {
     const sketchCanvas = document.getElementById("sketch-canvas") as HTMLCanvasElement;
     const pad = createSketchPad(sketchCanvas);
 
-    blueprintBtn.addEventListener("click", () => {
-      if (blueprintBtn.disabled) return;
+    /** Parent design id when the pad was opened as a modification. */
+    let sketchParentId: string | null = null;
+    const clearModify = () => {
+      sketchParentId = null;
+      sketchCanvas.classList.remove("underlay");
+      sketchCanvas.style.backgroundImage = "";
+    };
+    const openSketchPad = () => {
       overlay.classList.remove("hidden");
       requestAnimationFrame(pad.fit);
+    };
+
+    blueprintBtn.addEventListener("click", () => {
+      if (blueprintBtn.disabled) return;
+      clearModify();
+      nameInput.value = "";
+      intentInput.value = "";
+      pad.clear();
+      openSketchPad();
     });
     document.getElementById("sketch-cancel")!.addEventListener("click", () => {
       overlay.classList.add("hidden");
+      clearModify();
     });
     document.getElementById("sketch-clear")!.addEventListener("click", pad.clear);
     document.getElementById("sketch-submit")!.addEventListener("click", () => {
@@ -512,8 +552,10 @@ export function startController(code: string) {
         // sketch is the fallback body sprite.
         intent: intentInput.value.trim() || undefined,
         image: pad.toDataUrl(SKETCH_MAX_SIDE, SKETCH_CROP_PADDING),
+        parentId: sketchParentId ?? undefined,
       });
       overlay.classList.add("hidden");
+      clearModify();
       fabricatingNote.textContent = `FABRICATING: ${name}…`;
       fabricatingNote.classList.remove("hidden");
       fabricatingNote.classList.remove("err");
