@@ -187,6 +187,22 @@ export type DesignBuiltMsg = {
   designId: string;
 };
 
+/**
+ * Screen → phones: is this player standing at the Fabricator?
+ *
+ * Fabrication is a place, not a menu. Blueprinting and building are only
+ * available at the machine, so the world has to tell each phone when its
+ * player is close enough. Broadcast rather than addressed: the screen would
+ * otherwise need a slot→playerId map to target a controller, and every phone
+ * already knows its own slot.
+ */
+export type FabricatorRangeMsg = {
+  scope: "ui";
+  type: "fabricator-range";
+  slot: Slot;
+  inRange: boolean;
+};
+
 /** Screen → phones: current team stockpile, so phones can price designs. */
 export type StockpileMsg = {
   scope: "ui";

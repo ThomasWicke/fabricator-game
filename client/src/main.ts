@@ -3,6 +3,7 @@
 //   /screen/CODE   shared screen (lobby, then the host-authoritative sim)
 //   /c/CODE        phone controller (lobby, then the game pad)
 
+import { startBackdrop } from "./backdrop";
 import { rememberNickname, resolveIdentity, sanitizeNickname, NICKNAME_MAX } from "./identity";
 
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no ambiguous chars
@@ -24,41 +25,49 @@ function renderLanding() {
     window.matchMedia("(pointer: coarse)").matches && window.innerWidth < 820;
 
   const hostCard = `
-    <section class="card" id="host-card">
-      <h2>Host</h2>
-      <p>Run the world on <b>this</b> device — a TV or laptop everyone can see.
-         Phones join as controllers.</p>
-      <button id="new-screen">Open a lobby</button>
+    <section class="plate" id="host-card">
+      <h2>Run the world here</h2>
+      <p>This device becomes the planet — a TV or a laptop everyone can see.
+         Phones are the controllers.</p>
+      <button id="new-screen" class="primary">OPEN A LOBBY</button>
     </section>
   `;
   const joinCard = `
-    <section class="card" id="join-card">
-      <h2>Join</h2>
-      <p>Turn this phone into a controller. Get the 4-letter code from the big
-         screen.</p>
+    <section class="plate" id="join-card">
+      <h2>Join with this phone</h2>
+      <p>Take the four-letter code off the big screen.</p>
       <form id="join-form" class="join-form">
         <input id="join-name" type="text" maxlength="${NICKNAME_MAX}" placeholder="Your name"
                autocomplete="nickname" autocapitalize="words" spellcheck="false" />
         <div class="join-row">
           <input id="join-code" type="text" inputmode="text" autocapitalize="characters"
                  autocomplete="off" spellcheck="false" maxlength="4" placeholder="CODE" />
-          <button type="submit" id="join-btn" disabled>Join</button>
+          <button type="submit" id="join-btn" disabled>JOIN</button>
         </div>
       </form>
     </section>
   `;
 
   app.innerHTML = `
-    <div class="landing">
-      <h1>UNIVERSAL FABRICATOR</h1>
-      <p class="sub">co-op prototype · one shared screen, one phone per player</p>
-      <div class="cards">
-        ${phoneFirst ? joinCard + hostCard : hostCard + joinCard}
+    <div class="title-screen" id="title-screen">
+      <div class="title-inner">
+        <div class="wordmark">
+          <span class="wm-small">UNIVERSAL</span>
+          <span class="wm-big">FABRICATOR</span>
+          <span class="wm-rule"></span>
+        </div>
+        <p class="tagline">Sketch an impossible machine on your phone. The
+          Fabricator compiles it into something that actually works — then you
+          have to go out and afford it.</p>
+        <div class="plates">
+          ${phoneFirst ? joinCard + hostCard : hostCard + joinCard}
+        </div>
+        <p class="title-foot">Two players · one shared screen · a phone each</p>
       </div>
-      <p class="foot-note">Two players. Sketch an invention on your phone and the
-        Fabricator builds it into the world.</p>
     </div>
   `;
+
+  startBackdrop(document.getElementById("title-screen")!);
 
   const nameInput = document.getElementById("join-name") as HTMLInputElement;
   nameInput.value = identity.nickname;

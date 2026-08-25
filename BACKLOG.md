@@ -41,14 +41,14 @@ code, using every biome in the Kenney hexagon pack.
 
 ## Presentation
 
-- [ ] **P1 · Start screen.** A real title screen with an animated background loop,
+- [x] **P1 · Start screen.** A real title screen with an animated background loop,
       not a form. Thematic: the Fabricator, its light, drifting particles.
-- [ ] **P2 · Lobby redesign.** Same treatment as the title: joining should feel
+- [x] **P2 · Lobby redesign.** Same treatment as the title: joining should feel
       like boarding an expedition.
-- [ ] **P3 · Controller theming.** The phone should look like a device from the
+- [x] **P3 · Controller theming.** The phone should look like a device from the
       same world as the screen — plated panels, indicator lights, the Fabricator's
       blue.
-- [ ] **P4 · Joystick polish.** Centre it on first touch (already the behaviour;
+- [x] **P4 · Joystick polish.** Centre it on first touch (already the behaviour;
       make it read that way), with a visible ring, dead-zone, and travel feedback.
 - [ ] **P5 · Design thumbnails.** Show the fabricated sprite in the design library
       on the phone, so you can see what you are about to pay for.
@@ -57,7 +57,7 @@ code, using every biome in the Kenney hexagon pack.
 
 ## Fabrication
 
-- [ ] **F1 · The Fabricator is a place.** BLUEPRINT and DESIGNS only open when
+- [x] **F1 · The Fabricator is a place.** BLUEPRINT and DESIGNS only open when
       you are standing at the machine. Walking up to it is what starts a design.
 - [ ] **F2 · Structure placement.** Carry a fabricated structure as a translucent
       ghost, highlight the hex under it, place it centred on that hex with the

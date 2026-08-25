@@ -26,7 +26,10 @@ import type { DesignSummary } from "../../../party/designs";
 import type { MaterialType } from "../../../shared/fabricator/schema";
 
 const SEND_INTERVAL_MS = 33;
-const STICK_RADIUS = 52;
+const STICK_RADIUS = 56;
+/** Travel, in px, that reads as "not moving". Below this the stick sends a
+ *  hard zero — a thumb resting on glass is never perfectly still. */
+const STICK_DEAD_ZONE = 9;
 const SKETCH_MAX_SIDE = 256;
 const SKETCH_CROP_PADDING = 8;
 const RENAME_DEBOUNCE_MS = 300;
@@ -49,11 +52,16 @@ export function startController(code: string) {
   const designs = new Map<string, DesignSummary>();
   const stock: Record<MaterialType, number> = { wood: 0, stone: 0, bogiron: 0 };
 
+  /** Standing at the Fabricator? Lives at controller scope because the world
+   *  reports it while the lobby may still be up, before the pad view exists. */
+  let atFabricator = false;
+
   // Per-view hooks, replaced on every render.
   let applyRoster: () => void = () => {};
   let applyStatus: () => void = () => {};
   let onUiMsg: (msg: Record<string, unknown>) => void = () => {};
   let renderDesigns: () => void = () => {};
+  let applyFabState: () => void = () => {};
 
   keepScreenAwake();
   document.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -114,6 +122,7 @@ export function startController(code: string) {
     applyStatus();
     renderDesigns = () => {};
     onUiMsg = () => {};
+    applyFabState = () => {};
 
     const nameInput = document.getElementById("name-input") as HTMLInputElement;
     nameInput.value = nickname;
@@ -203,24 +212,29 @@ export function startController(code: string) {
     view = "game";
     app.innerHTML = `
       <div class="controller" id="controller">
-        <div class="status">
-          <span class="slot-name" id="slot-name">…</span>
-          · ROOM ${upperCode} ·
-          <span id="conn-status">connecting…</span>
+        <div class="pad-rail">
+          <span class="rail-slot" id="slot-name">…</span>
+          <span class="rail-room">${upperCode}</span>
+          <span class="rail-conn" id="conn-status">connecting…</span>
         </div>
         <div class="btn-zone">
-          <button class="action-btn" id="btn-b">B</button>
-          <button class="action-btn" id="btn-a">A</button>
+          <button class="action-btn secondary" id="btn-b"><b>B</b><i>run</i></button>
+          <button class="action-btn" id="btn-a"><b>A</b><i>use</i></button>
         </div>
         <div class="stick-zone" id="stick-zone">
-          <div class="stick-base" id="stick-base"></div>
+          <div class="stick-base" id="stick-base"><span class="ring"></span></div>
           <div class="stick-nub" id="stick-nub"></div>
-          <div class="zone-hint">touch anywhere here to move</div>
+          <div class="zone-hint">touch to move</div>
         </div>
         <div class="top-btns">
-          <button class="blueprint-btn" id="blueprint-btn">✏️ BLUEPRINT</button>
-          <button class="blueprint-btn" id="designs-btn">📐 DESIGNS<span class="badge" id="designs-count">0</span></button>
+          <button class="fab-btn" id="blueprint-btn">
+            <span class="ico">✎</span><span class="txt">BLUEPRINT</span>
+          </button>
+          <button class="fab-btn" id="designs-btn">
+            <span class="ico">▦</span><span class="txt">DESIGNS</span><span class="badge" id="designs-count">0</span>
+          </button>
         </div>
+        <div class="fab-hint" id="fab-hint"></div>
         <div class="fabricating-note hidden" id="fabricating-note">FABRICATING…</div>
         <div class="designs-overlay hidden" id="designs-overlay">
           <div class="designs-head">
@@ -264,57 +278,109 @@ export function startController(code: string) {
     };
     applyRoster();
 
+    // ── the Fabricator gate ─────────────────────────────────────
+    // Blueprinting and building happen AT the machine. Browsing the library
+    // does not — knowing what you could build, and what it would cost, is
+    // exactly the thing you want to think about while you're out gathering.
+    const blueprintBtn = document.getElementById("blueprint-btn") as HTMLButtonElement;
+    const fabHint = document.getElementById("fab-hint")!;
+
+    applyFabState = () => {
+      const usable = atFabricator && slot !== null;
+      blueprintBtn.disabled = !usable;
+      root.classList.toggle("at-fab", usable);
+      fabHint.textContent = usable ? "At the Fabricator" : "Walk to the Fabricator to build";
+      fabHint.classList.toggle("on", usable);
+      renderDesigns();
+    };
+
     // ── floating joystick ───────────────────────────────────────
     const zone = document.getElementById("stick-zone")!;
     const base = document.getElementById("stick-base")!;
     const nub = document.getElementById("stick-nub")!;
     let stickPointer: number | null = null;
     let origin = { x: 0, y: 0 };
+    /** The zone's viewport offset, captured when a touch starts.
+     *
+     *  The base and nub are absolutely positioned *inside* .stick-zone, but
+     *  pointer events report viewport coordinates — and the zone starts 45% of
+     *  the way across the screen. Placing them at the raw clientX pushed the
+     *  whole control off the right edge, so the stick you were meant to see
+     *  under your thumb was never actually on screen. */
+    let zoneOrigin = { x: 0, y: 0 };
 
     const placeStick = (el: HTMLElement, x: number, y: number) => {
-      el.style.left = `${x}px`;
-      el.style.top = `${y}px`;
+      el.style.left = `${x - zoneOrigin.x}px`;
+      el.style.top = `${y - zoneOrigin.y}px`;
     };
 
     zone.addEventListener("pointerdown", (e) => {
-      if (stickPointer !== null) return;
+      // Normally we ignore a second finger. But if the tracked pointer is no
+      // longer actually held — a system gesture stole the touch, the browser
+      // dropped the pointerup — then holding onto it jams the stick and the
+      // player simply cannot move again. A fresh touch takes over instead.
+      if (stickPointer !== null) {
+        const stale = !zone.hasPointerCapture(stickPointer);
+        if (!stale) return;
+        releaseStick();
+      }
       stickPointer = e.pointerId;
       try {
         zone.setPointerCapture(e.pointerId);
       } catch {
         // synthetic events (test harness) have no active pointer to capture
       }
+      // The stick is wherever your thumb lands. Nothing to aim for, nothing to
+      // find by feel — which is the whole point of a screen you don't look at.
+      // Read the zone's offset now: one layout read per touch, not per move.
+      const r = zone.getBoundingClientRect();
+      zoneOrigin = { x: r.left, y: r.top };
       origin = { x: e.clientX, y: e.clientY };
       placeStick(base, e.clientX, e.clientY);
       placeStick(nub, e.clientX, e.clientY);
-      base.style.opacity = "1";
-      nub.style.opacity = "1";
+      zone.classList.add("engaged");
     });
     zone.addEventListener("pointermove", (e) => {
       if (e.pointerId !== stickPointer) return;
-      let dx = e.clientX - origin.x;
-      let dy = e.clientY - origin.y;
+      const dx = e.clientX - origin.x;
+      const dy = e.clientY - origin.y;
       const len = Math.hypot(dx, dy);
-      if (len > STICK_RADIUS) {
-        dx = (dx / len) * STICK_RADIUS;
-        dy = (dy / len) * STICK_RADIUS;
-      }
-      placeStick(nub, origin.x + dx, origin.y + dy);
-      stick.x = dx / STICK_RADIUS;
-      stick.y = dy / STICK_RADIUS;
+      const ux = len ? dx / len : 0;
+      const uy = len ? dy / len : 0;
+
+      // The nub tracks the thumb (clamped to the ring) so the control always
+      // looks like it is following you.
+      const visual = Math.min(len, STICK_RADIUS);
+      placeStick(nub, origin.x + ux * visual, origin.y + uy * visual);
+
+      // What we SEND is remapped past a dead zone and ramps to full over the
+      // remaining travel. A thumb resting on glass never sits perfectly still,
+      // and without this the character drifts while you are reading the screen.
+      const mag =
+        len <= STICK_DEAD_ZONE
+          ? 0
+          : Math.min(1, (len - STICK_DEAD_ZONE) / (STICK_RADIUS - STICK_DEAD_ZONE));
+      stick.x = ux * mag;
+      stick.y = uy * mag;
+      zone.classList.toggle("live", mag > 0);
       dirty = true;
     });
-    const endStick = (e: PointerEvent) => {
-      if (e.pointerId !== stickPointer) return;
+    const releaseStick = () => {
       stickPointer = null;
-      base.style.opacity = "0";
-      nub.style.opacity = "0";
+      zone.classList.remove("engaged", "live");
       stick.x = 0;
       stick.y = 0;
       sendNow(); // stop immediately, don't wait for the tick
     };
+    const endStick = (e: PointerEvent) => {
+      if (e.pointerId !== stickPointer) return;
+      releaseStick();
+    };
     zone.addEventListener("pointerup", endStick);
     zone.addEventListener("pointercancel", endStick);
+    // Losing capture without a pointerup is the case that strands you: iOS
+    // hands the touch to a system gesture and no further events arrive.
+    zone.addEventListener("lostpointercapture", endStick);
 
     // ── design library ──────────────────────────────────────────
     // Designs are permanent; building one spends materials. Showing cost and
@@ -353,6 +419,9 @@ export function startController(code: string) {
             stock.stone >= d.cost.stone &&
             stock.bogiron >= d.cost.bogiron;
           const built = d.timesBuilt > 0 ? ` · built ${d.timesBuilt}×` : "";
+          // Two different reasons a design can't be built right now, and they
+          // call for two different responses from the player — so say which.
+          const label = !affordable ? "NEED MORE" : !atFabricator ? "TOO FAR" : "BUILD";
           return `
             <div class="design-row">
               <div class="info">
@@ -360,7 +429,9 @@ export function startController(code: string) {
                 <div class="dmeta">${d.category}${built}${d.hasArt ? " · art ✓" : ""}</div>
                 <div class="dcost">${costMarkup(d.cost)}</div>
               </div>
-              <button data-build="${d.id}" ${affordable ? "" : "disabled"}>BUILD</button>
+              <button data-build="${d.id}" ${
+                affordable && atFabricator ? "" : "disabled"
+              }>${label}</button>
             </div>`;
         })
         .join("");
@@ -369,7 +440,7 @@ export function startController(code: string) {
 
     designsList.addEventListener("click", (e) => {
       const btn = (e.target as HTMLElement).closest("[data-build]") as HTMLElement | null;
-      if (!btn) return;
+      if (!btn || (btn as HTMLButtonElement).disabled) return;
       conn.send({ scope: "ui", type: "manufacture", designId: btn.dataset.build! });
       if ("vibrate" in navigator) navigator.vibrate(20);
       designsOverlay.classList.add("hidden");
@@ -381,7 +452,7 @@ export function startController(code: string) {
     document.getElementById("designs-close")!.addEventListener("click", () => {
       designsOverlay.classList.add("hidden");
     });
-    renderDesigns();
+    applyFabState(); // also renders the design list, with the right button states
 
     // ── blueprint sketch pad ────────────────────────────────────
     // The phone briefly becomes the Fabricator's design surface; the game
@@ -434,7 +505,8 @@ export function startController(code: string) {
     sketchCanvas.addEventListener("pointerup", endStroke);
     sketchCanvas.addEventListener("pointercancel", endStroke);
 
-    document.getElementById("blueprint-btn")!.addEventListener("click", () => {
+    blueprintBtn.addEventListener("click", () => {
+      if (blueprintBtn.disabled) return;
       overlay.classList.remove("hidden");
       requestAnimationFrame(sizeSketchCanvas);
     });
@@ -540,13 +612,24 @@ export function startController(code: string) {
         return;
       }
       if (msg.scope === "ui") {
-        // the stockpile has to track even while the lobby is up, so the
-        // design store is priced correctly the moment the game view opens
+        // Stockpile and Fabricator proximity are tracked at controller scope,
+        // not per view: both keep arriving while the lobby is still up, and
+        // the game view has to open already knowing them rather than showing
+        // a wrong state until the next update happens to land.
         if (msg.type === "stockpile") {
           const s = msg as unknown as Record<MaterialType, number>;
           stock.wood = s.wood;
           stock.stone = s.stone;
           stock.bogiron = s.bogiron;
+        } else if (msg.type === "fabricator-range") {
+          const m = msg as unknown as { slot: Slot; inRange: boolean };
+          if (m.slot === slot && m.inRange !== atFabricator) {
+            atFabricator = m.inRange;
+            applyFabState();
+            // A nudge on arrival: the phone can suddenly do something it
+            // couldn't a moment ago, and you're looking at the TV, not at it.
+            if (m.inRange && "vibrate" in navigator) navigator.vibrate([15, 35, 15]);
+          }
         }
         onUiMsg(msg as unknown as Record<string, unknown>);
       }

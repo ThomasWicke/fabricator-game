@@ -12,15 +12,23 @@
     <title>Fabricator</title>
     <style>
       :root {
-        --bg: #0c1016;
-        --panel: #151b24;
-        --panel-2: #1c2430;
-        --line: #232d3c;
+        /* Deliberately single-theme: this is an instrument panel on an alien
+           planet, and it is the same panel in a bright room or a dark one. */
+        --bg: #080b11;
+        --panel: #121822;
+        --panel-2: #1a2331;
+        --line: #222d3d;
         --text: #e8edf4;
         --muted: #8b98a9;
         --p1: #f06eaa;
-        --p2: #ff9f43;
+        --p2: #ffb347;
         --accent: #6c9ef8;
+        --accent-soft: rgba(108, 158, 248, 0.16);
+        /* bogiron — the material accent, used where the game talks materials */
+        --warm: #d9813f;
+        /* Codes, counts, readouts. Mono is the whole point: it reads as
+           machine output, not as prose. */
+        --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
       }
       * {
         box-sizing: border-box;
@@ -49,82 +57,153 @@
         color: var(--muted);
       }
 
-      /* ── landing ─────────────────────────────────────────────── */
-      .landing {
+      /* ── shared: the animated hex backdrop ───────────────────── */
+      .backdrop {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+      }
+
+      /* ── title screen ────────────────────────────────────────── */
+      .title-screen {
+        position: relative;
         min-height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .title-inner {
+        position: relative;
+        z-index: 1;
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
-        gap: 14px;
-        padding: 28px 20px;
+        gap: 22px;
+        padding: 40px 20px;
+        max-width: 760px;
         text-align: center;
       }
-      .landing h1 {
-        font-size: 28px;
-        letter-spacing: 0.14em;
+      .wordmark {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+      }
+      .wm-small {
+        font-size: clamp(11px, 1.6vw, 15px);
+        letter-spacing: 0.62em;
+        /* the tracking pushes the block right; pull it back to centre */
+        text-indent: 0.62em;
+        font-weight: 700;
+        color: var(--accent);
+        opacity: 0.85;
+      }
+      .wm-big {
+        font-size: clamp(34px, 8.2vw, 82px);
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-indent: 0.1em;
+        color: var(--text);
+        /* a faint blue bloom, as if the letters were lit from inside */
+        text-shadow:
+          0 0 28px rgba(108, 158, 248, 0.42),
+          0 0 3px rgba(108, 158, 248, 0.6);
+      }
+      .wm-rule {
+        margin-top: 14px;
+        width: min(78vw, 460px);
+        height: 2px;
+        border-radius: 2px;
+        background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        box-shadow: 0 0 12px rgba(108, 158, 248, 0.55);
+      }
+      .tagline {
         margin: 0;
-      }
-      .landing .sub {
+        max-width: 46ch;
+        font-size: clamp(13px, 1.6vw, 16px);
+        line-height: 1.65;
         color: var(--muted);
-        margin: 0 0 10px;
-        font-size: 14px;
       }
-      .landing .foot-note {
-        color: var(--muted);
-        font-size: 12px;
-        max-width: 420px;
-        line-height: 1.6;
-        margin: 6px 0 0;
-      }
-      .cards {
+      .plates {
         display: flex;
         flex-wrap: wrap;
         gap: 14px;
         justify-content: center;
         width: 100%;
-        max-width: 700px;
       }
-      .card {
-        flex: 1 1 300px;
+      .plate {
+        flex: 1 1 290px;
         max-width: 340px;
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 18px;
-        padding: 20px;
         display: flex;
         flex-direction: column;
         gap: 12px;
+        padding: 20px;
         text-align: left;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        /* a machined plate: lit from above, seated on the dark */
+        background: linear-gradient(180deg, rgba(26, 35, 49, 0.92), rgba(18, 24, 34, 0.92));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.05),
+          0 10px 30px rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
       }
-      .card h2 {
+      .plate h2 {
         margin: 0;
-        font-size: 12px;
-        letter-spacing: 0.18em;
+        font-size: 11px;
+        letter-spacing: 0.2em;
         text-transform: uppercase;
-        color: var(--muted);
+        color: var(--accent);
       }
-      .card p {
+      .plate p {
         margin: 0;
         font-size: 13px;
-        line-height: 1.55;
+        line-height: 1.6;
         color: var(--muted);
         flex: 1;
       }
-      .card b {
+      .plate b {
         color: var(--text);
       }
-      .landing button,
-      .join-form button {
-        font-weight: 700;
-        padding: 14px 20px;
-        border-radius: 14px;
-        border: 0;
-        background: var(--accent);
-        color: #0b1220;
+      .title-foot {
+        margin: 0;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #5d6a7d;
       }
-      .landing button:disabled {
+      button.primary,
+      .join-form button {
+        font: inherit;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        padding: 14px 20px;
+        border-radius: 12px;
+        border: 1px solid rgba(108, 158, 248, 0.5);
+        background: var(--accent);
+        color: #08111f;
+        transition: filter 0.15s, transform 0.06s;
+      }
+      button.primary:hover,
+      .join-form button:hover:not(:disabled) {
+        filter: brightness(1.12);
+      }
+      button.primary:active,
+      .join-form button:active:not(:disabled) {
+        transform: translateY(1px);
+      }
+      button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .join-form button:disabled {
         background: var(--panel-2);
+        border-color: var(--line);
         color: #56637a;
         cursor: not-allowed;
       }
@@ -141,20 +220,23 @@
         font: inherit;
         font-weight: 600;
         padding: 12px 14px;
-        border-radius: 14px;
+        border-radius: 12px;
         border: 1px solid var(--line);
-        background: var(--panel-2);
+        background: rgba(8, 11, 17, 0.6);
         color: var(--text);
         outline: none;
         min-width: 0;
       }
       .join-form input:focus {
         border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
       }
       .join-form #join-code {
-        font-weight: 800;
-        letter-spacing: 0.24em;
-        width: 120px;
+        font-family: var(--mono);
+        font-weight: 700;
+        letter-spacing: 0.3em;
+        text-indent: 0.3em;
+        width: 130px;
         text-align: center;
         text-transform: uppercase;
       }
@@ -164,6 +246,13 @@
 
       /* ── screen lobby ────────────────────────────────────────── */
       .lobby {
+        position: relative;
+        height: 100%;
+        overflow: hidden;
+      }
+      .lobby-layer {
+        position: relative;
+        z-index: 1;
         height: 100%;
         display: flex;
         flex-direction: column;
@@ -173,45 +262,74 @@
         display: flex;
         align-items: center;
         gap: 14px;
-        padding: 12px 20px;
+        padding: 14px 24px;
         font-size: 13px;
       }
       .lobby-head {
         border-bottom: 1px solid var(--line);
+        background: rgba(8, 11, 17, 0.55);
       }
       .lobby-foot {
         border-top: 1px solid var(--line);
+        background: rgba(8, 11, 17, 0.55);
       }
       .lobby-head .brand {
+        font-size: 13px;
         font-weight: 800;
-        letter-spacing: 0.16em;
+        letter-spacing: 0.26em;
+        text-indent: 0.26em;
+        color: var(--text);
+      }
+      .lobby-head .brand b {
+        font-weight: 800;
+        color: var(--accent);
+        margin-right: 0.5em;
+      }
+      .lobby-head .conn {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
       }
       .lobby-body {
         flex: 1;
         min-height: 0;
         display: grid;
         grid-template-columns: 1fr 1fr;
-        align-content: start;
-        gap: 16px;
-        padding: 16px 20px;
+        /* Centred, not top-aligned: this runs on a TV, where top-aligning two
+           short panels leaves two thirds of the screen as empty void. */
+        align-content: center;
+        gap: 18px;
+        padding: 20px 24px;
         overflow: auto;
       }
+      @media (max-width: 860px) {
+        .lobby-body {
+          grid-template-columns: 1fr;
+        }
+      }
       .lobby-panel {
-        background: var(--panel);
-        border: 1px solid var(--line);
         border-radius: 18px;
-        padding: 18px;
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(26, 35, 49, 0.9), rgba(16, 22, 31, 0.92));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.05),
+          0 12px 34px rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        padding: 20px;
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 16px;
         min-width: 0;
       }
       .panel-title {
         display: flex;
         align-items: center;
         gap: 10px;
-        font-size: 12px;
-        letter-spacing: 0.16em;
+        font-size: 11px;
+        letter-spacing: 0.2em;
         text-transform: uppercase;
         color: var(--muted);
       }
@@ -219,75 +337,86 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 20px;
-        height: 20px;
+        width: 22px;
+        height: 22px;
         border-radius: 50%;
-        background: var(--panel-2);
-        color: var(--text);
+        border: 1px solid rgba(108, 158, 248, 0.45);
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-family: var(--mono);
         font-size: 11px;
-        font-weight: 800;
+        font-weight: 700;
         letter-spacing: 0;
       }
       .join-block {
         display: flex;
-        gap: 16px;
+        gap: 18px;
         align-items: center;
       }
       .join-block canvas {
         background: #fff;
-        padding: 7px;
+        padding: 8px;
         border-radius: 12px;
         flex: none;
+        box-shadow: 0 0 0 1px var(--line), 0 6px 18px rgba(0, 0, 0, 0.4);
       }
       .join-copy {
         min-width: 0;
       }
       .join-copy .label {
-        font-size: 11px;
-        letter-spacing: 0.14em;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.18em;
         text-transform: uppercase;
         color: var(--muted);
       }
       .join-copy .big-code {
-        font-size: 46px;
-        line-height: 1.1;
-        font-weight: 800;
-        letter-spacing: 0.18em;
+        font-family: var(--mono);
+        font-size: 52px;
+        line-height: 1.15;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-indent: 0.16em;
+        color: var(--text);
+        text-shadow: 0 0 22px rgba(108, 158, 248, 0.35);
       }
       .join-copy .url {
+        font-family: var(--mono);
         font-size: 12px;
         color: var(--accent);
         word-break: break-all;
-        margin: 2px 0 8px;
+        margin: 2px 0 10px;
       }
       .slots {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
       }
       .slot-card {
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 12px 14px;
+        padding: 13px 15px;
         border-radius: 14px;
-        background: var(--panel-2);
-        border: 1px solid transparent;
+        background: rgba(8, 11, 17, 0.5);
+        border: 1px solid var(--line);
+        transition: border-color 0.2s, background 0.2s;
       }
       .slot-card .dot {
         width: 12px;
         height: 12px;
         border-radius: 50%;
-        background: #3a465c;
+        background: #303c50;
         flex: none;
+        transition: box-shadow 0.2s, background 0.2s;
       }
       .slot-card.p1.ready,
       .slot-card.p1.joined {
-        border-color: rgba(240, 110, 170, 0.45);
+        border-color: rgba(240, 110, 170, 0.5);
       }
       .slot-card.p2.ready,
       .slot-card.p2.joined {
-        border-color: rgba(255, 159, 67, 0.45);
+        border-color: rgba(255, 179, 71, 0.5);
       }
       .slot-card.p1.ready .dot,
       .slot-card.p1.joined .dot {
@@ -297,8 +426,12 @@
       .slot-card.p2.joined .dot {
         background: var(--p2);
       }
+      /* Ready is the state the host is waiting on, so it gets the halo. */
       .slot-card.ready .dot {
-        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
+        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.09);
+      }
+      .slot-card.empty {
+        border-style: dashed;
       }
       .slot-card.empty .slot-name,
       .slot-card.offline .slot-name {
@@ -309,20 +442,46 @@
         font-size: 16px;
       }
       .slot-state {
-        font-size: 12px;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
         color: var(--muted);
       }
-      .spectators {
+      .spectators,
+      .lobby-foot .hint {
         font-size: 12px;
         color: var(--muted);
       }
       .lobby-note {
         font-size: 13px;
-        line-height: 1.55;
+        line-height: 1.6;
         color: var(--muted);
       }
       .lobby-note b {
         color: var(--text);
+      }
+      .lobby-foot button.primary {
+        padding: 15px 32px;
+        border-radius: 13px;
+      }
+      /* Everyone is ready: draw the host's eye to the one control that matters */
+      .lobby-foot button.primary.pulse {
+        animation: readyPulse 1.9s ease-in-out infinite;
+      }
+      @keyframes readyPulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(108, 158, 248, 0.55);
+        }
+        50% {
+          box-shadow: 0 0 0 10px rgba(108, 158, 248, 0);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .lobby-foot button.primary.pulse {
+          animation: none;
+        }
       }
 
       /* ── landing-site preview ─────────────────────────────────── */
@@ -403,10 +562,14 @@
         background: var(--bg);
       }
       .pad-lobby.slot-1 {
-        background: radial-gradient(120% 90% at 50% 0%, #371527 0%, var(--bg) 55%);
+        background:
+          radial-gradient(120% 85% at 50% 0%, rgba(240, 110, 170, 0.2), transparent 58%),
+          var(--bg);
       }
       .pad-lobby.slot-2 {
-        background: radial-gradient(120% 90% at 50% 0%, #3a2712 0%, var(--bg) 55%);
+        background:
+          radial-gradient(120% 85% at 50% 0%, rgba(255, 179, 71, 0.18), transparent 58%),
+          var(--bg);
       }
       .pad-lobby-head {
         display: flex;
@@ -414,14 +577,20 @@
         font-size: 12px;
         color: var(--muted);
       }
+      .pad-lobby-head {
+        font-family: var(--mono);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
       .pad-lobby-head .room {
-        font-weight: 800;
-        letter-spacing: 0.16em;
-        color: var(--text);
+        font-weight: 700;
+        letter-spacing: 0.2em;
+        color: var(--accent);
       }
       .you-card {
-        background: var(--panel);
+        background: linear-gradient(180deg, rgba(26, 35, 49, 0.92), rgba(18, 24, 34, 0.92));
         border: 1px solid var(--line);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
         border-radius: 18px;
         padding: 16px;
         display: flex;
@@ -429,9 +598,10 @@
         gap: 12px;
       }
       .you-slot {
+        font-family: var(--mono);
         font-size: 12px;
-        font-weight: 800;
-        letter-spacing: 0.18em;
+        font-weight: 700;
+        letter-spacing: 0.2em;
       }
       .you-slot.p1 {
         color: var(--p1);
@@ -505,7 +675,10 @@
         white-space: nowrap;
       }
       .roster-row .rstate {
-        font-size: 12px;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
         color: var(--muted);
       }
       .roster-empty {
@@ -865,6 +1038,10 @@
       }
 
       /* ── controller ──────────────────────────────────────────── */
+      /* The phone is a handheld instrument from the same world as the screen:
+         a dark plate, a lit rail across the top, machined controls. It is used
+         without being looked at, so everything is oversized and high-contrast
+         and nothing important is smaller than a thumb. */
       .controller {
         position: fixed;
         inset: 0;
@@ -872,28 +1049,69 @@
         user-select: none;
         -webkit-user-select: none;
         overflow: hidden;
+        background:
+          radial-gradient(130% 90% at 50% 108%, rgba(108, 158, 248, 0.1), transparent 60%),
+          var(--bg);
       }
-      .controller .status {
-        position: absolute;
-        top: env(safe-area-inset-top, 8px);
-        left: 0;
-        right: 0;
-        text-align: center;
-        font-size: 12px;
-        color: var(--muted);
-        padding: 8px;
-        pointer-events: none;
-        z-index: 3;
-      }
-      .controller .status .slot-name {
-        font-weight: 800;
-      }
+      /* Your own colour washes up from the bottom, matching your alien on the
+         big screen — so glancing down tells you which of the two you are. */
       .controller.slot-1 {
-        background: radial-gradient(120% 100% at 50% 100%, #371527 0%, var(--bg) 60%);
+        background:
+          radial-gradient(120% 85% at 50% 108%, rgba(240, 110, 170, 0.22), transparent 62%),
+          var(--bg);
       }
       .controller.slot-2 {
-        background: radial-gradient(120% 100% at 50% 100%, #3a2712 0%, var(--bg) 60%);
+        background:
+          radial-gradient(120% 85% at 50% 108%, rgba(255, 179, 71, 0.2), transparent 62%),
+          var(--bg);
       }
+
+      .pad-rail {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: calc(env(safe-area-inset-top, 6px) + 8px) 14px 8px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(8, 11, 17, 0.72);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        pointer-events: none;
+      }
+      .rail-slot {
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: var(--text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 45%;
+      }
+      .controller.slot-1 .rail-slot {
+        color: var(--p1);
+      }
+      .controller.slot-2 .rail-slot {
+        color: var(--p2);
+      }
+      .rail-room {
+        margin-left: auto;
+        color: var(--accent);
+        letter-spacing: 0.22em;
+      }
+      .rail-conn {
+        min-width: 6.5em;
+        text-align: right;
+      }
+
       .btn-zone {
         position: absolute;
         left: 0;
@@ -910,92 +1128,208 @@
         width: 55%;
         z-index: 1;
       }
+
       .action-btn {
         position: absolute;
-        width: 88px;
-        height: 88px;
+        width: 94px;
+        height: 94px;
         border-radius: 50%;
-        border: 2px solid rgba(255, 255, 255, 0.16);
-        background: rgba(255, 255, 255, 0.06);
+        border: 2px solid rgba(232, 237, 244, 0.22);
+        background:
+          radial-gradient(120% 120% at 50% 20%, rgba(255, 255, 255, 0.13), transparent 65%),
+          rgba(26, 35, 49, 0.85);
         color: var(--text);
-        font: inherit;
-        font-size: 26px;
-        font-weight: 800;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
+        gap: 1px;
         touch-action: none;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.14),
+          0 6px 16px rgba(0, 0, 0, 0.5);
+        transition: transform 0.05s, background 0.1s, border-color 0.1s;
+      }
+      .action-btn b {
+        font-size: 25px;
+        font-weight: 800;
+        line-height: 1;
+      }
+      .action-btn i {
+        font-style: normal;
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .action-btn.secondary {
+        width: 78px;
+        height: 78px;
+      }
+      .action-btn.secondary b {
+        font-size: 20px;
       }
       .action-btn.pressed {
-        background: rgba(255, 255, 255, 0.28);
-        border-color: rgba(255, 255, 255, 0.5);
+        background:
+          radial-gradient(120% 120% at 50% 20%, rgba(255, 255, 255, 0.3), transparent 65%),
+          rgba(108, 158, 248, 0.45);
+        border-color: rgba(150, 194, 255, 0.75);
+        transform: scale(0.96);
       }
+      /* Thumb geometry: A sits where the thumb rests, B is one short reach
+         up and inward. Spreading them further looks tidier and plays worse. */
       #btn-a {
-        left: 20%;
-        bottom: 22%;
+        left: 16%;
+        bottom: 17%;
       }
       #btn-b {
-        left: 44%;
-        bottom: 42%;
+        left: 50%;
+        bottom: 33%;
       }
+
+      /* The stick materialises wherever the thumb lands — there is nothing to
+         find by feel, which is why it can be invisible until touched. */
       .stick-base {
         position: absolute;
-        width: 132px;
-        height: 132px;
+        width: 140px;
+        height: 140px;
         border-radius: 50%;
-        border: 2px solid rgba(255, 255, 255, 0.14);
-        background: rgba(255, 255, 255, 0.04);
+        border: 2px solid rgba(232, 237, 244, 0.16);
+        background: rgba(8, 11, 17, 0.35);
         transform: translate(-50%, -50%);
         pointer-events: none;
         opacity: 0;
+        transition: opacity 0.12s;
+      }
+      /* inner ring marks the dead zone: inside it, you are not moving */
+      .stick-base .ring {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 26px;
+        height: 26px;
+        margin: -13px 0 0 -13px;
+        border-radius: 50%;
+        border: 1px dashed rgba(232, 237, 244, 0.28);
       }
       .stick-nub {
         position: absolute;
-        width: 58px;
-        height: 58px;
+        width: 60px;
+        height: 60px;
         border-radius: 50%;
-        background: rgba(255, 255, 255, 0.32);
+        background:
+          radial-gradient(120% 120% at 50% 25%, rgba(255, 255, 255, 0.5), transparent 62%),
+          rgba(232, 237, 244, 0.34);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
         transform: translate(-50%, -50%);
         pointer-events: none;
         opacity: 0;
+        transition: opacity 0.12s, background 0.12s;
+      }
+      .stick-zone.engaged .stick-base,
+      .stick-zone.engaged .stick-nub {
+        opacity: 1;
+      }
+      .stick-zone.engaged .zone-hint {
+        opacity: 0;
+      }
+      /* past the dead zone the nub takes your player colour: the control is
+         live, and it is live for *you* */
+      .controller.slot-1 .stick-zone.live .stick-nub {
+        background:
+          radial-gradient(120% 120% at 50% 25%, rgba(255, 255, 255, 0.55), transparent 62%),
+          var(--p1);
+      }
+      .controller.slot-2 .stick-zone.live .stick-nub {
+        background:
+          radial-gradient(120% 120% at 50% 25%, rgba(255, 255, 255, 0.55), transparent 62%),
+          var(--p2);
       }
       .controller .zone-hint {
         position: absolute;
-        bottom: 12%;
+        bottom: 11%;
         width: 100%;
         text-align: center;
-        color: rgba(255, 255, 255, 0.22);
-        font-size: 13px;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: rgba(232, 237, 244, 0.22);
         pointer-events: none;
+        transition: opacity 0.2s;
       }
+
+      /* ── the Fabricator controls ─────────────────────────────── */
       .top-btns {
         position: absolute;
-        top: calc(env(safe-area-inset-top, 8px) + 34px);
+        top: calc(env(safe-area-inset-top, 6px) + 44px);
         left: 12px;
         right: 12px;
         z-index: 4;
         display: flex;
         gap: 8px;
       }
-      .blueprint-btn {
-        font: inherit;
-        font-size: 13px;
+      .fab-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        font-family: var(--mono);
+        font-size: 12px;
         font-weight: 700;
-        padding: 10px 14px;
+        letter-spacing: 0.12em;
+        padding: 12px 10px;
         border-radius: 12px;
-        border: 1px solid #2a3546;
-        background: rgba(21, 27, 36, 0.9);
+        border: 1px solid var(--line);
+        background: rgba(18, 24, 34, 0.92);
         color: var(--text);
+        transition: border-color 0.2s, box-shadow 0.2s, opacity 0.2s;
       }
-      .blueprint-btn .badge {
+      .fab-btn .ico {
+        font-size: 14px;
+        color: var(--accent);
+      }
+      .fab-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .fab-btn:disabled .ico {
+        color: var(--muted);
+      }
+      /* In range, the machine's controls light up. This is the payoff for
+         walking back to it, so it should be unmistakable at a glance. */
+      .controller.at-fab .fab-btn:not(:disabled) {
+        border-color: rgba(108, 158, 248, 0.65);
+        box-shadow: 0 0 0 1px rgba(108, 158, 248, 0.25), 0 0 18px rgba(108, 158, 248, 0.22);
+      }
+      .fab-btn .badge {
         display: inline-block;
         min-width: 18px;
-        margin-left: 6px;
         padding: 1px 5px;
         border-radius: 99px;
         background: var(--accent);
-        color: #0b1220;
-        font-size: 11px;
+        color: #08111f;
+        font-size: 10px;
+      }
+      .fab-hint {
+        position: absolute;
+        top: calc(env(safe-area-inset-top, 6px) + 92px);
+        left: 12px;
+        right: 12px;
+        z-index: 4;
+        text-align: center;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+        pointer-events: none;
+        transition: color 0.2s;
+      }
+      .fab-hint.on {
+        color: var(--accent);
       }
 
       /* ── design library ──────────────────────────────────────── */

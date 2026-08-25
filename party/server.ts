@@ -134,10 +134,18 @@ export class FabricatorServer extends Server<Env> {
         break;
       }
       default: {
-        // Opaque relay: manufacture (phone→screens), stockpile (screen→phones),
-        // fabricate-error, …
-        if (fromScreen) this.sendToControllers(message, msg.to);
-        else this.sendToScreens(message);
+        // Opaque relay: manufacture (phone→screens), stockpile and
+        // fabricator-range (screen→phones), fabricate-error, …
+        if (fromScreen) {
+          this.sendToControllers(message, msg.to);
+          break;
+        }
+        // Phone→screen messages get the sender stamped on. The screen gates
+        // building on who is standing at the Fabricator, and it cannot take
+        // the phone's word for who that is. These are rare (a BUILD press),
+        // so re-serialising to add the field costs nothing that matters.
+        const playerId = this.connToPlayer.get(connection.id);
+        this.sendToScreens(playerId ? JSON.stringify({ ...msg, from: playerId }) : message);
       }
     }
   }

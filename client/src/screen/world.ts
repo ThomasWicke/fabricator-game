@@ -123,6 +123,10 @@ const SHORE_FAN = [0, 0.4, -0.4, 0.8, -0.8, 1.3, -1.3];
 /** Below this multiplier a machine simply cannot enter the ground at all. */
 const IMPASSABLE = 0.03;
 
+/** How close you have to stand to use the Fabricator. Generous enough that
+ *  "I'm at the machine" is obvious, tight enough that you have to go there. */
+const FABRICATOR_RANGE = 120;
+
 /** The partner arrow appears only inside this range — beyond it you're on
  *  your own expedition and an arrow is just clutter. */
 const POINTER_RANGE = 1300;
@@ -165,6 +169,9 @@ type PlayerEntity = {
     glow?: Phaser.GameObjects.Image;
   } | null;
   nextHarvestAt: number;
+  /** Standing at the Fabricator. Tracked so the change can be pushed to the
+   *  phone exactly once, on the edge. */
+  atFabricator: boolean;
 };
 
 type VehicleEntity = {
@@ -227,6 +234,9 @@ export class WorldScene extends Phaser.Scene {
   private cam2!: Phaser.Cameras.Scene2D.Camera;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private pad!: { x: number; y: number };
+  private padRing!: Phaser.GameObjects.Arc;
+  private padLabel!: Phaser.GameObjects.Text;
+  private padPrompt!: Phaser.GameObjects.Text;
   private spawn = { col: 0, row: 0 };
   private fabFx: Phaser.GameObjects.GameObject[] = [];
   /** One night overlay per viewport: an endless world has no rectangle a
@@ -259,6 +269,10 @@ export class WorldScene extends Phaser.Scene {
   /** Fired when a player boards or leaves a vehicle, for the HUD. */
   onRideChanged: ((slot: Slot, vehicle: string | null, driving: boolean) => void) | null =
     null;
+  /** Fired on the edge when a player walks up to or away from the Fabricator.
+   *  The shell relays it to that player's phone, which is where the blueprint
+   *  pad and the build buttons live. */
+  onFabricatorRange: ((slot: Slot, inRange: boolean) => void) | null = null;
   /** Fired when persistent state changed — the shell debounces a save. */
   onDirty: (() => void) | null = null;
   /** Fired once the scene exists and can accept a snapshot. */
@@ -314,6 +328,37 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.add.image(this.pad.x, this.pad.y, "pad").setDepth(this.pad.y);
+    // The machine announces itself. A permanent plate says what it is; the
+    // ring and the prompt only appear once someone is close enough to use it,
+    // which is how you learn that standing here is what unlocks the phone.
+    this.padRing = this.add
+      .circle(this.pad.x, this.pad.y + 6, FABRICATOR_RANGE * 0.55)
+      .setStrokeStyle(2, 0x6c9ef8, 0.7)
+      .setDepth(this.pad.y - 1)
+      .setVisible(false);
+    this.padLabel = this.add
+      .text(this.pad.x, this.pad.y - 34, "FABRICATOR", {
+        fontFamily: "ui-monospace, Menlo, monospace",
+        fontSize: "11px",
+        fontStyle: "bold",
+        color: "#8fc1ff",
+        backgroundColor: "rgba(8,14,26,0.55)",
+        padding: { x: 6, y: 2 },
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(1e6);
+    this.padPrompt = this.add
+      .text(this.pad.x, this.pad.y + 46, "open BLUEPRINT on your phone", {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "11px",
+        fontStyle: "bold",
+        color: "#dfe8f4",
+        backgroundColor: "rgba(8,14,26,0.6)",
+        padding: { x: 6, y: 3 },
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(1e6)
+      .setVisible(false);
 
     // ── players (aliens: stand=down, walk=side, climb=up) ───────
     for (const skin of Object.values(ALIEN_SKINS)) {
@@ -545,6 +590,7 @@ export class WorldScene extends Phaser.Scene {
       driving: null,
       tool: null,
       nextHarvestAt: 0,
+      atFabricator: false,
     };
     this.players.set(slot, entity);
     return entity;
@@ -1130,10 +1176,48 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.runAutomation(now);
+    this.updateFabricatorPresence(now);
     this.updatePointers();
     // Last: the cameras have finished following by now, so the chunks we
     // stream are the ones about to be on screen rather than last frame's.
     this.field.update(cams);
+  }
+
+  /**
+   * Who is standing at the Fabricator. Fired on the edge only, so the phone
+   * gets one message when you arrive and one when you leave rather than
+   * thirty a second.
+   */
+  private updateFabricatorPresence(now: number): void {
+    let anyone = false;
+    for (const p of this.players.values()) {
+      const near =
+        Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, this.pad.x, this.pad.y) <
+        FABRICATOR_RANGE;
+      anyone ||= near;
+      if (near === p.atFabricator) continue;
+      p.atFabricator = near;
+      this.onFabricatorRange?.(p.slot, near);
+      if (near) this.floatText(this.pad.x, this.pad.y - 52, "Fabricator ready", "#8fc1ff");
+    }
+
+    this.padRing.setVisible(anyone);
+    this.padPrompt.setVisible(anyone);
+    this.padLabel.setAlpha(anyone ? 1 : 0.55);
+    if (anyone) {
+      // A slow breath rather than a tween: no object to leak, and it stops
+      // dead the moment nobody is there.
+      const pulse = (Math.sin(now / 420) + 1) / 2;
+      this.padRing.setScale(0.94 + pulse * 0.1);
+      this.padRing.setAlpha(0.35 + pulse * 0.4);
+    }
+  }
+
+  /** The authoritative range check. The phone disables its own buttons, but a
+   *  message can still arrive late or from a stale view, so building is
+   *  verified here — where the simulation actually lives. */
+  isAtFabricator(slot: Slot): boolean {
+    return this.players.get(slot)?.atFabricator ?? false;
   }
 
   /** Can a walker stand here? */

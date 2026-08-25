@@ -20,6 +20,7 @@ import { formatCost } from "../../../shared/fabricator/cost";
 import { resolveIdentity } from "../identity";
 import { RoomConnection } from "../socket";
 import { keepScreenAwake } from "../wake-lock";
+import { startBackdrop } from "../backdrop";
 import { WorldScene, type MinimapData, type PlaceableDesign } from "./world";
 import {
   BIOMES,
@@ -71,6 +72,9 @@ export function startScreen(code: string) {
   // whoever drew the blueprint).
   const slotByPlayerId = new Map<string, Slot>();
   let lastStock: Record<MaterialType, number> | null = null;
+  /** Last known Fabricator proximity per slot, so a phone that reconnects
+   *  mid-game is told the truth instead of waiting for the next edge. */
+  const fabRange: Record<Slot, boolean> = { 1: false, 2: false };
   let pendingSnapshot: WorldSnapshot | null | undefined;
   // The room code IS the world. There is nothing to configure: a new code is
   // a new planet, and the same code always regenerates the same one.
@@ -79,6 +83,9 @@ export function startScreen(code: string) {
   let phase: Phase = "lobby";
   let scene: WorldScene | null = null;
   let connStatus = "connecting";
+  /** The lobby's animated hex field. Torn down when the world starts — it's a
+   *  rAF loop, and the game needs every frame it can get. */
+  let stopBackdrop: (() => void) | null = null;
 
   // Per-view hooks, replaced on every render.
   let onRoster: () => void = () => {};
@@ -100,46 +107,51 @@ export function startScreen(code: string) {
   function renderLobby() {
     phase = "lobby";
     app.innerHTML = `
-      <div class="lobby">
-        <header class="lobby-head">
-          <span class="brand">UNIVERSAL FABRICATOR</span>
-          <span class="spacer"></span>
-          <span class="hint" id="conn-status">${connStatus}</span>
-        </header>
+      <div class="lobby" id="lobby-root">
+        <div class="lobby-layer">
+          <header class="lobby-head">
+            <span class="brand"><b>UNIVERSAL</b>FABRICATOR</span>
+            <span class="spacer"></span>
+            <span class="conn" id="conn-status">${connStatus}</span>
+          </header>
 
-        <div class="lobby-body">
-          <section class="lobby-panel">
-            <div class="panel-title"><span class="step">1</span> Grab your phones</div>
-            <div class="join-block">
-              <canvas id="qr-canvas"></canvas>
-              <div class="join-copy">
-                <div class="label">room code</div>
-                <div class="big-code">${upperCode}</div>
-                <div class="url">${controllerUrl}</div>
-                <div class="label">or open the site and type the code</div>
+          <div class="lobby-body">
+            <section class="lobby-panel">
+              <div class="panel-title"><span class="step">1</span> Grab your phones</div>
+              <div class="join-block">
+                <canvas id="qr-canvas"></canvas>
+                <div class="join-copy">
+                  <div class="label">room code</div>
+                  <div class="big-code">${upperCode}</div>
+                  <div class="url">${controllerUrl}</div>
+                  <div class="label">or open the site and type the code</div>
+                </div>
               </div>
-            </div>
-            <div class="slots" id="slots"></div>
-            <div class="spectators" id="spectators"></div>
-          </section>
+              <div class="slots" id="slots"></div>
+              <div class="spectators" id="spectators"></div>
+            </section>
 
-          <section class="lobby-panel">
-            <div class="panel-title"><span class="step">2</span> The landing site</div>
-            <div class="world-preview">
-              <canvas id="world-map" width="300" height="300"></canvas>
-              <div class="world-legend" id="world-legend"></div>
-            </div>
-            <div class="lobby-note" id="world-note">Checking for a saved world…</div>
-          </section>
+            <section class="lobby-panel">
+              <div class="panel-title"><span class="step">2</span> The landing site</div>
+              <div class="world-preview">
+                <canvas id="world-map" width="300" height="300"></canvas>
+                <div class="world-legend" id="world-legend"></div>
+              </div>
+              <div class="lobby-note" id="world-note">Checking for a saved world…</div>
+            </section>
+          </div>
+
+          <footer class="lobby-foot">
+            <span class="hint" id="start-hint"></span>
+            <span class="spacer"></span>
+            <button class="primary" id="start-btn">START EXPEDITION</button>
+          </footer>
         </div>
-
-        <footer class="lobby-foot">
-          <span class="hint" id="start-hint"></span>
-          <span class="spacer"></span>
-          <button class="primary" id="start-btn">START EXPEDITION</button>
-        </footer>
       </div>
     `;
+
+    stopBackdrop?.();
+    stopBackdrop = startBackdrop(document.getElementById("lobby-root")!);
 
     const statusEl = document.getElementById("conn-status")!;
     onConnStatus = () => {
@@ -283,6 +295,9 @@ export function startScreen(code: string) {
   function startGame() {
       phase = "playing";
       syncPhase();
+      // The backdrop is a requestAnimationFrame loop; Phaser wants that budget.
+      stopBackdrop?.();
+      stopBackdrop = null;
       app.innerHTML = `
       <div class="screen">
         <div class="screen-stage" id="stage">
@@ -531,6 +546,13 @@ export function startScreen(code: string) {
       }
     };
 
+    // Fabrication is a place. The world says who's standing at the machine;
+    // the phones turn their blueprint pad and build buttons on accordingly.
+    worldScene.onFabricatorRange = (slot, inRange) => {
+      fabRange[slot] = inRange;
+      conn.send({ scope: "ui", type: "fabricator-range", slot, inRange });
+    };
+
     worldScene.onToolEquipped = (slot, spec) => {
       const el = document.getElementById(`tool-${slot === 1 ? "p1" : "p2"}`)!;
       const gathers = spec.harvest ? ` · ${spec.harvest.materials.join("/")}` : "";
@@ -568,7 +590,8 @@ export function startScreen(code: string) {
               : "waiting to join…";
         }
       }
-      // a phone that just (re)joined needs the current stockpile
+      // a phone that just (re)joined needs the current stockpile, and needs to
+      // know whether its player happens to be standing at the machine
       if (lastStock) {
         conn.send({
           scope: "ui",
@@ -577,6 +600,9 @@ export function startScreen(code: string) {
           stone: lastStock.stone,
           bogiron: lastStock.bogiron,
         });
+      }
+      for (const slot of [1, 2] as const) {
+        conn.send({ scope: "ui", type: "fabricator-range", slot, inRange: fabRange[slot] });
       }
       // Joining is the lobby's job now, so in-game the QR is purely a rejoin
       // aid: it comes back only for a seat that's taken but offline. Starting
@@ -659,6 +685,14 @@ export function startScreen(code: string) {
             return;
           }
           if (!scene) return;
+          // Whoever pressed BUILD has to be at the machine — not whoever
+          // originally drew it. The phone greys the button out, but this is
+          // the check that counts.
+          const presser = slotByPlayerId.get(String((msg as { from?: string }).from ?? ""));
+          if (presser && !scene.isAtFabricator(presser)) {
+            toast("Too far from the Fabricator to build that.", true);
+            return;
+          }
           const slot = slotByPlayerId.get(d.createdBy) ?? 1;
           const rejection = scene.tryFabricate(placeable(d), slot);
           if (rejection) {
