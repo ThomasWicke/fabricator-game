@@ -422,11 +422,18 @@ export function startController(code: string) {
           // Two different reasons a design can't be built right now, and they
           // call for two different responses from the player — so say which.
           const label = !affordable ? "NEED MORE" : !atFabricator ? "TOO FAR" : "BUILD";
+          // The thumbnail is the point of the library: you are about to spend
+          // real materials, and the name alone doesn't tell you what the
+          // Fabricator actually made of your sketch.
+          const thumb = d.artUrl
+            ? `<img class="dthumb" src="${esc(d.artUrl)}" alt="" loading="lazy" />`
+            : `<div class="dthumb missing"></div>`;
           return `
             <div class="design-row">
+              ${thumb}
               <div class="info">
                 <div class="dname">${esc(d.displayName)}</div>
-                <div class="dmeta">${d.category}${built}${d.hasArt ? " · art ✓" : ""}</div>
+                <div class="dmeta">${d.category}${built}</div>
                 <div class="dcost">${costMarkup(d.cost)}</div>
               </div>
               <button data-build="${d.id}" ${
@@ -436,6 +443,23 @@ export function startController(code: string) {
         })
         .join("");
       designsList.innerHTML = rows;
+      // A design can have art recorded but the blob still be missing (an
+      // upload that failed, an old room). Drop the src so the browser shows
+      // the empty plate instead of a broken-image glyph.
+      for (const img of designsList.querySelectorAll<HTMLImageElement>("img.dthumb")) {
+        // Swap the whole element for a blank plate. Clearing src is not
+        // enough: an <img> that has already failed keeps painting its
+        // broken-image glyph regardless of what the attribute says.
+        const fail = () => {
+          const plate = document.createElement("div");
+          plate.className = "dthumb missing";
+          img.replaceWith(plate);
+        };
+        img.addEventListener("error", fail);
+        // A cached failure fires its error event before this listener exists
+        // and never fires again, so check for one that already happened.
+        if (img.complete && img.naturalWidth === 0) fail();
+      }
     };
 
     designsList.addEventListener("click", (e) => {

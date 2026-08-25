@@ -1382,6 +1382,30 @@
         background: var(--panel);
         border: 1px solid #232c3a;
       }
+      /* What the Fabricator actually made of your sketch, at a glance —
+         checkered so a transparent sprite still reads as a shape. */
+      .design-row .dthumb {
+        flex: none;
+        width: 52px;
+        height: 52px;
+        border-radius: 10px;
+        object-fit: contain;
+        background-color: rgba(8, 11, 17, 0.6);
+        background-image:
+          linear-gradient(45deg, rgba(255, 255, 255, 0.045) 25%, transparent 25%),
+          linear-gradient(-45deg, rgba(255, 255, 255, 0.045) 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.045) 75%),
+          linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.045) 75%);
+        background-size: 10px 10px;
+        background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+        border: 1px solid var(--line);
+        padding: 3px;
+      }
+      /* No art yet, or it failed to load. The element keeps its plate; the
+         src is stripped in JS so no broken-image glyph can appear. */
+      .design-row .dthumb.missing {
+        opacity: 0.5;
+      }
       .design-row .info {
         flex: 1;
         min-width: 0;

@@ -20,14 +20,17 @@ export function computeCost(spec: RawSpec): MaterialCost {
   // silently double the price of every machine that already existed.
   const versatility =
     (TERRAINS.reduce((sum, k) => sum + t[k], 0) / TERRAINS.length) * 12;
-  const parts = spec.anchors.length * 2;
   const harvest = spec.harvest
     ? spec.harvest.rate * 3 + spec.harvest.materials.length * 2
     : 0;
   const emission = spec.emission ? spec.emission.intensity * 3 : 0;
+  // Seats are the one thing left that scales with "how much machine is this":
+  // the parts list used to carry that weight, and dropping it without a
+  // replacement would have made every vehicle several units cheaper overnight.
+  const chassis = spec.category === "vehicle" ? 4 + spec.seats * 2 : 0;
   const total = Math.max(
     1,
-    Math.round(area + mobility + versatility + parts + harvest + emission),
+    Math.round(area + mobility + versatility + chassis + harvest + emission),
   );
 
   // Material split. Going where bare legs can't is the bogiron sink: the bog

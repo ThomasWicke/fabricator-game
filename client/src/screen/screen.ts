@@ -548,6 +548,12 @@ export function startScreen(code: string) {
 
     // Fabrication is a place. The world says who's standing at the machine;
     // the phones turn their blueprint pad and build buttons on accordingly.
+    // Fired when a design truly lands in the world — which for a structure is
+    // when its carrier puts it down, not when BUILD was pressed.
+    worldScene.onDesignBuilt = (designId) => {
+      conn.send({ scope: "ui", type: "design-built", designId });
+    };
+
     worldScene.onFabricatorRange = (slot, inRange) => {
       fabRange[slot] = inRange;
       conn.send({ scope: "ui", type: "fabricator-range", slot, inRange });
@@ -693,12 +699,24 @@ export function startScreen(code: string) {
             toast("Too far from the Fabricator to build that.", true);
             return;
           }
-          const slot = slotByPlayerId.get(d.createdBy) ?? 1;
-          const rejection = scene.tryFabricate(placeable(d), slot);
-          if (rejection) {
-            toast(rejection, true);
+          // A structure goes to whoever pressed BUILD — they're the one who
+          // has to carry it somewhere. Everything else goes to whoever drew
+          // the blueprint, since a tool attaches to its maker.
+          const outcome = scene.tryFabricate(
+            placeable(d),
+            (d.spec.category === "structure" ? presser : undefined) ??
+              slotByPlayerId.get(d.createdBy) ??
+              1,
+          );
+          if (!outcome.ok) {
+            toast(outcome.reason, true);
+          } else if (outcome.carrying) {
+            toast(
+              `<span class="lead">${escapeHtml(d.spec.displayName)} is on your shoulder</span> — ` +
+                `walk it to where it should stand, then press <b>A</b>. ` +
+                `<span class="hint">Nothing is spent until you put it down.</span>`,
+            );
           } else {
-            conn.send({ scope: "ui", type: "design-built", designId });
             toast(
               `<span class="lead">Built ${escapeHtml(d.spec.displayName)}</span> ` +
                 `<span class="cost">−${formatCost(d.spec.cost)}</span>`,

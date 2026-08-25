@@ -30,15 +30,9 @@ export const TERRAINS: readonly TerrainType[] = [
 ];
 
 export type TerrainModifiers = Record<TerrainType, number>;
-export type PartKind =
-  | "wheel"
-  | "leg"
-  | "float"
-  | "track"
-  | "drill"
-  | "chimney"
-  | "lamp";
-export type EmissionKind = "light" | "smoke" | "sparks";
+/** What a machine throws off while it runs. Exhaust of any kind streams out
+ *  BEHIND the thing that makes it; light is the one that surrounds it. */
+export type EmissionKind = "light" | "smoke" | "steam" | "sparks";
 
 export const MATERIALS: readonly MaterialType[] = ["wood", "stone", "bogiron"];
 
@@ -67,15 +61,20 @@ export type FabricatedSpec = {
      *  lists it — bare hands can't gather it. */
     materials: MaterialType[];
   };
-  /** Ambient output — visible in the world (glow / smoke puffs / sparks). */
+  /**
+   * Ambient output. The renderer decides WHERE it goes — exhaust behind the
+   * machine, light around it — so the spec only says what kind and how much.
+   *
+   * There is deliberately no parts list any more. Bolting library wheels and
+   * chimneys onto generated art doubled up a silhouette that already had
+   * them, and it spent the compiler's attention on where to glue props
+   * instead of on what the machine DOES.
+   */
   emission?: {
     kind: EmissionKind;
     /** 0..1 — scales radius / particle frequency. */
     intensity: number;
   };
-  /** Functional parts attached to the body; x/y relative to body size,
-   *  each in [-0.5, 0.5] ((0,0) = body center). */
-  anchors: { part: PartKind; x: number; y: number }[];
   seats: number;
   /** One in-world line from the Fabricator about its interpretation. */
   flavor: string;
@@ -136,32 +135,16 @@ export const SPEC_JSON_SCHEMA = {
     emission: {
       type: "object",
       properties: {
-        kind: { type: "string", enum: ["light", "smoke", "sparks"] },
+        kind: { type: "string", enum: ["light", "smoke", "steam", "sparks"] },
         intensity: { type: "number" },
       },
       required: ["kind", "intensity"],
       additionalProperties: false,
     },
-    anchors: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          part: {
-            type: "string",
-            enum: ["wheel", "leg", "float", "track", "drill", "chimney", "lamp"],
-          },
-          x: { type: "number" },
-          y: { type: "number" },
-        },
-        required: ["part", "x", "y"],
-        additionalProperties: false,
-      },
-    },
     seats: { type: "number" },
     flavor: { type: "string" },
   },
-  required: ["category", "displayName", "size", "locomotion", "anchors", "seats", "flavor"],
+  required: ["category", "displayName", "size", "locomotion", "seats", "flavor"],
   additionalProperties: false,
 } as const;
 
@@ -204,26 +187,10 @@ export function validateSpec(raw: unknown): string[] {
   }
   if (o.emission !== undefined && o.emission !== null) {
     const em = o.emission as Record<string, unknown>;
-    if (!["light", "smoke", "sparks"].includes(em.kind as string)) {
+    if (!["light", "smoke", "steam", "sparks"].includes(em.kind as string)) {
       errs.push("bad emission.kind");
     }
     if (typeof em.intensity !== "number") errs.push("bad emission.intensity");
-  }
-  if (!Array.isArray(o.anchors)) {
-    errs.push("bad anchors");
-  } else {
-    for (const a of o.anchors as Record<string, unknown>[]) {
-      if (
-        !["wheel", "leg", "float", "track", "drill", "chimney", "lamp"].includes(
-          a?.part as string,
-        ) ||
-        typeof a?.x !== "number" ||
-        typeof a?.y !== "number"
-      ) {
-        errs.push("bad anchor entry");
-        break;
-      }
-    }
   }
   if (typeof o.seats !== "number") errs.push("bad seats");
   if (typeof o.flavor !== "string") errs.push("bad flavor");
@@ -303,11 +270,6 @@ export function clampSpec(raw: RawSpec): RawSpec {
     emission: raw.emission
       ? { kind: raw.emission.kind, intensity: clamp(raw.emission.intensity, 0, 1) }
       : undefined,
-    anchors: raw.anchors.slice(0, 8).map((a) => ({
-      part: a.part,
-      x: clamp(a.x, -0.5, 0.5),
-      y: clamp(a.y, -0.5, 0.5),
-    })),
     seats: clamp(Math.round(raw.seats), 0, 2),
     flavor: raw.flavor.slice(0, 120),
   };

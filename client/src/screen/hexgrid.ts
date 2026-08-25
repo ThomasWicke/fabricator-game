@@ -20,6 +20,21 @@ export const ROW_H = 48; // vertical distance between row centers (0.75 × top)
 
 export type HexCoord = { col: number; row: number };
 
+/**
+ * The top face's six corners, relative to the hex centre. An iso-squashed
+ * pointy-top hex: tips at top and bottom, vertical sides spanning the middle
+ * half of its height. Used to outline the hex under a structure you're about
+ * to place.
+ */
+export const HEX_POINTS: [number, number][] = [
+  [0, -HEX_TOP_H / 2],
+  [HEX_W / 2, -HEX_TOP_H / 4],
+  [HEX_W / 2, HEX_TOP_H / 4],
+  [0, HEX_TOP_H / 2],
+  [-HEX_W / 2, HEX_TOP_H / 4],
+  [-HEX_W / 2, -HEX_TOP_H / 4],
+];
+
 /** Center of a hex in world pixels. Odd rows shift right by half a tile. */
 export function hexToWorld(col: number, row: number): { x: number; y: number } {
   const x = col * HEX_W + (row % 2 !== 0 ? HEX_W / 2 : 0) + HEX_W / 2;

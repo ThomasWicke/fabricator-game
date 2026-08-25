@@ -40,6 +40,10 @@ export type DesignSummary = {
   createdAt: number;
   timesBuilt: number;
   hasArt: boolean;
+  /** Where the art actually lives. Resolved server-side, where the body/sketch
+   *  distinction is still known — a phone holding only a summary would have to
+   *  guess, and guess wrong for a design that never got a generated body. */
+  artUrl?: string;
 };
 
 export function summarize(d: Design): DesignSummary {
@@ -53,6 +57,7 @@ export function summarize(d: Design): DesignSummary {
     createdAt: d.createdAt,
     timesBuilt: d.timesBuilt,
     hasArt: d.hasBody || d.hasSketch,
+    artUrl: designArtUrl(d),
   };
 }
 
@@ -63,7 +68,7 @@ export function designArtUrl(d: Design | DesignSummary): string | undefined {
     if (d.hasSketch) return `/sprites/sketch/${d.id}.png`;
     return undefined;
   }
-  return d.hasArt ? `/sprites/body/${d.id}.png` : undefined;
+  return d.artUrl;
 }
 
 const MAX_DESIGNS = 500;

@@ -38,7 +38,6 @@ export function mockCompile(input: CompileInput): FabricatedSpec {
       locomotion: noLoco,
       harvest: { rate: 2, materials },
       emission: has("torch") ? { kind: "light", intensity: 0.6 } : undefined,
-      anchors: has("pick", "drill") ? [{ part: "drill", x: 0.3, y: 0 }] : [],
       seats: 0,
       flavor: "[offline mock] Compiled by keyword heuristics.",
     };
@@ -55,7 +54,6 @@ export function mockCompile(input: CompileInput): FabricatedSpec {
       size: light ? { w: 40, h: 70 } : { w: 120, h: 100 },
       locomotion: noLoco,
       emission: light ? { kind: "light", intensity: 0.8 } : undefined,
-      anchors: light ? [{ part: "lamp", x: 0, y: -0.4 }] : [],
       seats: 0,
       flavor: "[offline mock] Compiled by keyword heuristics.",
     };
@@ -88,18 +86,6 @@ export function mockCompile(input: CompileInput): FabricatedSpec {
   const materials: MaterialType[] = has("logging", "logger")
     ? ["wood"]
     : ["stone", "bogiron"];
-  const groundPart = locoType === "legs" ? ("leg" as const)
-    : locoType === "float" ? ("float" as const)
-    : locoType === "tracks" ? ("track" as const)
-    : ("wheel" as const);
-
-  const anchors: RawSpec["anchors"] = [
-    { part: groundPart, x: -0.32, y: 0.42 },
-    { part: groundPart, x: 0.32, y: 0.42 },
-  ];
-  if (harvester) anchors.push({ part: "drill", x: 0.45, y: 0.1 });
-  if (has("steam", "smoke", "chimney")) anchors.push({ part: "chimney", x: -0.2, y: -0.42 });
-
   const raw: RawSpec = {
     category: "vehicle",
     displayName: input.name.slice(0, 32) || "Thing",
@@ -110,8 +96,11 @@ export function mockCompile(input: CompileInput): FabricatedSpec {
       terrainModifiers: mods,
     },
     harvest: harvester ? { rate: 2.5, materials } : undefined,
-    emission: has("steam", "smoke", "chimney") ? { kind: "smoke", intensity: 0.6 } : undefined,
-    anchors,
+    emission: has("steam", "boiler", "kettle")
+      ? { kind: "steam" as const, intensity: 0.6 }
+      : has("smoke", "chimney", "furnace")
+        ? { kind: "smoke" as const, intensity: 0.6 }
+        : undefined,
     seats: 1,
     flavor:
       "[offline mock] Compiled by keyword heuristics — set GOOGLE_API_KEY for the real Fabricator.",

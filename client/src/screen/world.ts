@@ -29,13 +29,14 @@ import type {
   WorldSnapshot,
 } from "../../../party/protocol";
 import type {
+  EmissionKind,
   FabricatedSpec,
   MaterialType,
   TerrainType,
 } from "../../../shared/fabricator/schema";
 import { normalizeModifiers } from "../../../shared/fabricator/schema";
 import { canAfford, formatCost } from "../../../shared/fabricator/cost";
-import { HEX_W, ROW_H, hexToWorld, worldToHex } from "./hexgrid";
+import { HEX_POINTS, HEX_W, ROW_H, hexToWorld, worldToHex } from "./hexgrid";
 import {
   CHUNK_COLS,
   CHUNK_ROWS,
@@ -45,7 +46,7 @@ import {
   dropFor,
   type ChunkKey,
 } from "./chunks";
-import { makePadTexture, makePartTextures, makeParticleTextures } from "./textures";
+import { makePadTexture, makeParticleTextures } from "./textures";
 import {
   BIOMES,
   BIOME_TILE_KEYS,
@@ -123,6 +124,18 @@ const SHORE_FAN = [0, 0.4, -0.4, 0.8, -0.8, 1.3, -1.3];
 /** Below this multiplier a machine simply cannot enter the ground at all. */
 const IMPASSABLE = 0.03;
 
+/** Ground colour kicked up by a vehicle, per movement class. Water is in the
+ *  table only so the lookup is total; a hull leaves a wake, not dust, and the
+ *  drive loop skips it. */
+const DUST_TINT: Record<TerrainType, number> = {
+  grass: 0x6f7a4e,
+  sand: 0xd8c07a,
+  swamp: 0x4d5a3a,
+  rock: 0x8a8f99,
+  snow: 0xe2ebf1,
+  water: 0x2d5c86,
+};
+
 /** How close you have to stand to use the Fabricator. Generous enough that
  *  "I'm at the machine" is obvious, tight enough that you have to go there. */
 const FABRICATOR_RANGE = 120;
@@ -138,6 +151,12 @@ const ALIEN_FRAMES = ["stand", "walk1", "walk2", "climb1", "climb2"];
 
 export type PlayerInput = { stick: StickState; buttons: ButtonState };
 export type Stockpile = Record<MaterialType, number>;
+
+/** What happened when a phone pressed BUILD. `carrying` means it went onto
+ *  the builder's shoulder instead of into the world — nothing charged yet. */
+export type FabricateOutcome =
+  | { ok: true; carrying: boolean }
+  | { ok: false; reason: string };
 
 const idleInput = (): PlayerInput => ({
   stick: { x: 0, y: 0 },
@@ -160,6 +179,7 @@ type PlayerEntity = {
   label: Phaser.GameObjects.Text;
   net: PlayerInput;
   prevA: boolean;
+  prevB: boolean;
   color: number;
   driving: VehicleEntity | null;
   tool: {
@@ -172,6 +192,38 @@ type PlayerEntity = {
   /** Standing at the Fabricator. Tracked so the change can be pushed to the
    *  phone exactly once, on the edge. */
   atFabricator: boolean;
+  /** A fabricated structure being carried to wherever it should stand.
+   *  Nothing is charged until it is put down, so walking away costs nothing. */
+  carrying: CarriedStructure | null;
+};
+
+/**
+ * A hand-pumped particle source.
+ *
+ * Phaser's emitter is a GameObject and its particles live in its LOCAL space,
+ * so moving the emitter to follow a machine drags every particle already in
+ * the air along with it — exhaust ends up as a blob glued to the vehicle
+ * instead of a trail left behind on the ground. So the emitter stays parked at
+ * the world origin and never moves; we spawn each particle at an explicit
+ * world point instead, and it stays where it was born.
+ */
+type Emission = {
+  em: Phaser.GameObjects.Particles.ParticleEmitter;
+  /** Milliseconds between particles. */
+  everyMs: number;
+  accum: number;
+};
+
+/** A structure in transit: ghost art over the player, the hex it would land
+ *  on outlined underneath, and a prompt saying how to finish. */
+type CarriedStructure = {
+  design: PlaceableDesign;
+  ghost: Phaser.GameObjects.Image;
+  outline: Phaser.GameObjects.Polygon;
+  prompt: Phaser.GameObjects.Text;
+  /** Where it would go, recomputed each frame. */
+  hex: { col: number; row: number };
+  valid: boolean;
 };
 
 type VehicleEntity = {
@@ -179,7 +231,6 @@ type VehicleEntity = {
   container: Phaser.GameObjects.Container;
   /** The body art itself — shaken in place to sell a running engine. */
   bodyImg: Phaser.GameObjects.Image;
-  parts: { img: Phaser.GameObjects.Image; kind: string; baseY: number }[];
   spec: FabricatedSpec;
   /** terrainModifiers with the newer movement classes filled in — designs
    *  compiled before rock/snow/water existed still have to drive. */
@@ -188,12 +239,14 @@ type VehicleEntity = {
   /** Second rider, when the spec has the seats for one. */
   passenger: Slot | null;
   nextHarvestAt: number;
-  smoke?: Phaser.GameObjects.Particles.ParticleEmitter;
-  sparks?: Phaser.GameObjects.Particles.ParticleEmitter;
+  /** Spec'd exhaust — smoke, steam or sparks — emitted behind the machine. */
+  trail?: Emission;
+  /** Ground kicked up by motion. Not spec'd: every vehicle gets it, tinted
+   *  by whatever it happens to be driving over. */
+  dust?: Emission;
   /** Light lives outside the container so it can render above the night
    *  overlay; container children are stuck at the container's depth. */
   glow?: Phaser.GameObjects.Image;
-  glowOffset?: { x: number; y: number };
 };
 
 type ResourceNode = {
@@ -253,6 +306,8 @@ export class WorldScene extends Phaser.Scene {
   }>();
 
   private nodeByHex = new Map<string, ResourceNode>();
+  /** Hexes a structure already stands on — you cannot stack two on one tile. */
+  private occupied = new Set<string>();
   private nodesByChunk = new Map<ChunkKey, ResourceNode[]>();
   /** Nodes whose remaining count differs from the deterministic baseline —
    *  the only node state a save needs to carry. Survives chunk unload, which
@@ -269,6 +324,10 @@ export class WorldScene extends Phaser.Scene {
   /** Fired when a player boards or leaves a vehicle, for the HUD. */
   onRideChanged: ((slot: Slot, vehicle: string | null, driving: boolean) => void) | null =
     null;
+  /** Fired when a design actually becomes an object in the world. Separate
+   *  from the BUILD press, because a structure is only really built once its
+   *  carrier puts it down. */
+  onDesignBuilt: ((designId: string) => void) | null = null;
   /** Fired on the edge when a player walks up to or away from the Fabricator.
    *  The shell relays it to that player's phone, which is where the blueprint
    *  pad and the build buttons live. */
@@ -308,7 +367,6 @@ export class WorldScene extends Phaser.Scene {
     (window as unknown as { __world: WorldScene }).__world = this;
 
     makePadTexture(this);
-    makePartTextures(this);
     makeParticleTextures(this);
 
     this.obstacles = this.physics.add.staticGroup();
@@ -586,11 +644,13 @@ export class WorldScene extends Phaser.Scene {
       label,
       net: idleInput(),
       prevA: false,
+      prevB: false,
       color,
       driving: null,
       tool: null,
       nextHarvestAt: 0,
       atFabricator: false,
+      carrying: null,
     };
     this.players.set(slot, entity);
     return entity;
@@ -721,34 +781,51 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
-   * Manufacture a Design: charge the bill and materialize it. Returns an
-   * error string if the team can't afford it (nothing spawned or charged).
+   * Manufacture a Design.
+   *
+   * Vehicles and tools materialise straight away and the bill is charged on
+   * the spot. A structure instead goes onto the builder's shoulder as a ghost
+   * and is charged when they put it down — so wandering off with one, or
+   * changing your mind about where the smelter goes, costs nothing.
    */
-  tryFabricate(design: PlaceableDesign, bySlot: Slot): string | null {
+  tryFabricate(design: PlaceableDesign, bySlot: Slot): FabricateOutcome {
     this.clearFabricating();
     const { spec } = design;
     if (!canAfford(this.stockpile, spec.cost)) {
-      return `Not enough materials for ${spec.displayName} — needs ${formatCost(spec.cost)}.`;
+      return {
+        ok: false,
+        reason: `Not enough materials for ${spec.displayName} — needs ${formatCost(spec.cost)}.`,
+      };
     }
-    this.stockpile.wood -= spec.cost.wood;
-    this.stockpile.stone -= spec.cost.stone;
-    this.stockpile.bogiron -= spec.cost.bogiron;
-    this.onStockpile?.(this.stockpile);
+    if (spec.category === "structure") {
+      const p = this.players.get(bySlot) ?? this.players.get(1)!;
+      if (p.carrying) {
+        return {
+          ok: false,
+          reason: `Put down the ${p.carrying.design.spec.displayName} first.`,
+        };
+      }
+      this.startCarrying(p, design);
+      return { ok: true, carrying: true };
+    }
+    this.charge(spec.cost);
     this.placeDesign(design, bySlot);
-    return null;
+    this.onDesignBuilt?.(design.id);
+    return { ok: true, carrying: false };
   }
 
-  /** Put a design into the world without charging for it — the shared path
-   *  for manufacturing and for restoring a saved world. Textures are keyed
-   *  by design id, so repeat builds of one design share a single texture
-   *  and the art is only fetched once. */
-  private placeDesign(design: PlaceableDesign, bySlot: Slot, x?: number, y?: number) {
+  private charge(cost: FabricatedSpec["cost"]) {
+    this.stockpile.wood -= cost.wood;
+    this.stockpile.stone -= cost.stone;
+    this.stockpile.bogiron -= cost.bogiron;
+    this.onStockpile?.(this.stockpile);
+  }
+
+  /** Resolve a design's art to a texture key, loading it if need be, then run
+   *  `done`. Keyed by design id, so repeat builds of one design share a single
+   *  texture and the art is only ever fetched once. */
+  private withBodyTexture(design: PlaceableDesign, done: (key: string) => void) {
     const key = `fab-body-${design.id}`;
-    const build = () => {
-      if (design.spec.category === "tool") this.equipTool(design, key, bySlot);
-      else this.buildVehicle(design, key, x, y);
-      this.markDirty();
-    };
     const placeholder = () => {
       if (!this.textures.exists(key)) {
         const g = this.add.graphics();
@@ -757,14 +834,14 @@ export class WorldScene extends Phaser.Scene {
         g.generateTexture(key, 64, 40);
         g.destroy();
       }
-      build();
+      done(key);
     };
 
     if (this.textures.exists(key)) {
-      build();
+      done(key);
     } else if (design.artUrl) {
       this.load.image(key, design.artUrl);
-      this.load.once(`filecomplete-image-${key}`, build);
+      this.load.once(`filecomplete-image-${key}`, () => done(key));
       this.load.once(`loaderror`, (file: { key: string }) => {
         if (file.key === key) {
           console.warn("sprite failed to load, using placeholder:", design.artUrl);
@@ -775,6 +852,107 @@ export class WorldScene extends Phaser.Scene {
     } else {
       placeholder();
     }
+  }
+
+  /** Put a design into the world without charging for it — the shared path
+   *  for manufacturing and for restoring a saved world. */
+  private placeDesign(design: PlaceableDesign, bySlot: Slot, x?: number, y?: number) {
+    this.withBodyTexture(design, (key) => {
+      if (design.spec.category === "tool") this.equipTool(design, key, bySlot);
+      else this.buildVehicle(design, key, x, y);
+      this.markDirty();
+    });
+  }
+
+  // ── carrying a structure ──────────────────────────────────────
+
+  private startCarrying(p: PlayerEntity, design: PlaceableDesign) {
+    const { w, h } = design.spec.size;
+    this.withBodyTexture(design, (key) => {
+      // The player may have picked up something else while the art loaded.
+      if (p.carrying) return;
+      const ghost = this.add
+        .image(p.sprite.x, p.sprite.y, key)
+        .setDisplaySize(w, h)
+        .setAlpha(0.55)
+        .setDepth(1e6 - 1);
+      const outline = this.add
+        .polygon(p.sprite.x, p.sprite.y, HEX_POINTS.flat(), 0x7fe08a, 0.16)
+        .setDepth(1e6 - 3);
+      outline.setStrokeStyle(2, 0x7fe08a, 0.95);
+      const prompt = this.add
+        .text(p.sprite.x, p.sprite.y + 26, "A place · B cancel", {
+          fontFamily: "ui-monospace, Menlo, monospace",
+          fontSize: "10px",
+          fontStyle: "bold",
+          color: "#dfe8f4",
+          backgroundColor: "rgba(8,14,26,0.6)",
+          padding: { x: 5, y: 2 },
+        })
+        .setOrigin(0.5, 0)
+        .setDepth(1e6);
+      p.carrying = { design, ghost, outline, prompt, hex: { col: 0, row: 0 }, valid: false };
+    });
+  }
+
+  /** Can a structure stand on this hex? */
+  private canPlaceAt(col: number, row: number): boolean {
+    if (isLiquid(this.biomeAtHex(col, row))) return false;
+    if (this.nodeByHex.has(`${col},${row}`)) return false;
+    if (this.occupied.has(`${col},${row}`)) return false;
+    // Keep the Fabricator's own hex clear, or you can wall yourself out of
+    // the one machine the whole game runs through.
+    return !(col === this.spawn.col && row === this.spawn.row);
+  }
+
+  /** Track the carried ghost to its player and re-evaluate the hex under it. */
+  private updateCarry(p: PlayerEntity) {
+    const c = p.carrying;
+    if (!c) return;
+    const hex = worldToHex(p.sprite.x, p.sprite.y);
+    const centre = hexToWorld(hex.col, hex.row);
+    const drop = this.dropAt(hex.col, hex.row);
+    c.hex = hex;
+    c.valid = this.canPlaceAt(hex.col, hex.row);
+
+    c.ghost.setPosition(p.sprite.x, p.sprite.y - 26);
+    c.ghost.setDepth(p.sprite.y + 1);
+    c.outline.setPosition(centre.x, centre.y + drop);
+    const tint = c.valid ? 0x7fe08a : 0xff6b6b;
+    c.outline.setFillStyle(tint, 0.16);
+    c.outline.setStrokeStyle(2, tint, 0.95);
+    c.prompt.setPosition(p.sprite.x, p.sprite.y + 26);
+    c.prompt.setText(c.valid ? "A place · B cancel" : "blocked · B cancel");
+  }
+
+  private dropCarry(p: PlayerEntity) {
+    const c = p.carrying;
+    if (!c) return;
+    c.ghost.destroy();
+    c.outline.destroy();
+    c.prompt.destroy();
+    p.carrying = null;
+  }
+
+  /** Commit a carried structure to the hex it is hovering over. */
+  private placeCarried(p: PlayerEntity) {
+    const c = p.carrying!;
+    if (!c.valid) {
+      this.floatText(p.sprite.x, p.sprite.y - 44, "can't build here", "#ff9f9f");
+      return;
+    }
+    const cost = c.design.spec.cost;
+    // Re-checked at placement, not at fabrication: the other player may have
+    // spent the pile while this was being carried across the map.
+    if (!canAfford(this.stockpile, cost)) {
+      this.floatText(p.sprite.x, p.sprite.y - 44, `need ${formatCost(cost)}`, "#ff9f9f");
+      return;
+    }
+    const centre = hexToWorld(c.hex.col, c.hex.row);
+    this.charge(cost);
+    this.placeDesign(c.design, p.slot, centre.x, centre.y + this.dropAt(c.hex.col, c.hex.row));
+    this.onDesignBuilt?.(c.design.id);
+    this.dropCarry(p);
   }
 
   /** Hand tools attach to the player who blueprinted them. */
@@ -824,18 +1002,6 @@ export class WorldScene extends Phaser.Scene {
     const body = this.add.image(0, 0, bodyKey);
     body.setDisplaySize(w, h);
 
-    // Vehicles are generated complete (running gear and all), so library
-    // parts would double up on the art. Structures still get theirs — lamps
-    // and chimneys pair with the emission effects rather than duplicating
-    // the silhouette.
-    const parts =
-      spec.category === "vehicle"
-        ? []
-        : spec.anchors.map((a) => {
-            const img = this.add.image(a.x * w, a.y * h, `part-${a.part}`);
-            return { img, kind: a.part, baseY: a.y * h };
-          });
-
     const label = this.add
       .text(0, -h / 2 - 6, spec.displayName, {
         fontFamily: "system-ui, sans-serif",
@@ -847,10 +1013,7 @@ export class WorldScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 1);
 
-    const children: Phaser.GameObjects.GameObject[] = [body, ...parts.map((p) => p.img)];
-    children.push(label);
-
-    const container = this.add.container(x, y, children);
+    const container = this.add.container(x, y, [body, label]);
     container.setDepth(y);
     this.physics.add.existing(container);
     const bodyPhys = container.body as Phaser.Physics.Arcade.Body;
@@ -864,7 +1027,6 @@ export class WorldScene extends Phaser.Scene {
       designId: design.id,
       container,
       bodyImg: body,
-      parts,
       spec,
       mods: normalizeModifiers(spec.locomotion.terrainModifiers, spec.locomotion.type),
       driver: null,
@@ -872,46 +1034,149 @@ export class WorldScene extends Phaser.Scene {
       nextHarvestAt: 0,
     };
 
-    if (spec.emission?.kind === "smoke") {
-      const chimney = spec.anchors.find((a) => a.part === "chimney");
-      const em = this.add.particles(0, 0, "puff", {
-        speedY: { min: -30, max: -14 },
-        speedX: { min: -6, max: 6 },
-        scale: { start: 0.7 + spec.emission.intensity, end: 2 },
-        alpha: { start: 0.7, end: 0 },
-        lifespan: 1200,
-        frequency: 320 - spec.emission.intensity * 220,
-      });
-      em.startFollow(container, chimney ? chimney.x * w : 0, (chimney ? chimney.y * h : -h / 2) - 6);
-      em.setDepth(1e6 - 2);
-      if (spec.category === "vehicle") em.stop();
-      vehicle.smoke = em;
+    // ── emission ────────────────────────────────────────────────
+    // The spec says what comes off the machine; where it comes off is the
+    // renderer's business. Exhaust of every kind streams out behind — from
+    // the back of a moving machine, upward from a standing one. Light is the
+    // exception: it surrounds the thing rather than trailing from it.
+    const em = spec.emission;
+    if (em && em.kind !== "light") {
+      vehicle.trail = this.makeTrail(em.kind, em.intensity);
     }
-    if (spec.emission?.kind === "sparks") {
-      const em = this.add.particles(0, 0, "spark", {
-        speed: { min: 30, max: 90 },
-        scale: { start: 1, end: 0 },
-        lifespan: 350,
-        frequency: 260 - spec.emission.intensity * 180,
-      });
-      em.startFollow(container);
-      em.setDepth(1e6 - 2);
-      if (spec.category === "vehicle") em.stop();
-      vehicle.sparks = em;
+    if (em?.kind === "light") {
+      vehicle.glow = this.add
+        .image(x, y, "glow")
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setScale(0.9 + em.intensity * 1.8)
+        .setDepth(DEPTH_LIGHT);
+    }
+    // Every vehicle kicks up its own ground, spec or no spec — it is the
+    // cheapest thing that makes a machine read as moving rather than sliding.
+    if (spec.category === "vehicle") {
+      vehicle.dust = {
+        em: this.add
+          .particles(0, 0, "puff", {
+            speed: { min: 4, max: 18 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 0.35, end: 0.9 },
+            alpha: { start: 0.38, end: 0 },
+            lifespan: 480,
+            emitting: false,
+          })
+          .setDepth(0),
+        everyMs: 55,
+        accum: 0,
+      };
     }
 
-    if (spec.emission?.kind === "light") {
-      const lamp = spec.anchors.find((a) => a.part === "lamp");
-      vehicle.glowOffset = { x: lamp ? lamp.x * w : 0, y: lamp ? lamp.y * h : 0 };
-      vehicle.glow = this.add
-        .image(x + vehicle.glowOffset.x, y + vehicle.glowOffset.y, "glow")
-        .setBlendMode(Phaser.BlendModes.ADD)
-        .setScale(0.9 + spec.emission.intensity * 1.8)
-        .setDepth(DEPTH_LIGHT);
+    if (spec.category !== "vehicle") {
+      const hex = worldToHex(x, y);
+      this.occupied.add(`${hex.col},${hex.row}`);
     }
 
     this.vehicles.push(vehicle);
     this.materializeFlash(x, y, Math.max(w, h));
+  }
+
+  /** One emitter per emission kind. Rate and scale carry the intensity.
+   *  All of them start idle and are pumped by hand — see Emission. */
+  private makeTrail(kind: Exclude<EmissionKind, "light">, intensity: number): Emission {
+    const make = (
+      texture: string,
+      config: Phaser.Types.GameObjects.Particles.ParticleEmitterConfig,
+      everyMs: number,
+    ): Emission => ({
+      em: this.add.particles(0, 0, texture, { ...config, emitting: false }).setDepth(0),
+      everyMs,
+      accum: 0,
+    });
+
+    switch (kind) {
+      case "sparks":
+        return make(
+          "spark",
+          {
+            speed: { min: 30, max: 95 },
+            angle: { min: 200, max: 340 }, // thrown up and out, then they fall
+            gravityY: 190,
+            scale: { start: 1, end: 0 },
+            lifespan: 420,
+          },
+          240 - intensity * 170,
+        );
+      case "steam":
+        // Steam is thinner and shorter-lived than smoke, and rises faster.
+        return make(
+          "puff",
+          {
+            speedY: { min: -52, max: -26 },
+            speedX: { min: -10, max: 10 },
+            scale: { start: 0.35 + intensity * 0.4, end: 1.5 },
+            alpha: { start: 0.45, end: 0 },
+            lifespan: 850,
+          },
+          190 - intensity * 120,
+        );
+      case "smoke":
+      default: {
+        const e = make(
+          "puff",
+          {
+            speedY: { min: -30, max: -12 },
+            speedX: { min: -8, max: 8 },
+            scale: { start: 0.45 + intensity * 0.5, end: 1.7 },
+            alpha: { start: 0.55, end: 0 },
+            lifespan: 1400,
+          },
+          300 - intensity * 200,
+        );
+        e.em.setParticleTint(0x6f6a66);
+        return e;
+      }
+    }
+  }
+
+  /**
+   * Spawn particles at a world point, at the emission's own rate.
+   *
+   * The emitter never moves, so each particle stays where it was born — which
+   * is the whole point of a trail. The guard caps how many can be spawned in
+   * one tick, so a long frame (or a tab that was backgrounded) coughs out a
+   * couple of particles rather than a hundred.
+   */
+  private pump(e: Emission, x: number, y: number, dtMs: number, depth: number): void {
+    e.em.setDepth(depth);
+    e.accum += dtMs;
+    for (let i = 0; i < 4 && e.accum >= e.everyMs; i++) {
+      e.accum -= e.everyMs;
+      e.em.emitParticleAt(x, y);
+    }
+    if (e.accum > e.everyMs) e.accum = e.everyMs;
+  }
+
+  /**
+   * Where a machine's exhaust comes out.
+   *
+   * Moving: at the body's edge, opposite the direction of travel — so it
+   * leaves whichever end is currently the back, which is what "behind" has to
+   * mean for something that can drive in any direction. Standing still: out
+   * of the top, rising.
+   */
+  private trailOrigin(v: VehicleEntity): { x: number; y: number } {
+    const { w, h } = v.spec.size;
+    const body = v.container.body as Phaser.Physics.Arcade.Body | null;
+    let vx = body?.velocity.x ?? 0;
+    let vy = body?.velocity.y ?? 0;
+    const len = Math.hypot(vx, vy);
+    if (len < 10) return { x: v.container.x, y: v.container.y - h / 2 + 2 };
+    vx /= len;
+    vy /= len;
+    // Distance from centre to the body's edge along the travel axis.
+    const edge = Math.min(
+      Math.abs(vx) > 1e-3 ? w / 2 / Math.abs(vx) : Infinity,
+      Math.abs(vy) > 1e-3 ? h / 2 / Math.abs(vy) : Infinity,
+    );
+    return { x: v.container.x - vx * (edge + 4), y: v.container.y - vy * (edge + 4) };
   }
 
   private materializeFlash(x: number, y: number, radius: number) {
@@ -1107,15 +1372,18 @@ export class WorldScene extends Phaser.Scene {
     }
 
     for (const v of this.vehicles) {
-      if (!v.glow || !v.glowOffset) continue;
-      v.glow.setPosition(v.container.x + v.glowOffset.x, v.container.y + v.glowOffset.y);
-      // A lamp is invisible at noon and full strength at midnight.
+      if (!v.glow) continue;
+      // Light surrounds the machine rather than hanging off a lamp anchor.
+      v.glow.setPosition(v.container.x, v.container.y);
+      // Invisible at noon and full strength at midnight.
       v.glow.setAlpha(0.25 + night * 0.75);
     }
     for (const p of this.players.values()) {
       const input = this.keyboardInput(p.slot) ?? p.net;
       const aEdge = input.buttons.a && !p.prevA;
+      const bEdge = input.buttons.b && !p.prevB;
       p.prevA = input.buttons.a;
+      p.prevB = input.buttons.b;
 
       if (p.driving) {
         // Only whoever has the wheel steers; a passenger just rides along
@@ -1144,6 +1412,21 @@ export class WorldScene extends Phaser.Scene {
 
       const moving = Math.hypot(input.stick.x, input.stick.y) > 0.1;
       this.animatePlayer(p, input.stick.x, input.stick.y, moving);
+
+      // Carrying a structure takes over both buttons: A puts it down on the
+      // outlined hex, B calls the whole thing off. Nothing else — you can't
+      // gather or board a vehicle with a smelter on your shoulder.
+      if (p.carrying) {
+        this.updateCarry(p);
+        if (aEdge) this.placeCarried(p);
+        else if (bEdge) {
+          this.floatText(p.sprite.x, p.sprite.y - 44, "put back", "#8fc1ff");
+          this.dropCarry(p);
+        }
+        p.sprite.setDepth(p.sprite.y);
+        p.label.setPosition(p.sprite.x, p.sprite.y - p.sprite.displayHeight + 6);
+        continue;
+      }
 
       // A near a node = gather (hold). Otherwise A-edge = enter / ping.
       const node = this.nearestNode(p.sprite.x, p.sprite.y, HARVEST_RANGE);
@@ -1175,6 +1458,7 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
+    this.runStructureEmissions();
     this.runAutomation(now);
     this.updateFabricatorPresence(now);
     this.updatePointers();
@@ -1317,6 +1601,18 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /** A structure is always running, so its exhaust rises whether or not
+   *  anyone is watching. Vehicles are pumped from the drive loop instead —
+   *  they only smoke while someone has the wheel. */
+  private runStructureEmissions(): void {
+    const dt = this.game.loop.delta;
+    for (const v of this.vehicles) {
+      if (v.spec.category === "vehicle" || !v.trail) continue;
+      const o = this.trailOrigin(v);
+      this.pump(v.trail, o.x, o.y, dt, o.y);
+    }
+  }
+
   /**
    * Structures that can harvest work their own patch, unattended — the first
    * automation in the game. Deliberately slower than doing it by hand: the
@@ -1335,10 +1631,17 @@ export class WorldScene extends Phaser.Scene {
       }
       this.harvestHit(node, hv.materials);
       v.nextHarvestAt = now + 1000 / (hv.rate * AUTOMATION_RATE);
-      // a visible tick so you can tell it's earning its keep
-      for (const part of v.parts) {
-        if (part.kind === "drill") part.img.setAngle(part.img.angle === 0 ? 12 : 0);
-      }
+      // A visible tick so you can tell it is earning its keep, now that there
+      // is no bolted-on drill to waggle: the whole machine flinches.
+      this.tweens.killTweensOf(v.bodyImg);
+      v.bodyImg.setScale(1);
+      this.tweens.add({
+        targets: v.bodyImg,
+        scaleX: { from: 1.06, to: 1 },
+        scaleY: { from: 0.94, to: 1 },
+        duration: 220,
+        ease: "Quad.easeOut",
+      });
     }
   }
 
@@ -1370,8 +1673,6 @@ export class WorldScene extends Phaser.Scene {
     p.driving = v;
     if (v.driver === null) {
       v.driver = p.slot;
-      if (v.spec.emission?.kind === "smoke") v.smoke?.start();
-      if (v.spec.emission?.kind === "sparks") v.sparks?.start();
     } else {
       v.passenger = p.slot;
     }
@@ -1395,8 +1696,6 @@ export class WorldScene extends Phaser.Scene {
       v.bodyImg.setPosition(0, 0);
       v.bodyImg.setAngle(0);
       v.driver = null;
-      v.smoke?.stop();
-      v.sparks?.stop();
       this.markDirty(); // it was driven somewhere — persist where it ended up
     } else {
       v.passenger = null;
@@ -1487,30 +1786,33 @@ export class WorldScene extends Phaser.Scene {
     // physics owns). Idling shakes a little, driving shakes more — this is
     // what sells "running" now that wheels are baked into the art.
     const vel = Math.hypot(body.velocity.x, body.velocity.y);
-    const shake = 0.5 + Math.min(1, vel / 180) * 1.1;
+    // Chewing through a boulder judders harder than driving does — with the
+    // running gear baked into the art, this is the only feedback that the
+    // machine is actually biting something.
+    const shake = (0.5 + Math.min(1, vel / 180) * 1.1) * (harvesting ? 2.1 : 1);
     v.bodyImg.setPosition(
       Math.sin(now / 23) * shake * 0.6,
       Math.sin(now / 17) * shake,
     );
     v.bodyImg.setAngle(Math.sin(now / 31) * shake * 0.5);
 
-    // part animation (structures only — vehicles carry no library parts)
-    for (const part of v.parts) {
-      switch (part.kind) {
-        case "wheel":
-          part.img.rotation += (vel / 26) * 0.06 * (body.velocity.x >= 0 ? 1 : -1);
-          break;
-        case "drill":
-          part.img.setAngle(vel > 5 || harvesting ? Math.sin(now / 25) * 10 : 0);
-          break;
-        case "track":
-          if (vel > 5) part.img.y = part.baseY + Math.sin(now / 45) * 1;
-          break;
-        case "chimney":
-        case "lamp":
-          break;
-        default:
-          if (vel > 5) part.img.y = part.baseY + Math.sin(now / 90) * 2;
+    const dt = this.game.loop.delta;
+
+    // Exhaust leaves whichever end is currently the back.
+    if (v.trail) {
+      const o = this.trailOrigin(v);
+      this.pump(v.trail, o.x, o.y, dt, o.y);
+    }
+
+    // Ground spray, from under the machine and tinted by what it's driving
+    // over. Water gets none: a hull leaves a wake, not a dust cloud, and a
+    // wake is a different effect than this one.
+    if (v.dust) {
+      const terrain = this.terrainAt(v.container.x, v.container.y);
+      if (vel > 40 && terrain !== "water") {
+        const y = v.container.y + v.spec.size.h / 2 - 2;
+        v.dust.em.setParticleTint(DUST_TINT[terrain]);
+        this.pump(v.dust, v.container.x - Math.sign(body.velocity.x) * 6, y, dt, y - 1);
       }
     }
   }

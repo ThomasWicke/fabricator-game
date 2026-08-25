@@ -20,7 +20,6 @@ const structure = (mods: RawSpec["locomotion"]["terrainModifiers"]): RawSpec => 
   displayName: "Hut",
   size: { w: 120, h: 100 },
   locomotion: { type: "none", speed: 0, terrainModifiers: mods },
-  anchors: [],
   seats: 0,
   flavor: "x",
 });
@@ -56,10 +55,6 @@ const vehicle = (
   displayName: "V",
   size: { w: 84, h: 48 },
   locomotion: { type, speed: 180, terrainModifiers: mods },
-  anchors: [
-    { part: "wheel", x: -0.3, y: 0.4 },
-    { part: "wheel", x: 0.3, y: 0.4 },
-  ],
   seats: 1,
   flavor: "x",
 });
@@ -112,7 +107,6 @@ const drillTool = clampSpec({
   size: { w: 36, h: 28 },
   locomotion: { type: "none", speed: 0, terrainModifiers: { grass: 1, sand: 1, swamp: 1, rock: 1, snow: 1, water: 1 } },
   harvest: { rate: 3, materials: ["stone", "bogiron"] },
-  anchors: [{ part: "drill", x: 0.3, y: 0 }],
   seats: 0,
   flavor: "x",
 });

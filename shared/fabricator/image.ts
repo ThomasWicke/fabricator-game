@@ -4,7 +4,7 @@
 // (client/src/screen/chroma.ts).
 //
 // Vehicles are asked for COMPLETE — running gear included. The hybrid
-// approach (AI body + library parts bolted on at anchors) doubled up: the
+// approach (AI body + library parts bolted on) doubled up: the
 // generated art drew its own wheels and our sprites sat on top of them.
 // Structures still take library parts (lamps, chimneys) since those pair
 // with emission effects rather than duplicating the silhouette.

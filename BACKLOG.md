@@ -50,7 +50,7 @@ code, using every biome in the Kenney hexagon pack.
       blue.
 - [x] **P4 · Joystick polish.** Centre it on first touch (already the behaviour;
       make it read that way), with a visible ring, dead-zone, and travel feedback.
-- [ ] **P5 · Design thumbnails.** Show the fabricated sprite in the design library
+- [x] **P5 · Design thumbnails.** Show the fabricated sprite in the design library
       on the phone, so you can see what you are about to pay for.
 - [ ] **P6 · Survival HUD.** Health and hunger in the in-frame HUD, plus the
       carried-inventory strip.
@@ -59,7 +59,7 @@ code, using every biome in the Kenney hexagon pack.
 
 - [x] **F1 · The Fabricator is a place.** BLUEPRINT and DESIGNS only open when
       you are standing at the machine. Walking up to it is what starts a design.
-- [ ] **F2 · Structure placement.** Carry a fabricated structure as a translucent
+- [x] **F2 · Structure placement.** Carry a fabricated structure as a translucent
       ghost, highlight the hex under it, place it centred on that hex with the
       action button.
 - [ ] **F3 · Extend the capability matrix.** New primitives beyond
@@ -69,7 +69,7 @@ code, using every biome in the Kenney hexagon pack.
 - [x] **F4 · Terrain classes in the spec.** `terrainModifiers` grows to cover the
       new movement classes (rock, snow, water) so vehicles can be built for the
       new biomes. `float` becomes the water unlock.
-- [ ] **F5 · Emission rewrite.** Drop the chimney/wheel/lamp anchor parts
+- [x] **F5 · Emission rewrite.** Drop the chimney/wheel/lamp anchor parts
       entirely. Exhaust emits *behind* the machine relative to travel; light emits
       *around* it. Smoke, steam, sparks, dust as a shared trail system.
 - [ ] **F6 · Modification loop.** Feed an existing design back into the Fabricator
