@@ -382,13 +382,22 @@ export function findSpawn(seed: number): { col: number; row: number } {
     }
     return true;
   };
-  // Square rings outward: guaranteed to terminate on any seed, since land is
-  // ~70% of the field and this walks arbitrarily far.
-  for (let ring = 0; ring < 400; ring++) {
-    for (let dr = -ring; dr <= ring; dr++) {
-      for (let dc = -ring; dc <= ring; dc++) {
-        if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
-        if (clear(dc, dr)) return { col: dc, row: dr };
+  // Square rings outward, walking only each ring's PERIMETER.
+  //
+  // The obvious version scans the whole square and skips the interior, which
+  // costs (2r+1)² per ring and O(R⁴) overall — for a seed whose first good
+  // ground is sixty rings out that is millions of noise evaluations, and the
+  // game simply hangs on a black screen before it ever reaches create().
+  // Walking the edge is 8r per ring, and the whole search is O(R²).
+  if (clear(0, 0)) return { col: 0, row: 0 };
+  for (let ring = 1; ring < 400; ring++) {
+    for (let d = -ring; d <= ring; d++) {
+      if (clear(d, -ring)) return { col: d, row: -ring };
+      if (clear(d, ring)) return { col: d, row: ring };
+      // Corners belong to the rows above, so the columns skip them.
+      if (d > -ring && d < ring) {
+        if (clear(-ring, d)) return { col: -ring, row: d };
+        if (clear(ring, d)) return { col: ring, row: d };
       }
     }
   }

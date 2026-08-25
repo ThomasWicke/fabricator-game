@@ -71,6 +71,23 @@ assumed exactly two players.
 - [x] **UX-3 · Control hints.** Say what the keys are, in the game, where you
       need them.
 
+## One device, no controller
+
+The game already runs on a laptop alone, or on any device with a phone paired
+to it. What it can't do is run on a single phone or tablet — which is the most
+likely way somebody tries it for the first time.
+
+- [x] **M1 · Touch controls on the screen itself.** When the screen is opened on
+      a touch device, overlay the pad directly onto the game the way Minecraft
+      does on mobile: floating stick, action buttons, Fabricator. Input goes
+      straight to the simulation — no room to join, no second device, no server
+      round trip.
+- [x] **M2 · A HUD that fits a phone.** Minimap, player card, hints and the
+      Fabricator panel all sized for a small screen, in either orientation.
+- [x] **M3 · Let a friend still join.** A phone joining a touch-hosted game
+      becomes player two, not player one — the person holding the tablet should
+      not have their character taken off them.
+
 ## Fabrication
 
 - [x] **F1 · The Fabricator is a place.** BLUEPRINT and DESIGNS only open when

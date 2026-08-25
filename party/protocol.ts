@@ -35,6 +35,11 @@ export type IdentifyMsg = {
   role: "screen" | "controller";
   playerId: string;
   nickname: string;
+  /** A screen on a touch device draws the pad over its own game and IS
+   *  player one. Saying so reserves the seat, so a friend joining later with
+   *  a phone becomes player two instead of taking the character out from
+   *  under the person holding the tablet. */
+  touchHost?: boolean;
 };
 
 export type WelcomeMsg = {

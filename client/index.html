@@ -764,6 +764,142 @@
         display: none;
       }
 
+      /* ── one device: the pad drawn over the game ─────────────── */
+      /* The zones sit above the canvas but below the HUD, and only they take
+         touches — the rest of the overlay must stay transparent to them. */
+      .screen-stage.touch .btn-zone,
+      .screen-stage.touch .stick-zone {
+        z-index: 6;
+      }
+      .touch-fab {
+        position: absolute;
+        top: calc(env(safe-area-inset-top, 6px) + 0.5em);
+        right: 0.6em;
+        z-index: 9;
+        pointer-events: auto;
+        font-family: var(--mono);
+        font-size: 0.62em;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        padding: 0.75em 1em;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: rgba(18, 24, 34, 0.92);
+        color: var(--muted);
+        transition: border-color 0.2s, box-shadow 0.2s, color 0.2s;
+      }
+      .touch-fab.hidden {
+        display: none;
+      }
+      .touch-fab.ready {
+        color: var(--text);
+        border-color: rgba(108, 158, 248, 0.65);
+        box-shadow: 0 0 0 1px rgba(108, 158, 248, 0.25), 0 0 18px rgba(108, 158, 248, 0.22);
+      }
+      /* Keyboard hints are meaningless on a device with no keyboard. */
+      .screen-stage.touch .key-hints {
+        display: none;
+      }
+      /* On touch the bottom edge belongs to thumbs, so the status chips go —
+         a solo player on one device already knows which room they are in —
+         and the toast floats clear of both the top bar and the controls. */
+      .screen-stage.touch .hud-bottom .chip-mini {
+        display: none;
+      }
+      .screen-stage.touch .hud-bottom {
+        position: absolute;
+        left: 0.6em;
+        right: 0.6em;
+        bottom: auto;
+        top: 42%;
+        justify-content: center;
+      }
+      .screen-stage.touch .toast {
+        text-align: center;
+      }
+      /* Stacked down the right edge, under the top bar, so nothing overlaps:
+         Fabricator button, then the map beneath it. */
+      .screen-stage.touch .touch-fab {
+        top: 3.9em;
+      }
+      .screen-stage.touch .hud-map {
+        left: auto;
+        right: 0.6em;
+        top: 7.4em;
+        transform: none;
+      }
+
+      /* ── small screens ───────────────────────────────────────── */
+      @media (max-width: 760px) {
+        .hud {
+          padding: 0.5em 0.6em;
+          font-size: clamp(13px, 3.4vw, 18px);
+        }
+        /* The minimap moves to a corner: dead centre is where a thumb-driven
+           character actually stands. */
+        .hud-map {
+          left: auto;
+          right: 0.6em;
+          top: 3.6em;
+          transform: none;
+        }
+        .hud-map canvas {
+          width: 5.5em;
+          height: 5.5em;
+        }
+        .map-where {
+          display: none;
+        }
+        .player-card {
+          min-width: 0;
+          padding: 0.4em 0.6em;
+        }
+        .player-card .tool {
+          display: none;
+        }
+        .fab-sheet {
+          width: 100%;
+          max-height: 100%;
+          padding: 12px;
+          border-radius: 14px;
+          font-size: 13px;
+        }
+        .fab-panel {
+          padding: 0;
+        }
+        .fab-head {
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .fab-stock {
+          display: none;
+        }
+        .fab-fields {
+          flex-direction: column;
+        }
+        .fab-actions .hint {
+          display: none;
+        }
+        .fab-row .f {
+          display: none;
+        }
+      }
+      /* Landscape on a phone is short, not narrow: give the pad its height
+         back by trimming everything that isn't the world. */
+      @media (max-height: 480px) {
+        .hud-map {
+          display: none;
+        }
+        .action-btn {
+          width: 74px;
+          height: 74px;
+        }
+        .action-btn.secondary {
+          width: 62px;
+          height: 62px;
+        }
+      }
+
       /* ── keyboard hints ──────────────────────────────────────── */
       /* Sits along the bottom edge, quiet enough to ignore once learned. */
       .key-hints {
@@ -1508,12 +1644,14 @@
         transform: scale(0.96);
       }
       /* Thumb geometry: A sits where the thumb rests, B is one short reach
-         up and inward. Spreading them further looks tidier and plays worse. */
-      #btn-a {
+         up and inward. Spreading them further looks tidier and plays worse.
+         Selected by data attribute, because the pad is built by a shared
+         module and its buttons carry no ids. */
+      .action-btn[data-btn="a"] {
         left: 16%;
         bottom: 17%;
       }
-      #btn-b {
+      .action-btn[data-btn="b"] {
         left: 50%;
         bottom: 33%;
       }
@@ -1566,17 +1704,17 @@
       }
       /* past the dead zone the nub takes your player colour: the control is
          live, and it is live for *you* */
-      .controller.slot-1 .stick-zone.live .stick-nub {
+      .pad-surface.slot-1 .stick-zone.live .stick-nub {
         background:
           radial-gradient(120% 120% at 50% 25%, rgba(255, 255, 255, 0.55), transparent 62%),
           var(--p1);
       }
-      .controller.slot-2 .stick-zone.live .stick-nub {
+      .pad-surface.slot-2 .stick-zone.live .stick-nub {
         background:
           radial-gradient(120% 120% at 50% 25%, rgba(255, 255, 255, 0.55), transparent 62%),
           var(--p2);
       }
-      .controller .zone-hint {
+      .pad-surface .zone-hint {
         position: absolute;
         bottom: 11%;
         width: 100%;

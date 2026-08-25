@@ -22,6 +22,7 @@ import { RoomConnection } from "../socket";
 import { keepScreenAwake } from "../wake-lock";
 import { startBackdrop } from "../backdrop";
 import { createSketchPad } from "../sketch";
+import { createTouchPad } from "../touchpad";
 import { WorldScene, type MinimapData, type PlaceableDesign } from "./world";
 import {
   BIOMES,
@@ -82,6 +83,14 @@ export function startScreen(code: string) {
   ).join("");
 
   const app = document.getElementById("app")!;
+
+  /**
+   * A phone or tablet opening the screen route plays on its own: the pad is
+   * drawn over the game rather than living on a second device. Coarse pointer
+   * is the right test — it asks whether the primary input is a finger, not
+   * how wide the window happens to be.
+   */
+  const touchHost = window.matchMedia("(pointer: coarse)").matches;
 
   // ── state that outlives the view switch ─────────────────────
   // The design catalog and the saved world both arrive right after connecting,
@@ -319,7 +328,7 @@ export function startScreen(code: string) {
       stopBackdrop = null;
       app.innerHTML = `
       <div class="screen">
-        <div class="screen-stage" id="stage">
+        <div class="screen-stage${touchHost ? " touch pad-surface slot-1" : ""}" id="stage">
           <div class="split-divider"></div>
 
           <div class="hud">
@@ -377,6 +386,8 @@ export function startScreen(code: string) {
               </section>
             </div>
           </div>
+
+          <button class="touch-fab hidden" id="touch-fab">✎ FABRICATOR</button>
 
           <div class="key-hints" id="key-hints"></div>
 
@@ -436,6 +447,13 @@ export function startScreen(code: string) {
           },
         },
       });
+      // Dev/test hook. Phaser advances its asset loader inside the game step,
+      // so a tab that isn't compositing never finishes loading and looks hung
+      // — which is indistinguishable from a real freeze unless you can drive
+      // frames by hand. `__world` only appears once the scene exists, so it's
+      // no use for diagnosing a boot that never gets that far.
+      (window as unknown as { __game: Phaser.Game }).__game = game;
+
       new ResizeObserver(() => {
         if (stage.clientWidth && stage.clientHeight) {
           game.scale.resize(stage.clientWidth, stage.clientHeight);
@@ -482,6 +500,23 @@ export function startScreen(code: string) {
         conn.send({ scope: "ui", type: "world-save", snapshot: worldScene.snapshot() });
       }, 3000);
     };
+
+    // ── touch controls, drawn over the game ─────────────────────
+    // On a phone or tablet there is no second device: the pad goes straight
+    // onto the screen, and its input goes straight into the simulation
+    // running behind it. No socket round trip — the player and the world are
+    // the same machine, and routing through the server would only add lag.
+    if (touchHost) {
+      createTouchPad(stage, (padState) => {
+        worldScene.setInput(1, {
+          stick: { ...padState.stick },
+          buttons: { ...padState.buttons },
+        });
+      });
+      const touchFab = document.getElementById("touch-fab")!;
+      touchFab.classList.remove("hidden");
+      touchFab.addEventListener("click", () => openFab(1));
+    }
 
     // ── the Fabricator, on the screen ───────────────────────────
     // Everything the phone can do, reachable from the keyboard and mouse:
@@ -764,6 +799,11 @@ export function startScreen(code: string) {
     worldScene.onFabricatorRange = (slot, inRange) => {
       fabRange[slot] = inRange;
       conn.send({ scope: "ui", type: "fabricator-range", slot, inRange });
+      // The on-screen button lights up only where it can be used, exactly
+      // like the phone's does.
+      if (slot === 1) {
+        document.getElementById("touch-fab")?.classList.toggle("ready", inRange);
+      }
     };
 
     // ── vitals ──────────────────────────────────────────────────
@@ -865,7 +905,11 @@ export function startScreen(code: string) {
     conn.send({ scope: "presence", type: "set-phase", phase });
   }
 
-  const conn = new RoomConnection(code, "screen", resolveIdentity(), {
+  const conn = new RoomConnection(
+    code,
+    "screen",
+    resolveIdentity(),
+    {
     onStatus: (s) => {
       connStatus =
         s === "open" ? "online" : s === "connecting" ? "connecting" : "reconnecting";
@@ -980,8 +1024,10 @@ export function startScreen(code: string) {
           onRoster();
         }
       }
+      },
     },
-  });
+    touchHost,
+  );
 
   renderLobby();
 }

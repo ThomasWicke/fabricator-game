@@ -14,6 +14,7 @@ import {
   sanitizeNickname,
 } from "../identity";
 import { createSketchPad } from "../sketch";
+import { createTouchPad, type TouchPad } from "../touchpad";
 import { RoomConnection } from "../socket";
 import { keepScreenAwake } from "../wake-lock";
 import type {
@@ -27,10 +28,6 @@ import type { DesignSummary } from "../../../party/designs";
 import type { MaterialType } from "../../../shared/fabricator/schema";
 
 const SEND_INTERVAL_MS = 33;
-const STICK_RADIUS = 56;
-/** Travel, in px, that reads as "not moving". Below this the stick sends a
- *  hard zero — a thumb resting on glass is never perfectly still. */
-const STICK_DEAD_ZONE = 9;
 const SKETCH_MAX_SIDE = 256;
 const SKETCH_CROP_PADDING = 8;
 const RENAME_DEBOUNCE_MS = 300;
@@ -63,6 +60,9 @@ export function startController(code: string) {
   let onUiMsg: (msg: Record<string, unknown>) => void = () => {};
   let renderDesigns: () => void = () => {};
   let applyFabState: () => void = () => {};
+  /** The live touch pad, so switching views doesn't leave a second one wired
+   *  up to the same host element. */
+  let touchPad: TouchPad | null = null;
 
   keepScreenAwake();
   document.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -88,6 +88,8 @@ export function startController(code: string) {
   // ── lobby view ──────────────────────────────────────────────
   function renderLobby() {
     view = "lobby";
+    touchPad?.destroy();
+    touchPad = null;
     app.innerHTML = `
       <div class="pad-lobby" id="pad-lobby">
         <div class="pad-lobby-head">
@@ -211,21 +213,13 @@ export function startController(code: string) {
   // ── game view ───────────────────────────────────────────────
   function renderGame() {
     view = "game";
+    touchPad?.destroy();
     app.innerHTML = `
-      <div class="controller" id="controller">
+      <div class="controller pad-surface" id="controller">
         <div class="pad-rail">
           <span class="rail-slot" id="slot-name">…</span>
           <span class="rail-room">${upperCode}</span>
           <span class="rail-conn" id="conn-status">connecting…</span>
-        </div>
-        <div class="btn-zone">
-          <button class="action-btn secondary" id="btn-b"><b>B</b><i>run</i></button>
-          <button class="action-btn" id="btn-a"><b>A</b><i>use</i></button>
-        </div>
-        <div class="stick-zone" id="stick-zone">
-          <div class="stick-base" id="stick-base"><span class="ring"></span></div>
-          <div class="stick-nub" id="stick-nub"></div>
-          <div class="zone-hint">touch to move</div>
         </div>
         <div class="top-btns">
           <button class="fab-btn" id="blueprint-btn">
@@ -295,93 +289,17 @@ export function startController(code: string) {
       renderDesigns();
     };
 
-    // ── floating joystick ───────────────────────────────────────
-    const zone = document.getElementById("stick-zone")!;
-    const base = document.getElementById("stick-base")!;
-    const nub = document.getElementById("stick-nub")!;
-    let stickPointer: number | null = null;
-    let origin = { x: 0, y: 0 };
-    /** The zone's viewport offset, captured when a touch starts.
-     *
-     *  The base and nub are absolutely positioned *inside* .stick-zone, but
-     *  pointer events report viewport coordinates — and the zone starts 45% of
-     *  the way across the screen. Placing them at the raw clientX pushed the
-     *  whole control off the right edge, so the stick you were meant to see
-     *  under your thumb was never actually on screen. */
-    let zoneOrigin = { x: 0, y: 0 };
-
-    const placeStick = (el: HTMLElement, x: number, y: number) => {
-      el.style.left = `${x - zoneOrigin.x}px`;
-      el.style.top = `${y - zoneOrigin.y}px`;
-    };
-
-    zone.addEventListener("pointerdown", (e) => {
-      // Normally we ignore a second finger. But if the tracked pointer is no
-      // longer actually held — a system gesture stole the touch, the browser
-      // dropped the pointerup — then holding onto it jams the stick and the
-      // player simply cannot move again. A fresh touch takes over instead.
-      if (stickPointer !== null) {
-        const stale = !zone.hasPointerCapture(stickPointer);
-        if (!stale) return;
-        releaseStick();
-      }
-      stickPointer = e.pointerId;
-      try {
-        zone.setPointerCapture(e.pointerId);
-      } catch {
-        // synthetic events (test harness) have no active pointer to capture
-      }
-      // The stick is wherever your thumb lands. Nothing to aim for, nothing to
-      // find by feel — which is the whole point of a screen you don't look at.
-      // Read the zone's offset now: one layout read per touch, not per move.
-      const r = zone.getBoundingClientRect();
-      zoneOrigin = { x: r.left, y: r.top };
-      origin = { x: e.clientX, y: e.clientY };
-      placeStick(base, e.clientX, e.clientY);
-      placeStick(nub, e.clientX, e.clientY);
-      zone.classList.add("engaged");
+    // ── the pad ─────────────────────────────────────────────────
+    // Stick and buttons come from the shared module, so this phone and a
+    // tablet playing on its own behave identically down to the edge cases.
+    touchPad = createTouchPad(root, (s, immediate) => {
+      stick.x = s.stick.x;
+      stick.y = s.stick.y;
+      buttons.a = s.buttons.a;
+      buttons.b = s.buttons.b;
+      if (immediate) sendNow();
+      else dirty = true;
     });
-    zone.addEventListener("pointermove", (e) => {
-      if (e.pointerId !== stickPointer) return;
-      const dx = e.clientX - origin.x;
-      const dy = e.clientY - origin.y;
-      const len = Math.hypot(dx, dy);
-      const ux = len ? dx / len : 0;
-      const uy = len ? dy / len : 0;
-
-      // The nub tracks the thumb (clamped to the ring) so the control always
-      // looks like it is following you.
-      const visual = Math.min(len, STICK_RADIUS);
-      placeStick(nub, origin.x + ux * visual, origin.y + uy * visual);
-
-      // What we SEND is remapped past a dead zone and ramps to full over the
-      // remaining travel. A thumb resting on glass never sits perfectly still,
-      // and without this the character drifts while you are reading the screen.
-      const mag =
-        len <= STICK_DEAD_ZONE
-          ? 0
-          : Math.min(1, (len - STICK_DEAD_ZONE) / (STICK_RADIUS - STICK_DEAD_ZONE));
-      stick.x = ux * mag;
-      stick.y = uy * mag;
-      zone.classList.toggle("live", mag > 0);
-      dirty = true;
-    });
-    const releaseStick = () => {
-      stickPointer = null;
-      zone.classList.remove("engaged", "live");
-      stick.x = 0;
-      stick.y = 0;
-      sendNow(); // stop immediately, don't wait for the tick
-    };
-    const endStick = (e: PointerEvent) => {
-      if (e.pointerId !== stickPointer) return;
-      releaseStick();
-    };
-    zone.addEventListener("pointerup", endStick);
-    zone.addEventListener("pointercancel", endStick);
-    // Losing capture without a pointerup is the case that strands you: iOS
-    // hands the touch to a system gesture and no further events arrive.
-    zone.addEventListener("lostpointercapture", endStick);
 
     // ── design library ──────────────────────────────────────────
     // Designs are permanent; building one spends materials. Showing cost and
@@ -543,28 +461,6 @@ export function startController(code: string) {
       }
     };
 
-    // ── buttons ─────────────────────────────────────────────────
-    for (const id of ["a", "b"] as const) {
-      const el = document.getElementById(`btn-${id}`)!;
-      const set = (down: boolean) => {
-        if (buttons[id] === down) return;
-        buttons[id] = down;
-        el.classList.toggle("pressed", down);
-        if (down && "vibrate" in navigator) navigator.vibrate(12);
-        sendNow(); // button edges are latency-critical
-      };
-      el.addEventListener("pointerdown", (e) => {
-        e.preventDefault();
-        try {
-          el.setPointerCapture(e.pointerId);
-        } catch {
-          // synthetic events (test harness) have no active pointer to capture
-        }
-        set(true);
-      });
-      el.addEventListener("pointerup", () => set(false));
-      el.addEventListener("pointercancel", () => set(false));
-    }
   }
 
   // ── networking ────────────────────────────────────────────────

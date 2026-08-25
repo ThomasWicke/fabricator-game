@@ -26,6 +26,8 @@ export class RoomConnection {
     private role: "screen" | "controller",
     private identity: Identity,
     private handlers: Handlers,
+    /** Screens only: this device also plays, using on-screen touch controls. */
+    private touchHost = false,
   ) {
     this.handlers.onStatus("connecting");
     // In dev: same host:port as the page (Vite proxies /parties/* to
@@ -45,6 +47,7 @@ export class RoomConnection {
         role: this.role,
         playerId: this.identity.playerId,
         nickname: this.identity.nickname,
+        touchHost: this.touchHost || undefined,
       });
       const pending = this.queue;
       this.queue = [];

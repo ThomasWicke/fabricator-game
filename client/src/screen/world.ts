@@ -837,6 +837,14 @@ export class WorldScene extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
     const split = this.activeSlots.size > 1;
+
+    // Zoom is tuned for a television across a room. A phone is a hand's width
+    // away and has a fraction of the pixels, so the same magnification would
+    // leave you peering through a letterbox at three hexes.
+    const viewW = split ? w / 2 : w;
+    const zoom = viewW < 520 ? 1.15 : viewW < 800 ? 1.35 : CAMERA_ZOOM;
+    this.cameras.main.setZoom(zoom);
+    this.cam2.setZoom(zoom);
     if (split) {
       this.cameras.main.setViewport(0, 0, Math.floor(w / 2), h);
       this.cam2.setViewport(Math.floor(w / 2), 0, Math.ceil(w / 2), h);

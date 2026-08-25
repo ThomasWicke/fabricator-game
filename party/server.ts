@@ -153,11 +153,14 @@ export class FabricatorServer extends Server<Env> {
   }
 
   onClose(connection: Connection): void {
-    if (this.screenConns.delete(connection.id)) {
+    // A touch-host screen is both a screen and a player, so it falls through
+    // to the player cleanup below rather than returning early.
+    const wasScreen = this.screenConns.delete(connection.id);
+    const playerId = this.connToPlayer.get(connection.id);
+    if (wasScreen && !playerId) {
       this.broadcastRoster();
       return;
     }
-    const playerId = this.connToPlayer.get(connection.id);
     if (!playerId) return;
     this.connToPlayer.delete(connection.id);
     const rec = this.players.get(playerId);
@@ -302,6 +305,24 @@ export class FabricatorServer extends Server<Env> {
   private handleIdentify(msg: IdentifyMsg, conn: Connection) {
     if (msg.role === "screen") {
       this.screenConns.add(conn.id);
+      if (msg.touchHost) {
+        // This screen is playing on its own touch controls, so it holds a
+        // seat like any player. freeSlot() then hands a joining phone slot 2
+        // rather than the seat somebody is already sitting in.
+        const existing = this.players.get(msg.playerId);
+        const rec = existing ?? {
+          playerId: msg.playerId,
+          nickname: sanitizeNickname(msg.nickname) || "Player 1",
+          slot: 1 as Slot,
+          connectionId: conn.id,
+          ready: true,
+        };
+        rec.connectionId = conn.id;
+        rec.slot = 1;
+        rec.ready = true; // nothing to ready up: they're already here
+        this.players.set(msg.playerId, rec);
+        this.connToPlayer.set(conn.id, msg.playerId);
+      }
       conn.send(
         JSON.stringify({
           scope: "presence",
