@@ -43,38 +43,58 @@ export const dist = (r: number, g: number, b: number, k: RGB): number =>
 /**
  * What colour is the background?
  *
- * Sampled from the border — corners and edge midpoints — and averaged. The
- * spread is returned too: a backdrop with a gradient or a horizon in it will
- * disagree with itself, and that is the signal to leave the image alone.
+ * Sampled around the border and reduced by MEDIAN, not mean — because the
+ * border is not reliably background. A generated sprite often fills its
+ * frame, and the browser keys a ~3.5x downscale, so a subject ending 8px
+ * from the edge lands directly on a sample point. Measured on a real
+ * failure (an all-terrain bike): one contaminated sample out of eight
+ * dragged the averaged key to rgb(239,2,240) and the spread to 157 — past
+ * the flatness threshold — so a perfectly clean magenta background was
+ * refused and the sprite shipped unkeyed.
+ *
+ * The median ignores that sample entirely. What replaces "spread" as the
+ * refusal signal is AGREEMENT: on a flat backdrop nearly every sample sits
+ * on the key, while a gradient or a scene disagrees with itself everywhere.
+ * A few outliers are the subject touching an edge; a majority of outliers
+ * means there is no single background colour to key.
  */
+const BORDER_SAMPLES = 32;
+/** Fraction of border samples that must agree before the key is trusted. */
+const MIN_AGREEMENT = 0.6;
+
 export function readKey(
   d: Uint8ClampedArray,
   w: number,
   h: number,
 ): { key: RGB; spread: number } {
+  const m = 2; // inset, because edge pixels are often resampling mush
   const at = (x: number, y: number): RGB => {
-    const i = (y * w + x) * 4;
+    const i = (Math.max(0, Math.min(h - 1, y)) * w + Math.max(0, Math.min(w - 1, x))) * 4;
     return [d[i], d[i + 1], d[i + 2]];
   };
-  const m = 2; // inset, because edge pixels are often resampling mush
-  const samples: RGB[] = [
-    at(m, m),
-    at(w - 1 - m, m),
-    at(m, h - 1 - m),
-    at(w - 1 - m, h - 1 - m),
-    at(w >> 1, m),
-    at(w >> 1, h - 1 - m),
-    at(m, h >> 1),
-    at(w - 1 - m, h >> 1),
-  ];
-  const key: RGB = [0, 0, 0];
-  for (const s of samples) {
-    key[0] += s[0] / samples.length;
-    key[1] += s[1] / samples.length;
-    key[2] += s[2] / samples.length;
+  const samples: RGB[] = [];
+  const per = Math.max(2, Math.floor(BORDER_SAMPLES / 4));
+  for (let i = 0; i < per; i++) {
+    const fx = Math.round((i / (per - 1)) * (w - 1 - 2 * m)) + m;
+    const fy = Math.round((i / (per - 1)) * (h - 1 - 2 * m)) + m;
+    samples.push(at(fx, m), at(fx, h - 1 - m), at(m, fy), at(w - 1 - m, fy));
   }
-  let spread = 0;
-  for (const s of samples) spread = Math.max(spread, dist(s[0], s[1], s[2], key));
+
+  const median = (vals: number[]) => {
+    const s = [...vals].sort((a, b) => a - b);
+    return s[s.length >> 1];
+  };
+  const key: RGB = [
+    median(samples.map((s) => s[0])),
+    median(samples.map((s) => s[1])),
+    median(samples.map((s) => s[2])),
+  ];
+
+  // "Spread" is now the disagreement RATE, rescaled onto the old threshold so
+  // FLATNESS keeps its meaning: below it the border agrees on one colour.
+  const off = samples.filter((s) => dist(s[0], s[1], s[2], key) >= HARD).length;
+  const agreement = 1 - off / samples.length;
+  const spread = agreement >= MIN_AGREEMENT ? (1 - agreement) * FLATNESS : FLATNESS * 2;
   return { key, spread };
 }
 

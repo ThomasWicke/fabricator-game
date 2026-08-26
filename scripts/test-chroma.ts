@@ -116,6 +116,32 @@ console.log("\n── enclosed openings ─────────────�
   check("  the enclosed grey panel SURVIVED", alphaAt(d, 64, 30, 30) === 255);
 }
 
+console.log("\n── a subject that fills its frame ──────────────────────────");
+
+{
+  // The real failure this guards: an all-terrain bike whose rack reached to
+  // 8px of the right edge. The browser keys a ~3.5x downscale, so that put
+  // the subject directly under a border sample; averaging those samples
+  // dragged the key off magenta, spread hit 157, and a perfectly clean
+  // background was refused — the sprite shipped with magenta around it.
+  const w = 64, h = 64;
+  const d = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      // subject spans nearly edge to edge, touching the right border
+      const inside = x >= 3 && x <= w - 2 && y >= 20 && y <= 44;
+      const c: RGB = inside ? [40, 40, 45] : [255, 0, 255];
+      const i = (y * w + x) * 4;
+      d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+    }
+  }
+  const out = keyImage(d, w, h);
+  check("a frame-filling subject does not defeat the key", out.applied, out.applied ? "" : out.reason);
+  check("  the background still went", alphaAt(d, w, 5, 5) === 0);
+  check("  the subject survived", alphaAt(d, w, 30, 32) === 255);
+  check("  …including where it meets the border", alphaAt(d, w, w - 2, 32) === 255);
+}
+
 console.log("\n── images it must refuse ───────────────────────────────────");
 
 {

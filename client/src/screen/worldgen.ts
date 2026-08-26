@@ -406,7 +406,11 @@ export type NodeKind = "tree" | "rock" | ExoticNode | "food";
  *  full of bogiron would be a lie the player has no way to check. */
 export const SEAMS: Record<ExoticNode, { tint: number; biomes: BiomeType[] }> = {
   bogiron: { tint: 0xd9813f, biomes: ["magic"] },
-  basalt: { tint: 0x4d4a63, biomes: ["stone", "rock"] },
+  // Tints MULTIPLY the rock sprite, so a dark tint compounds into a
+  // silhouette: 0x4d4a63 measured at luminance 59 against 111-150 for the
+  // other three ores, and read as a missing texture rather than as basalt.
+  // 0x9a86c4 lands at 111 — the darkest, most violet ore, still a rock.
+  basalt: { tint: 0x9a86c4, biomes: ["stone", "rock"] },
   glass: { tint: 0x7fe4d8, biomes: ["sand"] },
   rime: { tint: 0x9fc7ff, biomes: ["snow"] },
 };

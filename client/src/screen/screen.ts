@@ -47,7 +47,14 @@ import type {
   WorldStateMsg,
 } from "../../../party/protocol";
 import { designArtUrl, type Design } from "../../../party/designs";
-import type { MaterialType } from "../../../shared/fabricator/schema";
+// MATERIALS is IMPORTED, never re-declared. A local copy lived here since
+// before the ores existed, and because every call site read as `MATERIALS`
+// it survived the sweep that fixed world.ts, controller.ts and the protocol.
+// It silently capped this whole file at three materials: no basalt, glass or
+// rime chip could render, the stockpile handler only ever updated three
+// counters, and the Communications repair bill showed its bogiron while
+// hiding its glass.
+import { MATERIALS, type MaterialType } from "../../../shared/fabricator/schema";
 
 const ICONS: Record<MaterialType, string> = {
   wood: `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><rect x="1" y="5" width="11.5" height="7" rx="3.2" fill="#8a6a48"/><ellipse cx="12.4" cy="8.5" rx="2.5" ry="3.5" fill="#a8845e"/><ellipse cx="12.4" cy="8.5" rx="1.1" ry="1.7" fill="#6d5236"/></svg>`,
@@ -60,7 +67,6 @@ const ICONS: Record<MaterialType, string> = {
   rime: `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><g stroke="#9fc7ff" stroke-width="1.5" stroke-linecap="round"><path d="M8 2 L8 14"/><path d="M2.8 5 L13.2 11"/><path d="M13.2 5 L2.8 11"/></g><circle cx="8" cy="8" r="1.7" fill="#dbeaff"/></svg>`,
 };
 
-const MATERIALS: MaterialType[] = ["wood", "stone", "bogiron"];
 
 /** One player's corner of the HUD: who they are, what they're holding, and
  *  the two bars that say whether they're in trouble. */
@@ -166,6 +172,19 @@ export function startScreen(code: string) {
   let onSnapshot: () => void = () => {};
   /** Set once the game view exists. The socket is listening long before that,
    *  so both are no-ops until there is something to act on. */
+  /**
+   * A rolling trace of what the Fabricator is doing, shown by /log in the
+   * cheat console. The pipeline spans two machines and four stages, and its
+   * only visible states were a spinner and a toast — when a sprite came back
+   * wrong there was nowhere to look.
+   */
+  const trace: string[] = [];
+  const traceLine = (line: string) => {
+    const t = new Date().toISOString().slice(11, 19);
+    trace.push(`${t} ${line}`);
+    if (trace.length > 60) trace.shift();
+    console.log(`[fab] ${line}`); // also in devtools, where stack traces live
+  };
   let requestDiscardRef: (id: string, requester?: string) => void = () => {};
   let renderFabListRef: () => void = () => {};
   /** Set by startGame; restores a saved world once both it and the scene
@@ -823,6 +842,16 @@ export function startScreen(code: string) {
       if (!line) return;
       // Stays open after a command: cheats come in bursts, and reopening the
       // console between each one is friction with no safety payoff.
+      // /log is answered here, not by the world: the fabrication pipeline is
+      // the SHELL's business — the world never sees a blueprint.
+      const cmd = line.trim().replace(/^\//, "").split(/\s+/)[0];
+      if (cmd === "log") {
+        cheatOut.textContent = trace.length
+          ? trace.slice(-14).join("\n")
+          : "nothing fabricated yet this session";
+        cheatIn.value = "";
+        return;
+      }
       cheatOut.textContent = `> ${line}\n${scene?.cheat(line) ?? "world not ready"}`;
       cheatIn.value = "";
     });
@@ -1369,14 +1398,16 @@ export function startScreen(code: string) {
         // design-catalog / design-body / world-state all land while the lobby
         // is still up — they feed the game that hasn't started yet.
         if (msg.type === "blueprint") {
-          scene?.setFabricating(String(msg.name ?? "…"));
+          const nm = String(msg.name ?? "…");
+          traceLine(`submitted "${nm}"${msg.image ? " with a sketch" : " (no sketch)"}`);
+          scene?.setFabricating(nm);
           armFabTimeout();
         } else if (msg.type === "fabricate-progress") {
           // The spec is done; the rest of the wait is the artist. Give the
           // patience budget a fresh start — progress proves it isn't hung.
-          scene?.setFabricatingStage(
-            `DRAWING: ${String((msg as unknown as { name: string }).name)}…`,
-          );
+          const nm = String((msg as unknown as { name: string }).name);
+          traceLine(`spec compiled → "${nm}" · now generating the body`);
+          scene?.setFabricatingStage(`DRAWING: ${nm}…`);
           armFabTimeout(false);
         } else if (msg.type === "design-catalog") {
           for (const d of (msg as unknown as DesignCatalogMsg).designs as Design[]) {
@@ -1385,6 +1416,11 @@ export function startScreen(code: string) {
         } else if (msg.type === "design-added") {
           const m = msg as unknown as DesignAddedMsg;
           designs.set(m.design.id, m.design);
+          const sp = m.design.spec;
+          traceLine(
+            `design ready: ${sp.displayName} · ${sp.category} · ${formatCost(sp.cost)}` +
+              (m.rawBody ? ` · art ${Math.round(m.rawBody.length / 1366)}KB` : " · NO ART returned"),
+          );
           scene?.clearFabricating();
           disarmFabTimeout();
           toast(
@@ -1396,9 +1432,20 @@ export function startScreen(code: string) {
           // permanent storage so every future build reuses it.
           if (m.rawBody) {
             chromaKeyBodySprite(m.rawBody).then(
-              (body) =>
-                conn.send({ scope: "ui", type: "design-body", designId: m.design.id, body }),
-              (err) => console.warn("chroma key failed, design keeps its sketch:", err),
+              (body) => {
+                // Same length back means the keyer refused and handed the
+                // original through — the sprite will show its background.
+                traceLine(
+                  body.length === m.rawBody!.length
+                    ? `⚠ chroma REFUSED ${sp.displayName} — shipping the raw image (see the console for why)`
+                    : `chroma keyed ${sp.displayName} · ${Math.round(m.rawBody!.length / 1366)}KB → ${Math.round(body.length / 1366)}KB`,
+                );
+                conn.send({ scope: "ui", type: "design-body", designId: m.design.id, body });
+              },
+              (err) => {
+                traceLine(`⚠ chroma FAILED ${sp.displayName}: ${err}`);
+                console.warn("chroma key failed, design keeps its sketch:", err);
+              },
             );
           }
         } else if (msg.type === "design-body") {
@@ -1479,6 +1526,7 @@ export function startScreen(code: string) {
         } else if (msg.type === "tool-cycle") {
           scene?.cycleTool((msg as unknown as { slot: Slot }).slot);
         } else if (msg.type === "fabricate-error") {
+          traceLine(`⚠ ${String(msg.message ?? "fabrication failed")}`);
           scene?.clearFabricating();
           disarmFabTimeout();
           toast(String(msg.message ?? "Fabrication failed."), true);

@@ -1357,6 +1357,7 @@ export class WorldScene extends Phaser.Scene {
           "/day · /night — set the time of day",
           "/grid — toggle the debug grid",
           "/where [slot] — print the player's address",
+          "/log — the last of what the Fabricator did, stage by stage",
         ].join("\n");
       case "bank-add": {
         const [mat, nStr] = args;
