@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "name": "Racing Buggy",
+    "intent": "As fast as possible on firm ground.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:26:42.792Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Racing Buggy",
+    "size": {
+      "w": 70,
+      "h": 40
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 360,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.9,
+        "swamp": 0.05,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Privateer, you're not racing the bog or the deep snow. Stick to the plains or the desert — these wheels are optimized for firm ground. Speed is your KPI. Anything else is a distraction."
+  },
+  "usage": {
+    "inputTokens": 1431,
+    "outputTokens": 163
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "name": "Spider Walker",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:26:57.220Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Spider Walker",
+    "size": {
+      "w": 110,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "legs",
+      "speed": 180,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.8,
+        "swamp": 0.7,
+        "rock": 0.6,
+        "snow": 0.4,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 1.5,
+      "materials": [
+        "bogiron"
+      ]
+    },
+    "seats": 1,
+    "flavor": "VibeTech's precision engineering delivers this low-profile, high-strength quadruped. Optimal for bog terrain, but inefficient on dry ground. Privateer, prioritize bog extraction over surface traversal."
+  },
+  "usage": {
+    "inputTokens": 1416,
+    "outputTokens": 169
+  }
+}

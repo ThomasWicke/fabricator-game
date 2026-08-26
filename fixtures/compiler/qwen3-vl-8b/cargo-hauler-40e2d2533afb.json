@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Cargo Hauler",
+    "intent": "Slow but big, for moving resources.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:27:03.413Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Cargo Hauler",
+    "size": {
+      "w": 140,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 120,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.9,
+        "swamp": 0.5,
+        "rock": 0.7,
+        "snow": 0.7,
+        "water": 0
+      }
+    },
+    "storage": {
+      "capacity": 16
+    },
+    "seats": 2,
+    "flavor": "The Privateer's resource artery. Built for bulk, not speed."
+  },
+  "usage": {
+    "inputTokens": 1431,
+    "outputTokens": 137
+  }
+}

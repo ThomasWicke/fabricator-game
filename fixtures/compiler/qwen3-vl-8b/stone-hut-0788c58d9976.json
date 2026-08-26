@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "name": "Stone Hut",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:26:35.685Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Stone Hut",
+    "size": {
+      "w": 100,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.8,
+        "swamp": 0.7,
+        "rock": 0.8,
+        "snow": 0.6,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 0.5,
+      "materials": [
+        "stone"
+      ]
+    },
+    "seats": 0,
+    "flavor": "VibeTech's standard modular stone structure — built to endure and extract, not to shelter. Resource throughput optimized for the hard terrain, no frills."
+  },
+  "usage": {
+    "inputTokens": 1416,
+    "outputTokens": 160
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "name": "Rover",
+    "hasSketch": true,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:29:32.109Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Rover",
+    "size": {
+      "w": 100,
+      "h": 60
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 120,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 0.85,
+        "swamp": 0.1,
+        "rock": 0.4,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 0.8,
+      "materials": [
+        "stone"
+      ]
+    },
+    "storage": {
+      "capacity": 10
+    },
+    "seats": 1,
+    "flavor": "Rover's dual-purpose wheels are designed for rocky outcrops and sand dunes, not for the bog or deep snow. It'll get the job done on the most common terrain, and we're not subsidizing your 'exploratory' detours into the unknown."
+  },
+  "usage": {
+    "inputTokens": 2446,
+    "outputTokens": 189
+  }
+}

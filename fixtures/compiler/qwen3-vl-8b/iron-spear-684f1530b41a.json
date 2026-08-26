@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "name": "Iron Spear",
+    "intent": "For fighting off animals.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:28:16.080Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Iron Spear",
+    "size": {
+      "w": 52,
+      "h": 48
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 0.9,
+        "swamp": 0.1,
+        "rock": 0.8,
+        "snow": 0.6,
+        "water": 0
+      }
+    },
+    "weapon": {
+      "damage": 16,
+      "reach": 60,
+      "cooldown": 0.5
+    },
+    "seats": 0,
+    "flavor": "A refined, industrial-grade spearhead — not the crude work of a settler. This is a proper VibeTech combat tool, engineered for efficiency and precision. Deploy it when your Privateer's survival is at stake. (You're not a hunter.)"
+  },
+  "usage": {
+    "inputTokens": 1426,
+    "outputTokens": 188
+  }
+}

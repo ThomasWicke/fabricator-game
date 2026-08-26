@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Scarecrow",
+    "intent": "Keeps the creatures off the crops.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:28:55.449Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Scarecrow",
+    "size": {
+      "w": 70,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 0.9,
+        "swamp": 0.85,
+        "rock": 0.8,
+        "snow": 0.75,
+        "water": 0
+      }
+    },
+    "ward": {
+      "radius": 200
+    },
+    "seats": 0,
+    "flavor": "Scarecrow deployed. Crop protection KPI met. No creatures detected in target zone. Proceed to harvest."
+  },
+  "usage": {
+    "inputTokens": 1430,
+    "outputTokens": 153
+  }
+}

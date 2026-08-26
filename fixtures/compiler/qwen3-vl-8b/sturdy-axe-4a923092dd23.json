@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Sturdy Axe",
+    "intent": "For chopping trees.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:27:35.200Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Sturdy Axe",
+    "size": {
+      "w": 36,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 0.7,
+        "swamp": 0.3,
+        "rock": 0.2,
+        "snow": 0.1,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 1.5,
+      "materials": [
+        "wood"
+      ]
+    },
+    "seats": 0,
+    "flavor": "A solid workhorse for the job, Privateer. No frills, no wasted pixels — just 1.5 units/sec of wood. If you need more, build a bigger rig. (Waste not, want not.)"
+  },
+  "usage": {
+    "inputTokens": 1426,
+    "outputTokens": 179
+  }
+}

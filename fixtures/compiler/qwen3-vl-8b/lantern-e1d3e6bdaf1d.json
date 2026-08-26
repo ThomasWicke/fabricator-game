@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Lantern",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:27:58.483Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Lantern",
+    "size": {
+      "w": 36,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 0.9,
+        "rock": 0.8,
+        "snow": 0.6,
+        "water": 0
+      }
+    },
+    "emission": {
+      "kind": "light",
+      "intensity": 0.7
+    },
+    "seats": 0,
+    "flavor": "VibeTech standard-issue illumination: sufficient for basic navigation but not for grand vistas. Efficient, reliable, and *not* a substitute for a working light engine."
+  },
+  "usage": {
+    "inputTokens": 1417,
+    "outputTokens": 156
+  }
+}

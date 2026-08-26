@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "name": "Swamp Buggy",
+    "intent": "A vehicle for crossing swamps.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:26:28.618Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Swamp Buggy",
+    "size": {
+      "w": 100,
+      "h": 56
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 120,
+      "terrainModifiers": {
+        "grass": 0.8,
+        "sand": 0.7,
+        "swamp": 0.9,
+        "rock": 0.4,
+        "snow": 0.4,
+        "water": 0
+      }
+    },
+    "seats": 2,
+    "flavor": "VibeTech engineering: the Swamp Buggy's tracks are precisely calibrated to maintain traction on boggy terrain without clogging. A modestly priced vehicle for expeditions where the terrain is less than ideal."
+  },
+  "usage": {
+    "inputTokens": 1430,
+    "outputTokens": 161
+  }
+}

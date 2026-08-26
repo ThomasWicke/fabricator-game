@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "name": "Heavy Maul",
+    "intent": "A huge two-handed hammer. Slow, and it hits like a falling tree.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:28:23.894Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Heavy Maul",
+    "size": {
+      "w": 64,
+      "h": 72
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 0.8,
+        "swamp": 0.1,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "weapon": {
+      "damage": 20,
+      "reach": 40,
+      "cooldown": 2
+    },
+    "seats": 0,
+    "flavor": "VibeTech delivers precision engineering. This hammer’s slow, deliberate strike minimizes wasted effort—unlike the Privateer’s tendency to swing wildly. KPIs: 20 damage per 2-second window."
+  },
+  "usage": {
+    "inputTokens": 1437,
+    "outputTokens": 176
+  }
+}

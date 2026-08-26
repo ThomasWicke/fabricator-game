@@ -14,6 +14,8 @@
 // ISOMORPHIC — fetch/FormData/atob only, caller supplies baseUrl + token.
 
 import { localAuthHeaders } from "./local-auth";
+import { decodePngRgba } from "./png-decode";
+import { isFramedScene, magentaMask, measureUnity } from "./sprite-check";
 import { STYLE_PALETTE } from "./style-refs";
 import type { FabricatedSpec } from "./schema";
 import type { ArtReferences, BodySprite, ImageUsage } from "./image";
@@ -33,15 +35,42 @@ export type LocalImageOptions = {
   /** Total wall-clock budget for the ComfyUI job, polling included. First
    *  run after a restart loads the checkpoint and needs the headroom. */
   timeoutMs?: number;
+  /** Replace the spec-derived positive prompt. For prompt-strategy evals —
+   *  production passes nothing and gets buildLocalImagePrompt(). */
+  prompt?: string;
+  /** Replace the negative prompt. Note it only bites above cfg 1.0. */
+  negativePrompt?: string;
+  /** Empty-latent flavour. FLUX needs the 16-channel SD3 latent; feeding it
+   *  a 4-channel one yields noise, not an error. */
+  latentType?: "sd" | "sd3";
+  sampler?: string;
+  scheduler?: string;
+  /** Fixed seed. Omit in production (each fabrication should roll its own);
+   *  set it in evals so two arms differ by the variable under test. */
+  seed?: number;
+  /** How many times to re-roll a frame that holds more than one object.
+   *  Ignored when `seed` is pinned. */
+  attempts?: number;
+  /** Largest-blob share that counts as a single object. 0.85 keeps a boat
+   *  whose mast is a separate blob and rejects a 2x2 grid. */
+  minUnity?: number;
 };
 
-const DEFAULTS: Required<LocalImageOptions> = {
+const DEFAULTS: Omit<
+  Required<LocalImageOptions>,
+  "prompt" | "negativePrompt" | "seed"
+> = {
   checkpoint: "sdxl_lightning_4step.safetensors",
   lora: "pixel-art-xl.safetensors",
   steps: 4,
   cfg: 1.0,
   rembg: true,
   timeoutMs: 120_000,
+  latentType: "sd",
+  sampler: "euler",
+  scheduler: "sgm_uniform",
+  attempts: 3,
+  minUnity: 0.85,
 };
 
 /** #FF00FF as the integer ComfyUI's EmptyImage color input takes. */
@@ -55,8 +84,17 @@ function bucketSize(spec: FabricatedSpec): { width: number; height: number } {
   return { width: 768, height: 768 };
 }
 
-/** Tag-style SD prompt from the same facts buildImagePrompt uses. The
- *  pixel-art LoRA is the style anchor, so no style-reference images here. */
+/**
+ * Tag-style SD prompt from the same facts buildImagePrompt uses. The
+ * pixel-art LoRA is the style anchor, so no style-reference images here.
+ *
+ * It deliberately never says "sprite" or "game art". Asking SDXL for a
+ * video-game sprite is asking for the thing that phrase labels in its
+ * training data: a SHEET of little poses, and often a cast of RPG
+ * characters to go with them. Naming one object and letting the LoRA carry
+ * the style measurably raised the single-object rate and, more visibly,
+ * stopped tiny humanoids appearing beside the vehicles.
+ */
 export function buildLocalImagePrompt(spec: FabricatedSpec): string {
   const RUNNING_GEAR: Record<string, string> = {
     wheels: "chunky rubber wheels along its underside",
@@ -74,9 +112,9 @@ export function buildLocalImagePrompt(spec: FabricatedSpec): string {
         ? "inventory item icon, slight three-quarter angle, business end toward lower left, not held by anyone"
         : "high three-quarter top-down view";
   return (
-    `pixel, 2D video game sprite of ${spec.displayName}, a ${spec.category}. ${spec.flavor} ` +
-    `${view}, single object, centered, filling most of the frame, ` +
-    "flat cel shading, chunky simplified toy-like shapes, bold readable silhouette" +
+    `a single ${spec.displayName}, alone. ${spec.flavor} ${view}. ` +
+    "one whole object shown by itself against an empty background, centered, filling the frame. " +
+    "pixel art, flat cel shading, chunky simplified shapes, bold readable outline" +
     (STYLE_PALETTE.length ? `, palette ${STYLE_PALETTE.join(" ")}` : "")
   );
 }
@@ -96,8 +134,7 @@ const b64ToBytes = (b64: string): Uint8Array<ArrayBuffer> => {
   return out;
 };
 
-const bytesToB64 = (buf: ArrayBuffer): string => {
-  const bytes = new Uint8Array(buf);
+const bytesToB64 = (bytes: Uint8Array): string => {
   let bin = "";
   // Chunked: String.fromCharCode(...whole) overflows the arg limit on big images.
   for (let i = 0; i < bytes.length; i += 0x8000) {
@@ -138,10 +175,10 @@ function buildGraph(
   spec: FabricatedSpec,
   initImage: string | null,
   denoise: number,
-  opts: Required<LocalImageOptions>,
+  opts: typeof DEFAULTS & Pick<LocalImageOptions, "prompt" | "negativePrompt" | "seed">,
 ): Graph {
   const { width, height } = bucketSize(spec);
-  const seed = Math.floor(Math.random() * 0x7fffffff);
+  const seed = opts.seed ?? Math.floor(Math.random() * 0x7fffffff);
   const g: Graph = {
     ckpt: {
       class_type: "CheckpointLoaderSimple",
@@ -164,8 +201,14 @@ function buildGraph(
     model = ["lora", 0];
     clip = ["lora", 1];
   }
-  g.pos = { class_type: "CLIPTextEncode", inputs: { clip, text: buildLocalImagePrompt(spec) } };
-  g.neg = { class_type: "CLIPTextEncode", inputs: { clip, text: NEGATIVE_PROMPT } };
+  g.pos = {
+    class_type: "CLIPTextEncode",
+    inputs: { clip, text: opts.prompt ?? buildLocalImagePrompt(spec) },
+  };
+  g.neg = {
+    class_type: "CLIPTextEncode",
+    inputs: { clip, text: opts.negativePrompt ?? NEGATIVE_PROMPT },
+  };
 
   let latent: [string, number];
   if (initImage) {
@@ -183,7 +226,10 @@ function buildGraph(
     g.encode = { class_type: "VAEEncode", inputs: { pixels: ["initScaled", 0], vae: ["ckpt", 2] } };
     latent = ["encode", 0];
   } else {
-    g.empty = { class_type: "EmptyLatentImage", inputs: { width, height, batch_size: 1 } };
+    g.empty = {
+      class_type: opts.latentType === "sd3" ? "EmptySD3LatentImage" : "EmptyLatentImage",
+      inputs: { width, height, batch_size: 1 },
+    };
     latent = ["empty", 0];
     denoise = 1.0;
   }
@@ -198,8 +244,8 @@ function buildGraph(
       seed,
       steps: opts.steps,
       cfg: opts.cfg,
-      sampler_name: "euler",
-      scheduler: "sgm_uniform",
+      sampler_name: opts.sampler,
+      scheduler: opts.scheduler,
       denoise,
     },
   };
@@ -236,29 +282,16 @@ function buildGraph(
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function generateBodySpriteLocal(
+/** One trip through ComfyUI: submit, poll, fetch the bytes. */
+async function renderOnce(
   spec: FabricatedSpec,
-  refs: ArtReferences,
+  initImage: string | null,
+  denoise: number,
+  opts: typeof DEFAULTS & LocalImageOptions,
   endpoint: LocalImageEndpoint,
-  options: LocalImageOptions = {},
-): Promise<BodySprite & { usage: ImageUsage }> {
-  const opts = { ...DEFAULTS, ...options };
+): Promise<Uint8Array> {
   const headers = localAuthHeaders(endpoint.token);
   const t0 = Date.now();
-
-  // One init image drives the img2img: the parent body when modifying (low
-  // denoise — the machine must stay recognisable, mirroring image.ts), else
-  // the player's sketch (high denoise — silhouette in, rendering out).
-  let initImage: string | null = null;
-  let denoise = 1.0;
-  if (refs.parent) {
-    initImage = await upload(endpoint, refs.parent, "fabricator-parent.png");
-    denoise = 0.45;
-  } else if (refs.sketch) {
-    initImage = await upload(endpoint, refs.sketch, "fabricator-sketch.png");
-    denoise = 0.7;
-  }
-
   const graph = buildGraph(spec, initImage, denoise, opts);
   const res = await fetch(`${endpoint.baseUrl}/prompt`, {
     method: "POST",
@@ -301,12 +334,64 @@ export async function generateBodySpriteLocal(
     { headers },
   );
   if (!view.ok) throw httpError("ComfyUI view", view.status, await view.text());
-  const base64 = bytesToB64(await view.arrayBuffer());
+  return new Uint8Array(await view.arrayBuffer());
+}
+
+export async function generateBodySpriteLocal(
+  spec: FabricatedSpec,
+  refs: ArtReferences,
+  endpoint: LocalImageEndpoint,
+  options: LocalImageOptions = {},
+): Promise<BodySprite & { usage: ImageUsage }> {
+  const opts = { ...DEFAULTS, ...options };
+
+  // One init image drives the img2img: the parent body when modifying (low
+  // denoise — the machine must stay recognisable, mirroring image.ts), else
+  // the player's sketch (high denoise — silhouette in, rendering out).
+  let initImage: string | null = null;
+  let denoise = 1.0;
+  if (refs.parent) {
+    initImage = await upload(endpoint, refs.parent, "fabricator-parent.png");
+    denoise = 0.45;
+  } else if (refs.sketch) {
+    initImage = await upload(endpoint, refs.sketch, "fabricator-sketch.png");
+    denoise = 0.7;
+  }
+
+  // Re-roll grids. Whether a frame holds one object or twelve is mostly the
+  // seed's doing — the same prompt and subject swings between unity 0.2 and
+  // 1.0 — and a local generation costs seconds and no money, so the honest
+  // move is to look at the result and ask again. A pinned seed means an eval
+  // wants that exact image, so it gets one attempt.
+  const attempts = options.seed !== undefined ? 1 : opts.attempts;
+  let best: { bytes: Uint8Array; unity: number } | null = null;
+  for (let i = 0; i < attempts; i++) {
+    const bytes = await renderOnce(spec, initImage, denoise, opts, endpoint);
+    // Score 0 for a scene: it is a worse asset than a grid, since the grid at
+    // least looks wrong immediately, and this ranks it below any real attempt.
+    let score = 1;
+    try {
+      const img = await decodePngRgba(bytes);
+      const m = measureUnity(magentaMask(img.rgba, img.width, img.height), img.width, img.height);
+      score = isFramedScene(m) ? 0 : m.unity;
+    } catch {
+      // A frame we cannot read is not a frame we can reject; keep it and let
+      // the client keyer have the final say.
+    }
+    if (!best || score > best.unity) best = { bytes, unity: score };
+    if (score >= opts.minUnity) break;
+  }
+
   return {
-    dataUrl: `data:image/png;base64,${base64}`,
+    dataUrl: `data:image/png;base64,${bytesToB64(best!.bytes)}`,
     mimeType: "image/png",
     // Free — zero tokens is the honest number; the model field keeps the
     // existing per-fabrication log line meaningful.
-    usage: { model: `comfyui/${opts.checkpoint}`, imageTokens: 0, totalTokens: 0 },
+    usage: {
+      model: `comfyui/${opts.checkpoint}`,
+      imageTokens: 0,
+      totalTokens: 0,
+      unity: best!.unity,
+    },
   };
 }

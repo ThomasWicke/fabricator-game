@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Rover",
+    "hasSketch": true,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:29:45.597Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Rover",
+    "size": {
+      "w": 100,
+      "h": 60
+    },
+    "locomotion": {
+      "type": "legs",
+      "speed": 120,
+      "terrainModifiers": {
+        "grass": 0.85,
+        "sand": 0.75,
+        "swamp": 0.6,
+        "rock": 0.5,
+        "snow": 0.3,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Rover's legs are the only thing keeping it on the ground; VibeTech doesn't care if it's slow, just that it's functional where the others aren't."
+  },
+  "usage": {
+    "inputTokens": 2446,
+    "outputTokens": 156
+  }
+}

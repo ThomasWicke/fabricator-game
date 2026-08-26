@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Vessel",
+    "hasSketch": true,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:29:59.019Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Vessel",
+    "size": {
+      "w": 100,
+      "h": 50
+    },
+    "locomotion": {
+      "type": "float",
+      "speed": 200,
+      "terrainModifiers": {
+        "grass": 0.3,
+        "sand": 0.3,
+        "swamp": 0.7,
+        "rock": 0.3,
+        "snow": 0.7,
+        "water": 1
+      }
+    },
+    "seats": 1,
+    "flavor": "Standard amphibious utility craft. Built to extract resources from waterways without sacrificing speed on land. Cost-effective for hydrographic surveys. Note: Sails not for combat."
+  },
+  "usage": {
+    "inputTokens": 2446,
+    "outputTokens": 154
+  }
+}

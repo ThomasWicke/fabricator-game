@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "name": "Grain Silo",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:28:32.157Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Grain Silo",
+    "size": {
+      "w": 140,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.85,
+        "sand": 0.65,
+        "swamp": 0.7,
+        "rock": 0.6,
+        "snow": 0.3,
+        "water": 0.2
+      }
+    },
+    "harvest": {
+      "rate": 0.8,
+      "materials": [
+        "wood",
+        "stone",
+        "bogiron",
+        "basalt",
+        "glass",
+        "rime"
+      ]
+    },
+    "storage": {
+      "capacity": 20
+    },
+    "seats": 0,
+    "flavor": "VibeTech: Your grain silo is a resource sink, not a pantry. Feed it, or it feeds the void. The Privateer's KPIs require active management."
+  },
+  "usage": {
+    "inputTokens": 1418,
+    "outputTokens": 187
+  }
+}

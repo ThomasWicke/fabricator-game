@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "name": "Mining Buggy",
+    "intent": "Bolt a stone drill onto the buggy.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:30:13.507Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Mining Buggy",
+    "size": {
+      "w": 80,
+      "h": 45
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 220,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 1,
+        "swamp": 0.1,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 2,
+      "materials": [
+        "stone"
+      ]
+    },
+    "emission": {
+      "kind": "smoke",
+      "intensity": 0.2
+    },
+    "seats": 1,
+    "flavor": "Added a stone drill to the Dune Buggy to excavate hard ground. KPIs demand efficiency and grit. No sand, no problem."
+  },
+  "usage": {
+    "inputTokens": 1572,
+    "outputTokens": 165
+  }
+}

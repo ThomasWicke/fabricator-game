@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "name": "Logging Truck",
+    "intent": "Drives around cutting down trees.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:27:51.568Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Logging Truck",
+    "size": {
+      "w": 100,
+      "h": 60
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 200,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 0.8,
+        "swamp": 0.1,
+        "rock": 0.4,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 2,
+      "materials": [
+        "wood"
+      ]
+    },
+    "storage": {
+      "capacity": 10
+    },
+    "seats": 2,
+    "flavor": "VibeTech: Optimized for rapid timber extraction — 2x the industry standard speed, 50% less fuel burn, and zero forest service complaints. (We don't comment on your driving habits.)"
+  },
+  "usage": {
+    "inputTokens": 1428,
+    "outputTokens": 170
+  }
+}
