@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "name": "Rover",
+    "hasSketch": true,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:02:26.454Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Rover",
+    "size": {
+      "w": 70,
+      "h": 40
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 240,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.8,
+        "swamp": 0.1,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 2,
+      "materials": [
+        "stone"
+      ]
+    },
+    "emission": {
+      "kind": "smoke",
+      "intensity": 0.6
+    },
+    "storage": {
+      "capacity": 12
+    },
+    "seats": 1,
+    "flavor": "A workhorse with a bad attitude. Rolls where it's told, but grumbles about the mud."
+  },
+  "usage": {
+    "inputTokens": 2361,
+    "outputTokens": 209
+  }
+}

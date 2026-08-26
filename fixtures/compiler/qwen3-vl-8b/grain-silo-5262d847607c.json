@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "name": "Grain Silo",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:05:32.205Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Grain Silo",
+    "size": {
+      "w": 120,
+      "h": 140
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.8,
+        "sand": 0.8,
+        "swamp": 0.3,
+        "rock": 0.6,
+        "snow": 0.7,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 0.3,
+      "materials": [
+        "wood"
+      ]
+    },
+    "emission": {
+      "kind": "light",
+      "intensity": 0.2
+    },
+    "storage": {
+      "capacity": 10
+    },
+    "nourish": {
+      "rate": 1
+    },
+    "seats": 0,
+    "flavor": "A sturdy wooden structure for storing harvested grain, though it's oddly vulnerable to critters."
+  },
+  "usage": {
+    "inputTokens": 1333,
+    "outputTokens": 171
+  }
+}

@@ -28,6 +28,7 @@ import type {
 } from "../shared/fabricator";
 import { googleProvider } from "../shared/fabricator/providers/google";
 import { anthropicProvider } from "../shared/fabricator/providers/anthropic";
+import { ollamaProvider } from "../shared/fabricator/providers/ollama";
 import {
   appendHistory,
   listFixtures,
@@ -332,11 +333,24 @@ const CONFIGS: { config: CompilerConfig; keyVar: string; probe?: boolean }[] = [
   { config: { provider: "google", model: "gemini-flash-latest" }, keyVar: "GOOGLE_API_KEY", probe: true },
   { config: { provider: "anthropic", model: "claude-sonnet-5" }, keyVar: "ANTHROPIC_API_KEY" },
   { config: { provider: "anthropic", model: "claude-haiku-4-5" }, keyVar: "ANTHROPIC_API_KEY" },
+  // Self-hosted on the Mac mini — free, so --live costs nothing here. The
+  // "key" that gates it is the server URL; LOCAL_AI_TOKEN (if any) is the
+  // auth credential the provider actually sends.
+  {
+    config: {
+      provider: "ollama",
+      model: process.env.LOCAL_COMPILER_MODEL ?? "qwen3-vl:8b",
+      baseUrl: process.env.LOCAL_AI_URL,
+      timeoutMs: 60_000,
+    },
+    keyVar: "LOCAL_AI_URL",
+  },
 ];
 
 const PROVIDERS: Record<string, FabricatorProvider> = {
   google: googleProvider,
   anthropic: anthropicProvider,
+  ollama: ollamaProvider,
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -351,8 +365,8 @@ function recording(inner: FabricatorProvider): {
   return {
     provider: {
       id: inner.id,
-      async compileSpec(input, model, apiKey, signal) {
-        const result = await inner.compileSpec(input, model, apiKey, signal);
+      async compileSpec(input, config, apiKey, signal) {
+        const result = await inner.compileSpec(input, config, apiKey, signal);
         last = { raw: result.raw, usage: result.usage };
         return result;
       },
@@ -378,9 +392,13 @@ async function main() {
   let anyFailures = 0;
 
   for (const { config, keyVar, probe } of CONFIGS) {
-    const apiKey = process.env[keyVar];
+    // For ollama the gate (server URL) and the credential differ; for cloud
+    // providers they are the same env var.
+    const gate = process.env[keyVar];
+    const apiKey =
+      config.provider === "ollama" ? process.env.LOCAL_AI_TOKEN ?? "" : gate;
     const label = `${config.provider}/${config.model}`;
-    if (live && !apiKey) {
+    if (live && !gate) {
       console.log(`\n─── ${label}: SKIPPED (no ${keyVar}) ───`);
       continue;
     }

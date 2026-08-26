@@ -10,7 +10,7 @@ import type { FabricatorProvider, ProviderResult } from "../provider";
 export const anthropicProvider: FabricatorProvider = {
   id: "anthropic",
 
-  async compileSpec(input, model, apiKey, signal): Promise<ProviderResult> {
+  async compileSpec(input, config, apiKey, signal): Promise<ProviderResult> {
     const content: Record<string, unknown>[] = [];
     if (input.imageBase64) {
       content.push({
@@ -31,7 +31,7 @@ export const anthropicProvider: FabricatorProvider = {
         "anthropic-dangerous-direct-browser-access": "true",
       },
       body: JSON.stringify({
-        model,
+        model: config.model,
         max_tokens: 8000,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content }],

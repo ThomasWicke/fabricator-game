@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "name": "Dune Buggy Mk II",
+    "intent": "The same buggy, just faster.",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:02:58.302Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Dune Buggy Mk II",
+    "size": {
+      "w": 80,
+      "h": 45
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 280,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 1,
+        "swamp": 0.1,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Kicks up more sand and still does not apologise."
+  },
+  "usage": {
+    "inputTokens": 1488,
+    "outputTokens": 132
+  }
+}

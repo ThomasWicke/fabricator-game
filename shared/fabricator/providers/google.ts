@@ -29,7 +29,7 @@ function toGeminiSchema(node: Record<string, unknown>): Record<string, unknown> 
 export const googleProvider: FabricatorProvider = {
   id: "google",
 
-  async compileSpec(input, model, apiKey, signal): Promise<ProviderResult> {
+  async compileSpec(input, config, apiKey, signal): Promise<ProviderResult> {
     const parts: Record<string, unknown>[] = [];
     if (input.imageBase64) {
       parts.push({ inlineData: { mimeType: "image/png", data: input.imageBase64 } });
@@ -37,7 +37,7 @@ export const googleProvider: FabricatorProvider = {
     parts.push({ text: buildUserText(input) });
 
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent`,
       {
         method: "POST",
         signal,

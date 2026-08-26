@@ -10,3 +10,4 @@ dist/
 # curated style refs are embedded in shared/fabricator/style-refs.ts; the
 # compiler fixtures ARE committed — they are the free regression suite.
 fixtures/art/
+fixtures/art-local/

@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Stone Hut",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:00:20.556Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Stone Hut",
+    "size": {
+      "w": 100,
+      "h": 60
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 0.9,
+        "swamp": 0.7,
+        "rock": 0.9,
+        "snow": 0.7,
+        "water": 0
+      }
+    },
+    "seats": 0,
+    "flavor": "Saw a 'Stone Hut' in the blueprints. Figured you wanted something to hunker down in after the last rockslide. Made it with your usual 'improvised' style — the mortar's just melted slag, and the roof's a couple of salvaged hull plates."
+  },
+  "usage": {
+    "inputTokens": 1331,
+    "outputTokens": 175
+  }
+}

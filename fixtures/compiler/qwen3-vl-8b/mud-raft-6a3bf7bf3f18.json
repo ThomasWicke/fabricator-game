@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Mud Raft",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:03:57.801Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Mud Raft",
+    "size": {
+      "w": 100,
+      "h": 60
+    },
+    "locomotion": {
+      "type": "float",
+      "speed": 100,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.9,
+        "swamp": 0.95,
+        "rock": 0.3,
+        "snow": 0.7,
+        "water": 0.85
+      }
+    },
+    "seats": 1,
+    "flavor": "You've made a raft from mud and reeds, but it's a bit wobbly."
+  },
+  "usage": {
+    "inputTokens": 1333,
+    "outputTokens": 144
+  }
+}

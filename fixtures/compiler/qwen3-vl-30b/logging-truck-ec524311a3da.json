@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "name": "Logging Truck",
+    "intent": "Drives around cutting down trees.",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:01:13.181Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Logging Truck",
+    "size": {
+      "w": 120,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 240,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.9,
+        "swamp": 0.05,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 1.8,
+      "materials": [
+        "wood"
+      ]
+    },
+    "storage": {
+      "capacity": 36
+    },
+    "seats": 2,
+    "flavor": "You've got an unassuming truck, but it's the only thing that can carry logs while you chop 'em down."
+  },
+  "usage": {
+    "inputTokens": 1343,
+    "outputTokens": 157
+  }
+}

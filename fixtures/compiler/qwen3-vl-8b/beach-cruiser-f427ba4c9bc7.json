@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Beach Cruiser",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:04:19.527Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Beach Cruiser",
+    "size": {
+      "w": 70,
+      "h": 40
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 300,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 1,
+        "swamp": 0.15,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 2,
+    "flavor": "It's got those big, fat wheels you see on beach buggies — perfect for rolling over the soft sand without sinking. But it's not built for anything else; it's just a beach cruiser. No off-road capability, no hauling, no speed on anything but sand."
+  },
+  "usage": {
+    "inputTokens": 1332,
+    "outputTokens": 175
+  }
+}

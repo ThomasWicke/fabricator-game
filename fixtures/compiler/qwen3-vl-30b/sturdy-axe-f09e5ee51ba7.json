@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Sturdy Axe",
+    "intent": "For chopping trees.",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:01:02.899Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Sturdy Axe",
+    "size": {
+      "w": 36,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 1,
+        "rock": 1,
+        "snow": 1,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 2,
+      "materials": [
+        "wood"
+      ]
+    },
+    "seats": 0,
+    "flavor": "Axe - because it's an axe."
+  },
+  "usage": {
+    "inputTokens": 1341,
+    "outputTokens": 176
+  }
+}

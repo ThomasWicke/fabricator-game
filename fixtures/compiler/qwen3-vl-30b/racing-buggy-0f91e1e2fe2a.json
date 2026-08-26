@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "name": "Racing Buggy",
+    "intent": "As fast as possible on firm ground.",
+    "hasSketch": false,
+    "model": "qwen3-vl:30b",
+    "recordedAt": "2026-08-25T20:00:25.850Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Racing Buggy",
+    "size": {
+      "w": 70,
+      "h": 40
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 360,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 0.85,
+        "swamp": 0.05,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "A stripped-down, single-seat speed demon built for pure, unadulterated track time. No frills, just the bare minimum to keep the wheels turning."
+  },
+  "usage": {
+    "inputTokens": 1346,
+    "outputTokens": 154
+  }
+}

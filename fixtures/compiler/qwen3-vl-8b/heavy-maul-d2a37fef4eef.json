@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "name": "Heavy Maul",
+    "intent": "A huge two-handed hammer. Slow, and it hits like a falling tree.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:05:24.651Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Heavy Maul",
+    "size": {
+      "w": 72,
+      "h": 56
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.9,
+        "swamp": 0.9,
+        "rock": 0.9,
+        "snow": 0.9,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 0.2,
+      "materials": [
+        "wood"
+      ]
+    },
+    "weapon": {
+      "damage": 40,
+      "reach": 40,
+      "cooldown": 2
+    },
+    "seats": 0,
+    "flavor": "This brute smashes trees but can't move a rock. Your hands will ache after a few swings."
+  },
+  "usage": {
+    "inputTokens": 1352,
+    "outputTokens": 161
+  }
+}

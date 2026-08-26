@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Mining Pick",
+    "intent": "For breaking ore out of stone.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:06:15.197Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Mining Pick",
+    "size": {
+      "w": 36,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.75,
+        "sand": 0.75,
+        "swamp": 0.15,
+        "rock": 0.95,
+        "snow": 0.3,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 1.2,
+      "materials": [
+        "stone"
+      ]
+    },
+    "seats": 0,
+    "flavor": "A trusty stone hammer with a handle, designed to crack rock and extract raw stone ore. The sharp edge is for breaking up the stone. It's not for mining the deep ore veins yet, but it's a start."
+  },
+  "usage": {
+    "inputTokens": 1343,
+    "outputTokens": 179
+  }
+}

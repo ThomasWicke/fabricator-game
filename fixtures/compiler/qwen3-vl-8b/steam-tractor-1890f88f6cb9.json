@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "name": "Steam Tractor",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:05:10.115Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Steam Tractor",
+    "size": {
+      "w": 104,
+      "h": 72
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 180,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 0.9,
+        "swamp": 0.5,
+        "rock": 0.6,
+        "snow": 0.5,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 0.8,
+      "materials": [
+        "stone"
+      ]
+    },
+    "emission": {
+      "kind": "steam",
+      "intensity": 0.8
+    },
+    "seats": 2,
+    "flavor": "A lumbering machine with a hissing steam boiler and tracks that chew through mud and snow."
+  },
+  "usage": {
+    "inputTokens": 1332,
+    "outputTokens": 158
+  }
+}

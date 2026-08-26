@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Rover",
+    "hasSketch": true,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:06:42.389Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Rover",
+    "size": {
+      "w": 100,
+      "h": 60
+    },
+    "locomotion": {
+      "type": "legs",
+      "speed": 120,
+      "terrainModifiers": {
+        "grass": 0.8,
+        "sand": 0.7,
+        "swamp": 0.6,
+        "rock": 0.65,
+        "snow": 0.5,
+        "water": 0
+      }
+    },
+    "seats": 2,
+    "flavor": "A sturdy, four-legged rover for traversing rough terrain without bogging down. The legs grip rock and swamp better than wheels, but it's slow on sand."
+  },
+  "usage": {
+    "inputTokens": 2361,
+    "outputTokens": 152
+  }
+}

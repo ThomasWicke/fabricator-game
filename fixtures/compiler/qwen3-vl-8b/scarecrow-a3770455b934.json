@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "Scarecrow",
+    "intent": "Keeps the creatures off the crops.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-25T20:05:52.788Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Scarecrow",
+    "size": {
+      "w": 70,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.95,
+        "sand": 0.85,
+        "swamp": 0.7,
+        "rock": 0.6,
+        "snow": 0.5,
+        "water": 0
+      }
+    },
+    "ward": {
+      "radius": 150
+    },
+    "seats": 0,
+    "flavor": "A tall, straw-filled figure with a crooked hat, waving arms to ward off the shadows."
+  },
+  "usage": {
+    "inputTokens": 1345,
+    "outputTokens": 142
+  }
+}
