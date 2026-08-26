@@ -511,8 +511,17 @@ export function startScreen(code: string) {
           <button class="touch-fab hidden" id="touch-fab">✎ FABRICATOR</button>
           <div class="cheat hidden" id="cheat">
             <pre class="cheat-out" id="cheat-out"></pre>
+            <div class="cheat-shots" id="cheat-shots"></div>
             <input id="cheat-in" type="text" spellcheck="false" autocomplete="off"
               placeholder="/help — Enter runs · Esc closes" />
+          </div>
+          <div class="gallery hidden" id="gallery">
+            <div class="gallery-head" id="gallery-head"></div>
+            <div class="gallery-stages" id="gallery-stages"></div>
+            <pre class="gallery-prompt" id="gallery-prompt"></pre>
+            <div class="gallery-foot">
+              <span>← → design</span><span>Home / End jump</span><span>click an image to open it full size</span><span>Esc closes</span>
+            </div>
           </div>
           <button class="touch-fab touch-swap hidden" id="touch-swap">⇄ TOOL</button>
 
@@ -825,6 +834,145 @@ export function startScreen(code: string) {
     const cheatEl = document.getElementById("cheat")!;
     const cheatIn = document.getElementById("cheat-in") as HTMLInputElement;
     const cheatOut = document.getElementById("cheat-out")!;
+    const cheatShots = document.getElementById("cheat-shots")!;
+    const gallery = document.getElementById("gallery")!;
+    const galleryHead = document.getElementById("gallery-head")!;
+    const galleryStages = document.getElementById("gallery-stages")!;
+    const galleryPrompt = document.getElementById("gallery-prompt") as HTMLPreElement;
+
+    /**
+     * The image pipeline, in the order it runs. The server parks every one of
+     * these in R2 under the design's id (party/server.ts, storeArtTrace), so
+     * the harness is just five URLs — no extra traffic until someone looks,
+     * and designs from previous sessions are as inspectable as this one's.
+     *
+     * Some stages are legitimately absent: `sketch`/`input` when the player
+     * drew nothing, `raw` on the Gemini path, which removes no background and
+     * so has no frame before removal. A missing image is drawn greyed rather
+     * than skipped — "this stage did not happen" is itself a finding.
+     */
+    const ART_STAGES: { key: string; ext: string; label: string; note: string }[] = [
+      { key: "sketch", ext: "png", label: "1 · scribble", note: "what you drew" },
+      { key: "input", ext: "png", label: "2 · model input", note: "what the model was handed" },
+      { key: "raw", ext: "png", label: "3 · generated", note: "before background removal" },
+      { key: "returned", ext: "png", label: "4 · returned", note: "after removal, on magenta" },
+      { key: "body", ext: "png", label: "5 · keyed", note: "after the browser keyer" },
+    ];
+    const stageUrl = (stage: { key: string; ext: string }, id: string) =>
+      `/sprites/${stage.key}/${id}.${stage.ext}`;
+
+    /** Open a stage image on its own, so it can be zoomed or saved. */
+    const openShot = (url: string) => window.open(url, "_blank", "noopener");
+
+    /** Build the stage strip for one design into `into`. `note` adds the
+     *  per-stage explanation, which there is only room for in the gallery. */
+    const renderShots = (into: Element, design: Design, notes: boolean) => {
+      into.replaceChildren();
+      for (const stage of ART_STAGES) {
+        const url = stageUrl(stage, design.id);
+        const fig = document.createElement("figure");
+        const img = document.createElement("img");
+        img.className = "shot";
+        img.src = url;
+        img.alt = `${design.spec.displayName} — ${stage.label}`;
+        img.loading = "lazy";
+        // A 404 is the normal answer for a stage that did not run, so it is
+        // styled rather than logged: an empty slot in the strip is the signal.
+        img.addEventListener("error", () => {
+          img.classList.add("missing");
+          img.removeAttribute("src");
+        });
+        img.addEventListener("click", () => {
+          if (!img.classList.contains("missing")) openShot(url);
+        });
+        const cap = document.createElement("figcaption");
+        cap.textContent = stage.label;
+        if (notes) {
+          const note = document.createElement("span");
+          note.textContent = stage.note;
+          cap.appendChild(note);
+        }
+        fig.append(img, cap);
+        into.appendChild(fig);
+      }
+    };
+
+    // ── /show-images ────────────────────────────────────────────
+    let galleryAt = 0;
+    let galleryList: Design[] = [];
+
+    const showGalleryEntry = () => {
+      const d = galleryList[galleryAt];
+      if (!d) return;
+      galleryHead.replaceChildren();
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = d.spec.displayName;
+      const meta = document.createElement("span");
+      meta.className = "meta";
+      meta.textContent =
+        `${galleryAt + 1}/${galleryList.length} · ` +
+        `${new Date(d.createdAt).toLocaleString()} · ${d.spec.category} · ${d.id.slice(0, 8)}`;
+      galleryHead.append(name, meta);
+      renderShots(galleryStages, d, true);
+
+      // The prompt is a text file next to the images; fetched per entry
+      // rather than held, since only the visible one is ever read.
+      galleryPrompt.textContent = "loading prompt…";
+      fetch(`/sprites/prompt/${d.id}.txt`).then(
+        async (res) => {
+          galleryPrompt.textContent = res.ok
+            ? await res.text()
+            : "no prompt stored for this design (it predates the trace, or art generation failed)";
+        },
+        () => {
+          galleryPrompt.textContent = "prompt could not be loaded";
+        },
+      );
+    };
+
+    const openGallery = () => {
+      // Newest first: the thing you just made is the thing you want to see.
+      galleryList = [...designs.values()].sort((a, b) => b.createdAt - a.createdAt);
+      galleryAt = 0;
+      if (!galleryList.length) {
+        galleryHead.replaceChildren();
+        galleryStages.replaceChildren();
+        const empty = document.createElement("div");
+        empty.className = "gallery-empty";
+        empty.textContent = "nothing fabricated yet — make something and it will appear here";
+        galleryHead.appendChild(empty);
+        galleryPrompt.textContent = "";
+      } else {
+        showGalleryEntry();
+      }
+      gallery.classList.remove("hidden");
+    };
+    const closeGallery = () => gallery.classList.add("hidden");
+    const galleryOpen = () => !gallery.classList.contains("hidden");
+
+    // Captured on the window so the gallery answers keys while the game has
+    // focus; it swallows what it handles so nothing reaches the world.
+    window.addEventListener(
+      "keydown",
+      (e) => {
+        if (!galleryOpen()) return;
+        const move = (to: number) => {
+          galleryAt = Math.min(Math.max(to, 0), galleryList.length - 1);
+          showGalleryEntry();
+        };
+        if (e.key === "Escape") closeGallery();
+        else if (e.key === "ArrowRight") move(galleryAt + 1);
+        else if (e.key === "ArrowLeft") move(galleryAt - 1);
+        else if (e.key === "Home") move(0);
+        else if (e.key === "End") move(galleryList.length - 1);
+        else return;
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      true,
+    );
+
     const openCheat = () => {
       cheatEl.classList.remove("hidden");
       worldScene.setUiOpen(true); // the keyboard belongs to the input now
@@ -864,9 +1012,26 @@ export function startScreen(code: string) {
         cheatOut.textContent = trace.length
           ? trace.slice(-14).join("\n")
           : "nothing fabricated yet this session";
+        // Plus the last fabrication's pipeline, because a trace line saying
+        // "chroma keyed" and an image that still has magenta in it are two
+        // different claims, and only one of them is checkable.
+        const newest = [...designs.values()].sort((a, b) => b.createdAt - a.createdAt)[0];
+        if (newest) {
+          renderShots(cheatShots, newest, false);
+          cheatOut.textContent += `\n\nstages for "${newest.spec.displayName}" — click to open · /show-images for the rest`;
+        } else {
+          cheatShots.replaceChildren();
+        }
         cheatIn.value = "";
         return;
       }
+      if (cmd === "show-images" || cmd === "images" || cmd === "gallery") {
+        openGallery();
+        cheatOut.textContent = "gallery open — ← → to move through fabrications, Esc to close";
+        cheatIn.value = "";
+        return;
+      }
+      cheatShots.replaceChildren();
       cheatOut.textContent = `> ${line}\n${scene?.cheat(line) ?? "world not ready"}`;
       cheatIn.value = "";
     });
@@ -1430,9 +1595,18 @@ export function startScreen(code: string) {
           for (const d of (msg as unknown as DesignCatalogMsg).designs as Design[]) {
             designs.set(d.id, d);
           }
+          // The list and its DESIGNS count are DERIVED from `designs`, so
+          // every mutation has to re-derive them. Three of the four handlers
+          // that touch the map did not, and the count therefore only caught
+          // up the next time something else happened to redraw — opening the
+          // tab, repairing a tier, closing the endscreen. Rendering on the
+          // catalog matters as much as on an add: a rejoin restores a full
+          // library behind a badge still reading 0.
+          renderFabListRef();
         } else if (msg.type === "design-added") {
           const m = msg as unknown as DesignAddedMsg;
           designs.set(m.design.id, m.design);
+          renderFabListRef();
           const sp = m.design.spec;
           const artBy = (m as unknown as { artModel?: string }).artModel;
           if (artBy) lastArtModel = artBy;
@@ -1474,6 +1648,9 @@ export function startScreen(code: string) {
           // The sprite is now in R2; the design just gains a URL.
           const d = designs.get((msg as unknown as DesignBodyMsg).designId);
           if (d) d.hasBody = true;
+          // Re-render for the THUMBNAIL, not the count: the row was drawn
+          // against the sketch fallback and only now has real art to show.
+          if (d) renderFabListRef();
         } else if (msg.type === "world-state") {
           const saved = (msg as unknown as WorldStateMsg).snapshot;
           // v1 saves describe the old bounded island: their hex addresses and

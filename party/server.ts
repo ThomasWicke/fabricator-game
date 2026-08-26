@@ -10,6 +10,7 @@
 import { Server, type Connection, type WSMessage } from "partyserver";
 import { FabricatorEndpoint } from "./fabricator";
 import { DesignStore, summarize, type Design } from "./designs";
+import type { ArtTrace } from "../shared/fabricator/image";
 import type {
   BlueprintMsg,
   ClientToServer,
@@ -258,6 +259,12 @@ export class FabricatorServer extends Server<Env> {
           httpMetadata: { contentType: sketch.mimeType },
         });
       }
+      // Every stage of the image pipeline, parked next to the sprite under
+      // the same id. They cost nothing to keep and answer the question the
+      // finished sprite cannot: at WHICH step did this go wrong — what the
+      // model was handed, what it drew, what the matte left. /show-images
+      // reads them straight off these URLs.
+      if (body?.trace) await this.storeArtTrace(id, body.trace, body.dataUrl);
       const design: Design = {
         id,
         spec,
@@ -511,6 +518,41 @@ export class FabricatorServer extends Server<Env> {
     this.broadcast(JSON.stringify(msg));
   }
 
+  /**
+   * Park the image pipeline's intermediate frames beside the finished
+   * sprite. Best-effort throughout: a fabrication that produced a usable
+   * body must not fail because its evidence could not be filed.
+   */
+  private async storeArtTrace(id: string, trace: ArtTrace, dataUrl: string) {
+    const png = (base64: string) => {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes;
+    };
+    const returned = decodeDataUrl(dataUrl, MAX_BODY_BYTES);
+    const files: [string, Uint8Array, string][] = [];
+    if (trace.input) files.push([`input/${id}.png`, png(trace.input), "image/png"]);
+    if (trace.preKey) files.push([`raw/${id}.png`, png(trace.preKey), "image/png"]);
+    if (returned) files.push([`returned/${id}.png`, returned.bytes, returned.mimeType]);
+    if (trace.prompt) {
+      files.push([`prompt/${id}.txt`, new TextEncoder().encode(trace.prompt), "text/plain"]);
+    }
+    await Promise.all(
+      files.map(([key, bytes, contentType]) =>
+        this.env.SPRITES.put(key, bytes, { httpMetadata: { contentType } }).catch((err) =>
+          console.error(`art trace ${key} not stored:`, err),
+        ),
+      ),
+    );
+    // Bytes below 1KB: the filled silhouette is a few hundred bytes of flat
+    // colour, and rounding it to "0KB" reads as "nothing was stored".
+    const size = (n: number) => (n < 1024 ? `${n}B` : `${Math.round(n / 1024)}KB`);
+    console.log(
+      `art trace ${id}: ${files.map((f) => `${f[0].split("/")[0]}=${size(f[1].length)}`).join(" ")}`,
+    );
+  }
+
   // ── send helpers ─────────────────────────────────────────────
 
   private sendToScreens(payload: string) {
@@ -558,6 +600,10 @@ function decodeDataUrl(
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return { mimeType: m[1], base64: m[2], bytes };
 }
+
+/** Stage names as they appear in R2 and in the console. Ordered as the
+ *  pipeline runs, which is the order the gallery shows them in. */
+export const ART_STAGES = ["sketch", "input", "raw", "returned", "body"] as const;
 
 function designSummaryMsg(d: Design): string {
   const msg: DesignAddedSummaryMsg = {

@@ -18,6 +18,7 @@ import {
   type FabricatedSpec,
 } from "../shared/fabricator";
 import { generateBodySprite } from "../shared/fabricator/image";
+import type { ArtTrace } from "../shared/fabricator/image";
 import { generateBodySpriteLocal } from "../shared/fabricator/image-local";
 
 /** Per-room fabrication cap so a deployed demo key can't be farmed. */
@@ -106,7 +107,7 @@ export class FabricatorEndpoint {
   async bodySprite(
     spec: FabricatedSpec,
     refs: { sketch?: string; parent?: string },
-  ): Promise<{ dataUrl: string; model: string } | null> {
+  ): Promise<{ dataUrl: string; model: string; trace: ArtTrace } | null> {
     const localUrl = this.env.LOCAL_IMAGE_URL as string | undefined;
     if (localUrl) {
       try {
@@ -118,9 +119,17 @@ export class FabricatorEndpoint {
         console.log(
           `body sprite for "${spec.displayName}" in ${Date.now() - t0}ms via ` +
             `${sprite.usage.model} (local, unity=${sprite.usage.unity?.toFixed(2)}, ` +
+            // solidity is the re-roll trigger that catches a body drawn as an
+            // outline; sketchSolidity says how much shape the player gave us
+            // to work from. Both belong in the trace — between them they
+            // explain a body that came out unlike the drawing.
+            `solidity=${sprite.usage.solidity?.toFixed(2)}, ` +
+            (Number.isFinite(sprite.usage.sketchSolidity)
+              ? `sketch=${sprite.usage.sketchSolidity!.toFixed(2)}, `
+              : "") +
             `~${Math.round(sprite.dataUrl.length / 1024)}KB wire)`,
         );
-        return { dataUrl: sprite.dataUrl, model: `${sprite.usage.model} (local)` };
+        return { dataUrl: sprite.dataUrl, model: `${sprite.usage.model} (local)`, trace: sprite.trace };
       } catch (err) {
         console.error("local body sprite failed, trying cloud:", err);
       }
@@ -137,7 +146,7 @@ export class FabricatorEndpoint {
           `${sprite.usage.model} (${sprite.usage.imageTokens} image tokens, ` +
           `${sprite.usage.totalTokens} total, ~${Math.round(sprite.dataUrl.length / 1024)}KB wire)`,
       );
-      return { dataUrl: sprite.dataUrl, model: sprite.usage.model };
+      return { dataUrl: sprite.dataUrl, model: sprite.usage.model, trace: sprite.trace };
     } catch (err) {
       console.error("body sprite failed, falling back to sketch:", err);
       return null;

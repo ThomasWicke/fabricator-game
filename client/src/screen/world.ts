@@ -1358,6 +1358,7 @@ export class WorldScene extends Phaser.Scene {
           "/grid — toggle the debug grid",
           "/where [slot] — print the player's address",
           "/log — the last of what the Fabricator did, stage by stage",
+          "/show-images — gallery of every fabrication's pipeline, oldest to newest",
           "/models — which compiler and image model actually answered",
         ].join("\n");
       case "bank-add": {

@@ -2258,6 +2258,150 @@
       .cheat-out:empty {
         display: none;
       }
+      /* The last fabrication's pipeline stages, under /log. Thumbnails on a
+         chequerboard: transparency is the thing being judged here, so a flat
+         backdrop would hide exactly the failure we are looking for. */
+      .cheat-shots {
+        display: flex;
+        gap: 0.35em;
+        pointer-events: auto;
+      }
+      .cheat-shots:empty {
+        display: none;
+      }
+      .cheat-shots figure {
+        margin: 0;
+        flex: 1 1 0;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.2em;
+      }
+      .cheat-shots figcaption {
+        font-family: var(--mono);
+        font-size: 0.5em;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #8affde;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .shot {
+        display: block;
+        width: 100%;
+        aspect-ratio: 1;
+        object-fit: contain;
+        border: 1px solid rgba(42, 255, 200, 0.25);
+        border-radius: 6px;
+        /* A MID-TONE checker, not a dark one. The first stage is the
+           player's scribble — near-black strokes on transparency — and on
+           the console's own dark ground it renders as an empty box, which
+           reads as "no sketch" when the truth is "sketch present, invisible".
+           Mid grey shows dark ink and pale sprites at once. */
+        background-color: #8c93a1;
+        background-image:
+          linear-gradient(45deg, rgba(255, 255, 255, 0.32) 25%, transparent 25%),
+          linear-gradient(-45deg, rgba(255, 255, 255, 0.32) 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.32) 75%),
+          linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.32) 75%);
+        background-size: 10px 10px;
+        background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+        cursor: zoom-in;
+      }
+      .shot.missing {
+        cursor: default;
+        opacity: 0.25;
+      }
+
+      /* ── /show-images ─────────────────────────────────────────── */
+      .gallery {
+        position: absolute;
+        inset: 0;
+        z-index: 60;
+        display: flex;
+        flex-direction: column;
+        gap: 0.8em;
+        padding: 1.4em 1.6em;
+        background: rgba(6, 10, 18, 0.96);
+        color: #dfe8f4;
+        pointer-events: auto;
+        overflow-y: auto;
+      }
+      .gallery.hidden {
+        display: none;
+      }
+      .gallery-head {
+        display: flex;
+        align-items: baseline;
+        gap: 0.8em;
+        flex-wrap: wrap;
+        font-family: var(--mono);
+        font-size: 0.7em;
+      }
+      .gallery-head .name {
+        font-size: 1.5em;
+        color: #8affde;
+        letter-spacing: 0.02em;
+      }
+      .gallery-head .meta {
+        color: #7f8ea3;
+      }
+      .gallery-stages {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(11em, 1fr));
+        gap: 0.7em;
+      }
+      .gallery-stages figure {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.3em;
+      }
+      .gallery-stages figcaption {
+        font-family: var(--mono);
+        font-size: 0.62em;
+        color: #8affde;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      .gallery-stages figcaption span {
+        display: block;
+        text-transform: none;
+        letter-spacing: 0;
+        color: #7f8ea3;
+      }
+      .gallery-stages .shot {
+        aspect-ratio: 4 / 3;
+      }
+      .gallery-prompt {
+        font-family: var(--mono);
+        font-size: 0.62em;
+        line-height: 1.6;
+        color: #b9c6d6;
+        background: rgba(8, 14, 26, 0.9);
+        border: 1px solid rgba(42, 255, 200, 0.2);
+        border-radius: 8px;
+        padding: 0.7em 0.9em;
+        margin: 0;
+        white-space: pre-wrap;
+        max-height: 9em;
+        overflow-y: auto;
+      }
+      .gallery-foot {
+        margin-top: auto;
+        font-family: var(--mono);
+        font-size: 0.62em;
+        color: #7f8ea3;
+        display: flex;
+        gap: 1.2em;
+        flex-wrap: wrap;
+      }
+      .gallery-empty {
+        font-family: var(--mono);
+        font-size: 0.8em;
+        color: #7f8ea3;
+      }
       .cheat input {
         font-family: var(--mono);
         font-size: 0.7em;
