@@ -26,6 +26,12 @@ export type UnityResult = {
    *  edges in both directions is a backdrop. */
   spanX: number;
   spanY: number;
+  /** Main blob's pixels over its own bounding-box area, 0..1. Volume, in one
+   *  number: a solid machine packs its box, an outline drawing rattles around
+   *  inside one. This is the check that separates a body from a wireframe
+   *  when every other number is happy — unity cannot, because an outline is
+   *  perfectly connected and scores ~1. */
+  solidity: number;
 };
 
 /**
@@ -57,7 +63,7 @@ export function measureUnity(mask: Uint8Array, w: number, h: number): UnityResul
   const sizes: number[] = [];
   let total = 0;
   for (let i = 0; i < w * h; i++) if (mask[i]) total++;
-  if (total === 0) return { unity: 0, blobs: 0, coverage: 0, spanX: 0, spanY: 0 };
+  if (total === 0) return { unity: 0, blobs: 0, coverage: 0, spanX: 0, spanY: 0, solidity: 0 };
 
   const stack: number[] = [];
   const push = (n: number) => {
@@ -66,7 +72,7 @@ export function measureUnity(mask: Uint8Array, w: number, h: number): UnityResul
       stack.push(n);
     }
   };
-  let largest = { size: 0, spanX: 0, spanY: 0 };
+  let largest = { size: 0, spanX: 0, spanY: 0, solidity: 0 };
   for (let start = 0; start < w * h; start++) {
     if (seen[start] || !mask[start]) continue;
     let size = 0;
@@ -91,7 +97,9 @@ export function measureUnity(mask: Uint8Array, w: number, h: number): UnityResul
     }
     sizes.push(size);
     if (size > largest.size) {
-      largest = { size, spanX: (maxX - minX + 1) / w, spanY: (maxY - minY + 1) / h };
+      const bw = maxX - minX + 1;
+      const bh = maxY - minY + 1;
+      largest = { size, spanX: bw / w, spanY: bh / h, solidity: size / (bw * bh) };
     }
   }
   sizes.sort((a, b) => b - a);
@@ -101,6 +109,7 @@ export function measureUnity(mask: Uint8Array, w: number, h: number): UnityResul
     coverage: total / (w * h),
     spanX: largest.spanX,
     spanY: largest.spanY,
+    solidity: largest.solidity,
   };
 }
 

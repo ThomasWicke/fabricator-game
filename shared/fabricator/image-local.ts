@@ -15,10 +15,11 @@
 
 import { localAuthHeaders } from "./local-auth";
 import { decodePngRgba } from "./png-decode";
+import { silhouetteFromPngBase64 } from "./silhouette";
 import { isFramedScene, magentaMask, measureUnity } from "./sprite-check";
 import { STYLE_PALETTE } from "./style-refs";
 import type { FabricatedSpec } from "./schema";
-import type { ArtReferences, BodySprite, ImageUsage } from "./image";
+import type { ArtReferences, ArtTrace, BodySprite, ImageUsage } from "./image";
 
 export type LocalImageEndpoint = { baseUrl: string; token: string };
 
@@ -40,6 +41,19 @@ export type LocalImageOptions = {
   prompt?: string;
   /** Replace the negative prompt. Note it only bites above cfg 1.0. */
   negativePrompt?: string;
+  /** Override the img2img denoise. Production derives it from which
+   *  reference it got (SKETCH_DENOISE, or 0.45 for a parent); an eval sets
+   *  it to make denoise the variable under test. */
+  denoise?: number;
+  /** Fill the sketch into a silhouette before using it as the init image.
+   *  Production always does; an eval turns it off to reproduce the hollow
+   *  bodies it was introduced to fix. */
+  fillSketch?: boolean;
+  /** Also save the frame BEFORE background removal, so the T console can
+   *  show what the model drew rather than only what survived rembg. One
+   *  extra local fetch per attempt; off for evals that only score the
+   *  finished sprite. */
+  traceFrames?: boolean;
   /** Empty-latent flavour. FLUX needs the 16-channel SD3 latent; feeding it
    *  a 4-channel one yields noise, not an error. */
   latentType?: "sd" | "sd3";
@@ -54,16 +68,43 @@ export type LocalImageOptions = {
   /** Largest-blob share that counts as a single object. 0.85 keeps a boat
    *  whose mast is a separate blob and rejects a 2x2 grid. */
   minUnity?: number;
+  /** Main blob's share of its own bounding box that counts as a solid
+   *  object rather than an outline of one. See MIN_SOLIDITY. */
+  minSolidity?: number;
 };
+
+/**
+ * Below this, the frame holds a drawing of an object instead of an object.
+ *
+ * Measured 2026-08-26 over the two hollow bodies Thomas reported and every
+ * local sprite we have accepted: the wireframes scored 0.096 and 0.128, the
+ * accepted sprites 0.455 to 0.882, and the airiest real subject — an
+ * all-terrain bike, mostly spokes and open frame — 0.334. 0.25 sits in the
+ * gap with room on both sides. Unity cannot see this at all: both wireframes
+ * scored 0.94 and 0.98 there, because an outline is perfectly connected.
+ */
+export const MIN_SOLIDITY = 0.25;
+
+/**
+ * Denoise for the sketch init. Structure is decided at HIGH sigma, and
+ * denoise starts the schedule below its own value — so the old 0.7 handed
+ * the sampler a composition it could refine but never reconsider, and it
+ * refined the player's strokes into rendered strokes. 0.85 re-enters the
+ * range where form is chosen, leaving the sketch as a bias rather than a
+ * tracing guide. Paired with silhouette.ts filling the sketch first: the
+ * shape survives the higher denoise because it arrives as a mass, not as
+ * lines that need preserving.
+ */
+const SKETCH_DENOISE = 0.85;
 
 const DEFAULTS: Omit<
   Required<LocalImageOptions>,
-  "prompt" | "negativePrompt" | "seed"
+  "prompt" | "negativePrompt" | "seed" | "denoise"
 > = {
   checkpoint: "sdxl_lightning_4step.safetensors",
   lora: "pixel-art-xl.safetensors",
   steps: 4,
-  cfg: 1.0,
+  cfg: 1.6,
   rembg: true,
   timeoutMs: 120_000,
   latentType: "sd",
@@ -71,6 +112,9 @@ const DEFAULTS: Omit<
   scheduler: "sgm_uniform",
   attempts: 3,
   minUnity: 0.85,
+  minSolidity: MIN_SOLIDITY,
+  fillSketch: true,
+  traceFrames: true,
 };
 
 /** #FF00FF as the integer ComfyUI's EmptyImage color input takes. */
@@ -114,7 +158,8 @@ export function buildLocalImagePrompt(spec: FabricatedSpec): string {
   return (
     `a single ${spec.displayName}, alone. ${spec.flavor} ${view}. ` +
     "one whole object shown by itself against an empty background, centered, filling the frame. " +
-    "pixel art, flat cel shading, chunky simplified shapes, bold readable outline" +
+    "pixel art, flat cel shading, chunky simplified shapes, solid opaque body "  +
+    "filled with flat colour, thick dark outline around the exterior only" +
     (STYLE_PALETTE.length ? `, palette ${STYLE_PALETTE.join(" ")}` : "")
   );
 }
@@ -125,7 +170,13 @@ const NEGATIVE_PROMPT =
   // The pixel-art LoRA loves emitting a grid of variations when it hears
   // "sprite" — the tools on the first contact sheet came out as 12 tiny
   // drills. Name every collage shape it reaches for.
-  "sprite sheet, grid, collage, multiple views, variations, tileset, icon set";
+  "sprite sheet, grid, collage, multiple views, variations, tileset, icon set, " +
+  // The hollow bodies of 2026-08-26. Worth naming even though the silhouette
+  // fill and the prompt are the load-bearing halves of that fix: this is the
+  // first build where cfg is above 1.0, so it is also the first build where
+  // any of these words do anything at all.
+  "wireframe, line art, outline drawing, blueprint, technical drawing, " +
+  "coloring book, unfilled outline, hollow, empty interior, sketch, doodle";
 
 const b64ToBytes = (b64: string): Uint8Array<ArrayBuffer> => {
   const bin = atob(b64);
@@ -274,6 +325,16 @@ function buildGraph(
       },
     };
     g.save = { class_type: "SaveImage", inputs: { images: ["flat", 0], filename_prefix: "fabricator" } };
+    // The frame as the model drew it, before rembg cut it out and before it
+    // was laid on magenta. Without this the two removals are indistinguishable
+    // from the outside: a hollow body could be the model's doing or the
+    // matte's, and the returned image cannot tell you which.
+    if (opts.traceFrames) {
+      g.saveRaw = {
+        class_type: "SaveImage",
+        inputs: { images: ["decode", 0], filename_prefix: "fabricator-raw" },
+      };
+    }
   } else {
     g.save = { class_type: "SaveImage", inputs: { images: ["decode", 0], filename_prefix: "fabricator" } };
   }
@@ -289,7 +350,7 @@ async function renderOnce(
   denoise: number,
   opts: typeof DEFAULTS & LocalImageOptions,
   endpoint: LocalImageEndpoint,
-): Promise<Uint8Array> {
+): Promise<{ bytes: Uint8Array; preKey?: Uint8Array }> {
   const headers = localAuthHeaders(endpoint.token);
   const t0 = Date.now();
   const graph = buildGraph(spec, initImage, denoise, opts);
@@ -306,6 +367,7 @@ async function renderOnce(
   // Workers free plan's 50-per-request cap.
   await sleep(5000);
   let images: { filename: string; subfolder: string; type: string }[] | undefined;
+  let rawImages: { filename: string; subfolder: string; type: string }[] | undefined;
   while (!images) {
     if (Date.now() - t0 > opts.timeoutMs) {
       throw httpError("ComfyUI job", 504, `no result after ${opts.timeoutMs}ms`);
@@ -324,17 +386,25 @@ async function renderOnce(
       throw new Error("ComfyUI job failed — check the server log for the failing node");
     }
     images = entry?.outputs?.save?.images;
+    rawImages = entry?.outputs?.saveRaw?.images;
     if (!images) await sleep(2500);
   }
 
-  const img = images[0];
-  const view = await fetch(
-    `${endpoint.baseUrl}/view?filename=${encodeURIComponent(img.filename)}` +
-      `&subfolder=${encodeURIComponent(img.subfolder)}&type=${img.type}`,
-    { headers },
-  );
-  if (!view.ok) throw httpError("ComfyUI view", view.status, await view.text());
-  return new Uint8Array(await view.arrayBuffer());
+  const fetchImage = async (img: { filename: string; subfolder: string; type: string }) => {
+    const view = await fetch(
+      `${endpoint.baseUrl}/view?filename=${encodeURIComponent(img.filename)}` +
+        `&subfolder=${encodeURIComponent(img.subfolder)}&type=${img.type}`,
+      { headers },
+    );
+    if (!view.ok) throw httpError("ComfyUI view", view.status, await view.text());
+    return new Uint8Array(await view.arrayBuffer());
+  };
+  const bytes = await fetchImage(images[0]);
+  // A missing trace frame is not a failed fabrication — the sprite is the
+  // product, this is only the evidence.
+  const rawOut = rawImages?.[0];
+  const preKey = rawOut ? await fetchImage(rawOut).catch(() => undefined) : undefined;
+  return { bytes, preKey };
 }
 
 export async function generateBodySpriteLocal(
@@ -342,21 +412,41 @@ export async function generateBodySpriteLocal(
   refs: ArtReferences,
   endpoint: LocalImageEndpoint,
   options: LocalImageOptions = {},
-): Promise<BodySprite & { usage: ImageUsage }> {
+): Promise<BodySprite & { usage: ImageUsage; trace: ArtTrace }> {
   const opts = { ...DEFAULTS, ...options };
 
   // One init image drives the img2img: the parent body when modifying (low
   // denoise — the machine must stay recognisable, mirroring image.ts), else
-  // the player's sketch (high denoise — silhouette in, rendering out).
+  // the player's sketch.
+  //
+  // The sketch is FILLED before it is uploaded. It arrives as strokes on a
+  // transparent field and ComfyUI's LoadImage discards alpha rather than
+  // compositing it, so the raw file reached the sampler as near-black lines
+  // on pure black — and img2img returned exactly that, thin marks on
+  // nothing. silhouette.ts closes the strokes and floods the inside, so what
+  // the sampler is handed is the solid shape the player meant.
   let initImage: string | null = null;
   let denoise = 1.0;
+  let sketchSolidity: number | undefined;
+  let uploadedSketch: string | undefined;
   if (refs.parent) {
     initImage = await upload(endpoint, refs.parent, "fabricator-parent.png");
     denoise = 0.45;
   } else if (refs.sketch) {
-    initImage = await upload(endpoint, refs.sketch, "fabricator-sketch.png");
-    denoise = 0.7;
+    // A drawing we cannot read is not a reason to fail the fabrication —
+    // fall through to a plain text-to-image render, which is what a player
+    // who drew nothing already gets.
+    const filled = opts.fillSketch
+      ? await silhouetteFromPngBase64(refs.sketch).catch(() => null)
+      : { base64: refs.sketch, solidity: NaN, thickened: false };
+    if (filled) {
+      uploadedSketch = filled.base64;
+      initImage = await upload(endpoint, filled.base64, "fabricator-sketch.png");
+      denoise = SKETCH_DENOISE;
+      sketchSolidity = filled.solidity;
+    }
   }
+  if (options.denoise !== undefined && initImage) denoise = options.denoise;
 
   // Re-roll grids. Whether a frame holds one object or twelve is mostly the
   // seed's doing — the same prompt and subject swings between unity 0.2 and
@@ -364,27 +454,49 @@ export async function generateBodySpriteLocal(
   // move is to look at the result and ask again. A pinned seed means an eval
   // wants that exact image, so it gets one attempt.
   const attempts = options.seed !== undefined ? 1 : opts.attempts;
-  let best: { bytes: Uint8Array; unity: number } | null = null;
+  let best:
+    | { bytes: Uint8Array; preKey?: Uint8Array; score: number; unity: number; solidity: number }
+    | null = null;
   for (let i = 0; i < attempts; i++) {
-    const bytes = await renderOnce(spec, initImage, denoise, opts, endpoint);
-    // Score 0 for a scene: it is a worse asset than a grid, since the grid at
-    // least looks wrong immediately, and this ranks it below any real attempt.
+    const { bytes, preKey } = await renderOnce(spec, initImage, denoise, opts, endpoint);
+    // A frame we cannot read is not a frame we can reject; keep it and let
+    // the client keyer have the final say.
     let score = 1;
+    let ok = true;
+    let unity = 1;
+    let solidity = 1;
     try {
       const img = await decodePngRgba(bytes);
       const m = measureUnity(magentaMask(img.rgba, img.width, img.height), img.width, img.height);
-      score = isFramedScene(m) ? 0 : m.unity;
+      unity = m.unity;
+      solidity = m.solidity;
+      const scene = isFramedScene(m);
+      ok = !scene && m.unity >= opts.minUnity && m.solidity >= opts.minSolidity;
+      // Ranked on the WORSE of the two checks, each measured against its own
+      // bar. One number cannot be allowed to carry a frame the other rejects:
+      // a hollow wireframe scores ~0.96 unity precisely because an outline is
+      // perfectly connected, and under a unity-only ranking it would beat
+      // every solid attempt beside it.
+      // Score 0 for a scene: it is a worse asset than a grid, since the grid
+      // at least looks wrong immediately.
+      score = scene ? 0 : Math.min(m.unity / opts.minUnity, m.solidity / opts.minSolidity);
     } catch {
-      // A frame we cannot read is not a frame we can reject; keep it and let
-      // the client keyer have the final say.
+      // keep the defaults above — unreadable means unjudged, not rejected
     }
-    if (!best || score > best.unity) best = { bytes, unity: score };
-    if (score >= opts.minUnity) break;
+    if (!best || score > best.score) best = { bytes, preKey, score, unity, solidity };
+    if (ok) break;
   }
 
+  const trace: ArtTrace = {
+    // What the sampler was handed: the filled silhouette, not the strokes.
+    input: initImage && refs.sketch ? uploadedSketch : undefined,
+    preKey: best!.preKey ? bytesToB64(best!.preKey) : undefined,
+    prompt: opts.prompt ?? buildLocalImagePrompt(spec),
+  };
   return {
     dataUrl: `data:image/png;base64,${bytesToB64(best!.bytes)}`,
     mimeType: "image/png",
+    trace,
     // Free — zero tokens is the honest number; the model field keeps the
     // existing per-fabrication log line meaningful.
     usage: {
@@ -392,6 +504,8 @@ export async function generateBodySpriteLocal(
       imageTokens: 0,
       totalTokens: 0,
       unity: best!.unity,
+      solidity: best!.solidity,
+      sketchSolidity,
     },
   };
 }

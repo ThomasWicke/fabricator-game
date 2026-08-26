@@ -35,7 +35,36 @@ export type BodySprite = {
   mimeType: string;
 };
 
-function buildImagePrompt(spec: FabricatedSpec, _hasSketch: boolean, _hasStyleRef = false): string {
+/**
+ * The stages of image generation only the provider can see, kept so the T
+ * console can show what the model was actually handed and what it actually
+ * gave back.
+ *
+ * The pipeline spans two machines and four transformations, and until now
+ * every one of them was invisible: a body came back wrong and the only
+ * evidence was the final sprite. Diagnosing the hollow wireframes of
+ * 2026-08-26 meant reasoning backwards from one PNG — with these frames it
+ * would have been a glance.
+ *
+ * All base64 PNG, no data: prefix.
+ */
+export type ArtTrace = {
+  /** The image input AS THE MODEL RECEIVED IT: the filled silhouette on the
+   *  local path (silhouette.ts rewrites the player's strokes before they are
+   *  uploaded), the player's raw sketch on Gemini's, absent when they drew
+   *  nothing. */
+  input?: string;
+  /** The model's own frame, before any background removal. Local path only —
+   *  its graph runs rembg and composites onto magenta, so the returned image
+   *  is already two steps downstream of what the model drew. Gemini removes
+   *  nothing, so there its returned image IS this frame. */
+  preKey?: string;
+  /** The positive prompt actually sent, after every per-category and
+   *  per-spec branch has resolved. */
+  prompt?: string;
+};
+
+function buildImagePrompt(spec: FabricatedSpec, hasSketch: boolean, _hasStyleRef = false): string {
   const aspect =
     spec.size.w > spec.size.h * 1.4
       ? "wide, elongated"
@@ -82,7 +111,18 @@ function buildImagePrompt(spec: FabricatedSpec, _hasSketch: boolean, _hasStyleRe
     parts +
     // The attached images carry their own labels; the style tail below only
     // needs to hold when there is no reference at all.
-    " Style: flat cel-shaded colors, chunky simplified toy-like shapes, bold readable silhouette, matching the look of Kenney game assets. " +
+    // The local backend returned two hollow wireframes on 2026-08-26 by
+    // treating a scribble as an exact line map. The cause there was the
+    // img2img init (see silhouette.ts) and not the wording, but a multimodal
+    // model handed a line drawing can make the same reading, and it costs one
+    // sentence to rule out.
+    (hasSketch
+      ? " The sketch is the OUTLINE of a solid object: fill it in as opaque volume. " +
+        "Its lines are the boundary of the shape, not the subject — never render wires, " +
+        "tubes, bare frames or a hollow see-through object. "
+      : "") +
+    " Style: flat cel-shaded colors, chunky simplified toy-like shapes, bold readable silhouette, " +
+    "solid opaque bodies filled with flat color, matching the look of Kenney game assets. " +
     (STYLE_PALETTE.length
       ? `Work from this palette where it fits: ${STYLE_PALETTE.join(", ")}. `
       : "") +
@@ -101,6 +141,14 @@ export type ImageUsage = {
    *  sprite-check.ts). Worth logging — it is the number that decides
    *  whether a frame was re-rolled. */
   unity?: number;
+  /** Local backend only: how much of its own bounding box the subject fills.
+   *  The other re-roll trigger — this is the one that catches a body drawn
+   *  as an outline, which unity scores as a perfect single object. */
+  solidity?: number;
+  /** Local backend only: how solid the player's sketch was after filling.
+   *  Low means they drew open line-work and we thickened it into a mass, so
+   *  a body that came out unlike the drawing has its explanation here. */
+  sketchSolidity?: number;
 };
 
 async function callImageModel(
@@ -160,7 +208,7 @@ export async function generateBodySprite(
   refs: ArtReferences,
   apiKey: string,
   model: string = IMAGE_MODEL,
-): Promise<BodySprite & { usage: ImageUsage }> {
+): Promise<BodySprite & { usage: ImageUsage; trace: ArtTrace }> {
   // Each image is preceded by a text part saying what it IS. Naming them by
   // position ("the first image…") breaks the moment an optional one is
   // absent, and there are three optional images now.
@@ -184,11 +232,19 @@ export async function generateBodySprite(
   }
   if (refs.sketch) {
     attach(
-      "The player's rough shape sketch — follow its silhouette and layout, but render it properly:",
+      "The player's rough shape sketch. Read it as a SILHOUETTE to fill, not as lines to " +
+        "trace: follow its outline and layout, then render the object solid:",
       refs.sketch,
     );
   }
-  parts.push({ text: buildImagePrompt(spec, !!refs.sketch, !!styleRef) });
+  const prompt = buildImagePrompt(spec, !!refs.sketch, !!styleRef);
+  parts.push({ text: prompt });
+  // Gemini is handed the sketch as drawn — it reads a drawing AS a drawing,
+  // so there is nothing to preprocess and `input` is simply what we sent.
+  // Nothing removes its background either, so the frame it returns is both
+  // the returned image and the pre-key one; only `preKey` would be a lie
+  // here, and it stays absent.
+  const trace: ArtTrace = { input: refs.sketch, prompt };
 
   // Lite is the default and occasionally reports "high demand". A failed call
   // isn't billed, so one retry then the heavier model is cheap insurance
@@ -199,7 +255,7 @@ export async function generateBodySprite(
   for (let i = 0; i < attempts.length; i++) {
     try {
       const { sprite, usage } = await callImageModel(attempts[i], parts, apiKey);
-      return { ...sprite, usage };
+      return { ...sprite, usage, trace };
     } catch (err) {
       last = err;
       const status = (err as Error & { status?: number }).status;
