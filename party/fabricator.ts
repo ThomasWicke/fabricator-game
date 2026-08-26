@@ -60,26 +60,31 @@ export class FabricatorEndpoint {
     return chain;
   }
 
-  async compile(input: CompileInput): Promise<FabricatedSpec> {
+  /** The spec, and WHICH link of the chain produced it. The degradation
+   *  chain is invisible from the outside — a fabrication looks identical
+   *  whether the Mac mini answered or Gemini caught the fall — so the model
+   *  travels with the result and ends up in the player's /log. */
+  async compile(input: CompileInput): Promise<{ spec: FabricatedSpec; model: string }> {
     this.checkRateCap();
     const chain = this.resolve();
     if (chain.length === 0) {
       // Keyless dev / test harness: keep the loop playable offline.
-      return mockCompile(input);
+      return { spec: mockCompile(input), model: "offline mock (no key configured)" };
     }
     let lastErr: unknown;
     for (const { config, apiKey } of chain) {
+      const label = `${config.provider}/${config.model}`;
       try {
         const outcome = await compileSpec(input, config, apiKey);
         console.log(
-          `fabricated "${input.name}" via ${config.provider}/${config.model}` +
+          `fabricated "${input.name}" via ${label}` +
             ` in ${outcome.attempts} attempt(s), tokens in=${outcome.usage.inputTokens}` +
             ` out=${outcome.usage.outputTokens}`,
         );
-        return outcome.spec;
+        return { spec: outcome.spec, model: label };
       } catch (err) {
         lastErr = err;
-        console.error(`compile via ${config.provider}/${config.model} failed:`, err);
+        console.error(`compile via ${label} failed:`, err);
       }
     }
     throw lastErr;
@@ -101,7 +106,7 @@ export class FabricatorEndpoint {
   async bodySprite(
     spec: FabricatedSpec,
     refs: { sketch?: string; parent?: string },
-  ): Promise<string | null> {
+  ): Promise<{ dataUrl: string; model: string } | null> {
     const localUrl = this.env.LOCAL_IMAGE_URL as string | undefined;
     if (localUrl) {
       try {
@@ -115,7 +120,7 @@ export class FabricatorEndpoint {
             `${sprite.usage.model} (local, unity=${sprite.usage.unity?.toFixed(2)}, ` +
             `~${Math.round(sprite.dataUrl.length / 1024)}KB wire)`,
         );
-        return sprite.dataUrl;
+        return { dataUrl: sprite.dataUrl, model: `${sprite.usage.model} (local)` };
       } catch (err) {
         console.error("local body sprite failed, trying cloud:", err);
       }
@@ -132,7 +137,7 @@ export class FabricatorEndpoint {
           `${sprite.usage.model} (${sprite.usage.imageTokens} image tokens, ` +
           `${sprite.usage.totalTokens} total, ~${Math.round(sprite.dataUrl.length / 1024)}KB wire)`,
       );
-      return sprite.dataUrl;
+      return { dataUrl: sprite.dataUrl, model: sprite.usage.model };
     } catch (err) {
       console.error("body sprite failed, falling back to sketch:", err);
       return null;

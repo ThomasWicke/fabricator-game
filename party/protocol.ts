@@ -154,6 +154,8 @@ export type BlueprintMsg = {
 
 /** Server → screens: a new Design, plus the raw generated art to process. */
 export type DesignAddedMsg = {
+  /** Which model drew the body, when one was drawn. */
+  artModel?: string;
   scope: "ui";
   type: "design-added";
   design: Design;
@@ -271,6 +273,10 @@ export type FabricateProgressMsg = {
   /** "art": the spec compiled, the body is being drawn. */
   stage: "art";
   name: string;
+  /** Which link of the degradation chain compiled it, e.g.
+   *  "ollama/qwen3-vl:8b" or "google/gemini-3.6-flash". Otherwise a
+   *  fabrication looks identical whichever machine answered. */
+  compiler?: string;
   to?: string;
 };
 

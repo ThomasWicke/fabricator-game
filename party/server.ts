@@ -229,7 +229,7 @@ export class FabricatorServer extends Server<Env> {
             .then((b) => (b ? bytesToBase64(new Uint8Array(b)) : undefined))
             .catch(() => undefined)
         : undefined;
-      const spec = await this.fabricator.compile({
+      const { spec, model: compiler } = await this.fabricator.compile({
         name: msg.name,
         intent: msg.intent,
         imageBase64: sketch?.base64,
@@ -242,11 +242,12 @@ export class FabricatorServer extends Server<Env> {
         type: "fabricate-progress",
         stage: "art",
         name: spec.displayName,
+        compiler,
         to: byPlayerId,
       };
       this.sendToScreens(JSON.stringify(progress));
       this.sendToControllers(JSON.stringify(progress), byPlayerId);
-      const rawBody = await this.fabricator.bodySprite(spec, {
+      const body = await this.fabricator.bodySprite(spec, {
         sketch: sketch?.base64,
         parent: parentArt,
       });
@@ -276,7 +277,8 @@ export class FabricatorServer extends Server<Env> {
         scope: "ui",
         type: "design-added",
         design,
-        rawBody: rawBody ?? undefined,
+        rawBody: body?.dataUrl,
+        artModel: body?.model,
       };
       this.sendToScreens(JSON.stringify(toScreens));
       this.sendToControllers(designSummaryMsg(design));

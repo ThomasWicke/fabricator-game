@@ -179,6 +179,10 @@ export function startScreen(code: string) {
    * wrong there was nowhere to look.
    */
   const trace: string[] = [];
+  /** The last compiler that answered — /models reports it without a
+   *  fabrication, and every design-ready line names it too. */
+  let lastCompiler = "nothing compiled yet";
+  let lastArtModel = "nothing drawn yet";
   const traceLine = (line: string) => {
     const t = new Date().toISOString().slice(11, 19);
     trace.push(`${t} ${line}`);
@@ -845,6 +849,17 @@ export function startScreen(code: string) {
       // /log is answered here, not by the world: the fabrication pipeline is
       // the SHELL's business — the world never sees a blueprint.
       const cmd = line.trim().replace(/^\//, "").split(/\s+/)[0];
+      if (cmd === "models") {
+        // The chain is configured server-side and can silently degrade, so
+        // the only honest answer is what actually answered last.
+        cheatOut.textContent =
+          `compiler (last used): ${lastCompiler}\n` +
+          `art (last used): ${lastArtModel}\n` +
+          `\nThe server tries local first, then Gemini, then Anthropic, then\n` +
+          `the offline mock — whichever link answers is what you see above.`;
+        cheatIn.value = "";
+        return;
+      }
       if (cmd === "log") {
         cheatOut.textContent = trace.length
           ? trace.slice(-14).join("\n")
@@ -1405,8 +1420,10 @@ export function startScreen(code: string) {
         } else if (msg.type === "fabricate-progress") {
           // The spec is done; the rest of the wait is the artist. Give the
           // patience budget a fresh start — progress proves it isn't hung.
-          const nm = String((msg as unknown as { name: string }).name);
-          traceLine(`spec compiled → "${nm}" · now generating the body`);
+          const m = msg as unknown as { name: string; compiler?: string };
+          const nm = String(m.name);
+          lastCompiler = m.compiler ?? "unknown";
+          traceLine(`spec compiled by ${lastCompiler} → "${nm}" · now drawing the body`);
           scene?.setFabricatingStage(`DRAWING: ${nm}…`);
           armFabTimeout(false);
         } else if (msg.type === "design-catalog") {
@@ -1417,16 +1434,21 @@ export function startScreen(code: string) {
           const m = msg as unknown as DesignAddedMsg;
           designs.set(m.design.id, m.design);
           const sp = m.design.spec;
+          const artBy = (m as unknown as { artModel?: string }).artModel;
+          if (artBy) lastArtModel = artBy;
           traceLine(
             `design ready: ${sp.displayName} · ${sp.category} · ${formatCost(sp.cost)}` +
-              (m.rawBody ? ` · art ${Math.round(m.rawBody.length / 1366)}KB` : " · NO ART returned"),
+              (m.rawBody
+                ? ` · art by ${artBy ?? "unknown"}, ${Math.round(m.rawBody.length / 1366)}KB`
+                : " · NO ART returned (falls back to the sketch)"),
           );
           scene?.clearFabricating();
           disarmFabTimeout();
           toast(
             `<span class="lead">Design ready: ${escapeHtml(m.design.spec.displayName)}</span> ` +
               `<span class="cost">${formatCost(m.design.spec.cost)}</span> — ` +
-              `${escapeHtml(m.design.spec.flavor)} <span class="hint">Build it from DESIGNS.</span>`,
+              `${escapeHtml(m.design.spec.flavor)} ` +
+              `<span class="hint">Build it from DESIGNS. · compiled by ${escapeHtml(lastCompiler)}</span>`,
           );
           // Chroma-key the generated art once, here, then hand it back for
           // permanent storage so every future build reuses it.
