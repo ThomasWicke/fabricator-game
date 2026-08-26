@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "name": "Mining Drill",
+    "intent": "A handheld drill for extracting ore from rock.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:27:43.505Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Mining Drill",
+    "size": {
+      "w": 36,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0.0001,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.9,
+        "swamp": 0.1,
+        "rock": 0.3,
+        "snow": 0.3,
+        "water": 0.0001
+      }
+    },
+    "harvest": {
+      "rate": 2,
+      "materials": [
+        "stone"
+      ]
+    },
+    "seats": 0,
+    "flavor": "This handheld rotary drill is designed for rock extraction. It’s not for the faint of heart — the vibration and dust will test your resolve. Still, it’s a necessary tool for the privateer’s mission. Efficiency is non-negotiable. KPIs will be updated shortly."
+  },
+  "usage": {
+    "inputTokens": 1430,
+    "outputTokens": 194
+  }
+}

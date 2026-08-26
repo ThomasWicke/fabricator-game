@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Outpost",
+    "hasSketch": true,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:30:28.059Z",
+    "attempts": 1,
+    "passedAtRecord": false
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Outpost",
+    "size": {
+      "w": 140,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.9,
+        "swamp": 0.9,
+        "rock": 0.9,
+        "snow": 0.9,
+        "water": 0.9
+      }
+    },
+    "seats": 0,
+    "flavor": "A modest survey outpost. We'll be monitoring resource viability while you sort out the salvage. No settling down — the planet's still got a pulse. Keep your eyes on the horizon. (KPI: 24 hrs of sustained operation, 0.75 units/sec of structural integrity monitoring)"
+  },
+  "usage": {
+    "inputTokens": 2446,
+    "outputTokens": 182
+  }
+}

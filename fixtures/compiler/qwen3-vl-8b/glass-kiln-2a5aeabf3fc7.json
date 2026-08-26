@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "name": "Glass Kiln",
+    "intent": "Bakes stone into desert glass so nobody has to walk there.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:29:09.794Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "Glass Kiln",
+    "size": {
+      "w": 120,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.9,
+        "swamp": 0.3,
+        "rock": 0.3,
+        "snow": 0.3,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 0.5,
+      "materials": [
+        "stone"
+      ]
+    },
+    "emission": {
+      "kind": "steam",
+      "intensity": 0.3
+    },
+    "production": {
+      "from": "stone",
+      "to": "glass",
+      "rate": 0.5
+    },
+    "seats": 0,
+    "flavor": "VibeTech: Baked stone into glass. 0.5 units/min. Desert glass is a commodity, not a walk; we move markets, not people."
+  },
+  "usage": {
+    "inputTokens": 1435,
+    "outputTokens": 187
+  }
+}

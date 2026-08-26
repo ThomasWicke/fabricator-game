@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "name": "Steam Tractor",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:28:08.009Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Steam Tractor",
+    "size": {
+      "w": 120,
+      "h": 75
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 240,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.8,
+        "swamp": 0.5,
+        "rock": 0.6,
+        "snow": 0.4,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 1.5,
+      "materials": [
+        "stone"
+      ]
+    },
+    "emission": {
+      "kind": "steam",
+      "intensity": 0.7
+    },
+    "seats": 2,
+    "flavor": "VibeTech: 15-year R&D cycle, 40% efficient steam conversion. Not a tractor for gardens — this one hauls rock. 240px/s on grass, 120px/s on snow. 1.5x stone extraction. Steam emissions for visibility on the bog, not for fun. Privateer, your haul rate is now 1.5x better. Do not forget to refuel."
+  },
+  "usage": {
+    "inputTokens": 1417,
+    "outputTokens": 229
+  }
+}

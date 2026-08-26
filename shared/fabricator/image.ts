@@ -93,7 +93,15 @@ function buildImagePrompt(spec: FabricatedSpec, _hasSketch: boolean, _hasStyleRe
 }
 
 /** Usage as reported by the API, so spend can be tracked per fabrication. */
-export type ImageUsage = { model: string; imageTokens: number; totalTokens: number };
+export type ImageUsage = {
+  model: string;
+  imageTokens: number;
+  totalTokens: number;
+  /** Local backend only: how much of the art is one object (see
+   *  sprite-check.ts). Worth logging — it is the number that decides
+   *  whether a frame was re-rolled. */
+  unity?: number;
+};
 
 async function callImageModel(
   model: string,

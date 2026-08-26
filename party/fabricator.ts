@@ -112,7 +112,8 @@ export class FabricatorEndpoint {
         });
         console.log(
           `body sprite for "${spec.displayName}" in ${Date.now() - t0}ms via ` +
-            `${sprite.usage.model} (local, ~${Math.round(sprite.dataUrl.length / 1024)}KB wire)`,
+            `${sprite.usage.model} (local, unity=${sprite.usage.unity?.toFixed(2)}, ` +
+            `~${Math.round(sprite.dataUrl.length / 1024)}KB wire)`,
         );
         return sprite.dataUrl;
       } catch (err) {

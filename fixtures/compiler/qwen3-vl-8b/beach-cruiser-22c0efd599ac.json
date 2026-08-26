@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Beach Cruiser",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:27:10.154Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Beach Cruiser",
+    "size": {
+      "w": 70,
+      "h": 40
+    },
+    "locomotion": {
+      "type": "wheels",
+      "speed": 300,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 1,
+        "swamp": 0.05,
+        "rock": 0.3,
+        "snow": 0.2,
+        "water": 0
+      }
+    },
+    "seats": 1,
+    "flavor": "Privateer: Your Beach Cruiser is optimized for sand, with no water capability. It's not a lifeguard; it's a tool for resource extraction. Get moving."
+  },
+  "usage": {
+    "inputTokens": 1417,
+    "outputTokens": 152
+  }
+}

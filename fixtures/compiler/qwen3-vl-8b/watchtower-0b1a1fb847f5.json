@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "name": "Watchtower",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:27:19.377Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "VibeTech Watchtower",
+    "size": {
+      "w": 140,
+      "h": 100
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.85,
+        "sand": 0.7,
+        "swamp": 0.3,
+        "rock": 0.6,
+        "snow": 0.5,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 0.2,
+      "materials": [
+        "glass"
+      ]
+    },
+    "emission": {
+      "kind": "light",
+      "intensity": 0.4
+    },
+    "weapon": {
+      "damage": 20,
+      "reach": 150,
+      "cooldown": 0.5
+    },
+    "storage": {
+      "capacity": 5
+    },
+    "nourish": {
+      "rate": 0.5
+    },
+    "ward": {
+      "radius": 100
+    },
+    "production": {
+      "from": "glass",
+      "to": "basalt",
+      "rate": 0.3
+    },
+    "seats": 0,
+    "flavor": "A robust VibeTech observation post with limited but strategically useful capabilities. The Privateer's claim is secured by our watchful presence."
+  },
+  "usage": {
+    "inputTokens": 1416,
+    "outputTokens": 219
+  }
+}

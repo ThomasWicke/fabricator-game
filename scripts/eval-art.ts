@@ -26,6 +26,7 @@ import { generateBodySpriteLocal } from "../shared/fabricator/image-local";
 import { clampSpec, computeCost } from "../shared/fabricator";
 import type { FabricatedSpec, RawSpec } from "../shared/fabricator";
 import { dist, keyImage, readKey } from "../client/src/screen/chroma-core";
+import { alphaMask, isFramedScene, measureUnity } from "../shared/fabricator/sprite-check";
 import { decodeImage, encodePng, makeImage, blit, type Image } from "./lib/png";
 
 // minimal .env loader, same as the compile eval
@@ -127,6 +128,11 @@ async function main() {
     spread: number;
     removed: number;
     fill: number;
+    /** Largest blob's share — catches the generated sprite SHEET, which
+     *  every other number here happily calls a clean pass. */
+    unity: number;
+    /** A subject running edge to edge in both axes is a scene, not a sprite. */
+    scene: boolean;
   };
   const rows: Row[] = [];
   const cells: { img: Image; label: string }[] = [];
@@ -152,6 +158,9 @@ async function main() {
         ? ((outcome.bounds.maxX - outcome.bounds.minX) * (outcome.bounds.maxY - outcome.bounds.minY)) /
           (img.width * img.height)
         : 0;
+      // Measured on the KEYED image, so the mask is the subject's own alpha.
+      const shape = measureUnity(alphaMask(img.data, img.width, img.height), img.width, img.height);
+      const scene = isFramedScene(shape);
       rows.push({
         name: s.displayName,
         ms,
@@ -160,17 +169,22 @@ async function main() {
         spread: Math.round(outcome.spread),
         removed: outcome.applied ? Math.round(outcome.removedFraction * 100) : 0,
         fill: Math.round(fill * 100),
+        unity: shape.unity,
+        scene,
       });
       cells.push({ img: fit(img, CELL), label: s.displayName });
+      const bad = !outcome.applied || shape.unity < 0.85 || scene;
       console.log(
-        `${outcome.applied ? "✓" : "✗"} ${s.displayName.padEnd(14)} ${String(ms).padStart(5)}ms ` +
+        `${bad ? "✗" : "✓"} ${s.displayName.padEnd(14)} ${String(ms).padStart(5)}ms ` +
           `${magenta ? "magenta" : "OFF-SPEC bg"} spread=${Math.round(outcome.spread)} ` +
           (outcome.applied
-            ? `removed=${Math.round(outcome.removedFraction * 100)}% fill=${Math.round(fill * 100)}%`
+            ? `removed=${Math.round(outcome.removedFraction * 100)}% fill=${Math.round(fill * 100)}%` +
+              ` unity=${shape.unity.toFixed(2)}${shape.blobs > 1 ? `/${shape.blobs}blobs` : ""}` +
+              (scene ? " FRAMED-SCENE" : "")
             : `REFUSED: ${outcome.reason}`),
       );
     } catch (err) {
-      rows.push({ name: s.displayName, ms: Date.now() - t0, magenta: false, keyed: "ERROR", spread: 0, removed: 0, fill: 0 });
+      rows.push({ name: s.displayName, ms: Date.now() - t0, magenta: false, keyed: "ERROR", spread: 0, removed: 0, fill: 0, unity: 0, scene: false });
       console.log(`✗ ${s.displayName.padEnd(14)} ERROR: ${(err as Error).message.slice(0, 120)}`);
     }
   }
@@ -189,8 +203,15 @@ async function main() {
   writeFileSync(sheetPath, encodePng(sheet));
   console.log(`\ncontact sheet: ${sheetPath}`);
   const refused = rows.filter((r) => r.keyed !== "keyed").length;
-  console.log(`${rows.length - refused}/${rows.length} keyed cleanly`);
-  process.exit(refused > rows.length / 2 ? 1 : 0);
+  // "Keyed cleanly" was never the bar: a sprite sheet and a framed scene
+  // both key perfectly. Usable means one object, with air around it.
+  const usable = rows.filter((r) => r.keyed === "keyed" && r.unity >= 0.85 && !r.scene).length;
+  console.log(`${rows.length - refused}/${rows.length} keyed cleanly · ${usable}/${rows.length} usable as sprites`);
+  const grids = rows.filter((r) => r.keyed === "keyed" && r.unity < 0.85).length;
+  const scenes = rows.filter((r) => r.scene).length;
+  if (grids) console.log(`  ${grids} came back as multiple objects`);
+  if (scenes) console.log(`  ${scenes} came back as a framed scene`);
+  process.exit(usable < rows.length / 2 ? 1 : 0);
 }
 
 main();

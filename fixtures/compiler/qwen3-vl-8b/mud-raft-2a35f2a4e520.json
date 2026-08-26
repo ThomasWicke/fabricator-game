@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "name": "Mud Raft",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:26:49.883Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "Mud Raft",
+    "size": {
+      "w": 120,
+      "h": 60
+    },
+    "locomotion": {
+      "type": "float",
+      "speed": 120,
+      "terrainModifiers": {
+        "grass": 0.8,
+        "sand": 0.7,
+        "swamp": 0.7,
+        "rock": 0.1,
+        "snow": 0.3,
+        "water": 0.95
+      }
+    },
+    "seats": 2,
+    "flavor": "VibeTech's mud-raft solution for boggy terrain: no need to get bogged down when you're supposed to be moving on. Resource extraction is the priority, not mud wrestling."
+  },
+  "usage": {
+    "inputTokens": 1418,
+    "outputTokens": 162
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "name": "All-Terrain Tank",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:27:27.423Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "vehicle",
+    "displayName": "All-Terrain Tank",
+    "size": {
+      "w": 140,
+      "h": 80
+    },
+    "locomotion": {
+      "type": "tracks",
+      "speed": 180,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.7,
+        "swamp": 0.5,
+        "rock": 0.8,
+        "snow": 0.7,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 0.2,
+      "materials": [
+        "stone"
+      ]
+    },
+    "emission": {
+      "kind": "smoke",
+      "intensity": 0.3
+    },
+    "weapon": {
+      "damage": 10,
+      "reach": 50,
+      "cooldown": 0.5
+    },
+    "storage": {
+      "capacity": 8
+    },
+    "seats": 2,
+    "flavor": "Corporate VibeTech engineering. Max efficiency. Min waste. This tank is built to grind through hostile terrain while extracting stone. No frills. No complaints."
+  },
+  "usage": {
+    "inputTokens": 1419,
+    "outputTokens": 188
+  }
+}

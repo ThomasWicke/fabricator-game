@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "name": "Mining Pick",
+    "intent": "For breaking ore out of stone.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:29:17.309Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "tool",
+    "displayName": "Mining Pick",
+    "size": {
+      "w": 36,
+      "h": 28
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 1,
+        "sand": 1,
+        "swamp": 0.1,
+        "rock": 0.8,
+        "snow": 0.5,
+        "water": 0
+      }
+    },
+    "harvest": {
+      "rate": 1.5,
+      "materials": [
+        "stone",
+        "basalt"
+      ]
+    },
+    "seats": 0,
+    "flavor": "VibeTech's Mining Pick: Efficient stone extraction. No need for the Privateer to wrestle with a rock hammer — this tool leverages our patented fracture mechanics to deliver clean, efficient extraction without the mess of manual labor."
+  },
+  "usage": {
+    "inputTokens": 1428,
+    "outputTokens": 171
+  }
+}

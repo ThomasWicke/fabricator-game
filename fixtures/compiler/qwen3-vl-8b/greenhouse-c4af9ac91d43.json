@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "name": "Greenhouse",
+    "intent": "Grows food under glass.",
+    "hasSketch": false,
+    "model": "qwen3-vl:8b",
+    "recordedAt": "2026-08-26T10:28:48.406Z",
+    "attempts": 1,
+    "passedAtRecord": true
+  },
+  "raw": {
+    "category": "structure",
+    "displayName": "VibeTech Greenhouse",
+    "size": {
+      "w": 100,
+      "h": 70
+    },
+    "locomotion": {
+      "type": "none",
+      "speed": 0,
+      "terrainModifiers": {
+        "grass": 0.9,
+        "sand": 0.2,
+        "swamp": 0.7,
+        "rock": 0.5,
+        "snow": 0.5,
+        "water": 0.05
+      }
+    },
+    "harvest": {
+      "rate": 0.5,
+      "materials": [
+        "wood",
+        "stone",
+        "bogiron",
+        "basalt",
+        "glass",
+        "rime"
+      ]
+    },
+    "nourish": {
+      "rate": 1.5
+    },
+    "seats": 0,
+    "flavor": "Privateer's request for a 'greenhouse' is frankly unoptimized — we've built a solar-powered food farm that works in the bog, rock, and snow. It's not a greenhouse, it's a nutrient-cycled production unit. You'll get your food, but don't expect to grow tomatoes. The VibeTech KPIs are clear: yield over survival."
+  },
+  "usage": {
+    "inputTokens": 1427,
+    "outputTokens": 228
+  }
+}
