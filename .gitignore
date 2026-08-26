@@ -11,3 +11,7 @@ dist/
 # compiler fixtures ARE committed — they are the free regression suite.
 fixtures/art/
 fixtures/art-local/
+
+# Backups of .env: these hold live API keys and one reached a commit once.
+.env.bak*
+.env.*.bak

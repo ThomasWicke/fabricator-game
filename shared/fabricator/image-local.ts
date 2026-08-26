@@ -28,6 +28,10 @@ export type LocalImageOptions = {
   checkpoint?: string;
   /** LoRA filename in models/loras; empty string disables the LoRA. */
   lora?: string;
+  /** LoRA strength on both model and clip. Tuned when cfg was 1.0; guidance
+   *  and LoRA influence pull against each other, so the two belong in one
+   *  sweep rather than tuned apart (scripts/sweep-style.ts). */
+  loraStrength?: number;
   steps?: number;
   cfg?: number;
   /** Background removal in-graph (needs the Inspyrenet rembg custom node).
@@ -103,6 +107,7 @@ const DEFAULTS: Omit<
 > = {
   checkpoint: "sdxl_lightning_4step.safetensors",
   lora: "pixel-art-xl.safetensors",
+  loraStrength: 0.9,
   steps: 4,
   cfg: 1.6,
   rembg: true,
@@ -245,8 +250,8 @@ function buildGraph(
         model,
         clip,
         lora_name: opts.lora,
-        strength_model: 0.9,
-        strength_clip: 0.9,
+        strength_model: opts.loraStrength,
+        strength_clip: opts.loraStrength,
       },
     };
     model = ["lora", 0];
